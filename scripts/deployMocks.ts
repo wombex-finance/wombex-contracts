@@ -1,42 +1,36 @@
 import { ONE_WEEK, ZERO_ADDRESS, ZERO_KEY } from "./../test-utils/constants";
 import { simpleToExactAmount } from "./../test-utils/math";
+import { getTimestamp } from "./../test-utils";
 import { Signer } from "ethers";
-import { parseEther } from "ethers/lib/utils";
 import {
     MockERC20__factory,
     MockERC20,
-    MockCurveVoteEscrow,
-    MockCurveVoteEscrow__factory,
     MockVoting,
     MockVoting__factory,
     MockWalletChecker,
     MockWalletChecker__factory,
-    MockFeeDistributor,
-    MockFeeDistributor__factory,
-    MockCurveGauge,
-    MockCurveGauge__factory,
-    MockCurveMinter__factory,
-    MockCurveMinter,
-    MockBalancerPoolToken,
-    MockBalancerPoolToken__factory,
-    MockBalancerVault,
-    MockBalancerVault__factory,
+    VoterProxy, VoterProxy__factory,
+    VeWom, VeWom__factory,
+    MasterWombatV2, MasterWombatV2__factory,
+    MultiRewarderPerSec, MultiRewarderPerSec__factory,
+    WETH, WETH__factory,
 } from "../types/generated";
-import { deployContract } from "../tasks/utils";
+import {deployContract, waitForTx} from "../tasks/utils";
 import { MultisigConfig, DistroList, ExtSystemConfig, NamingConfig } from "./deploySystem";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { BigNumber as BN } from "ethers";
 
 interface DeployMocksResult {
     lptoken: MockERC20;
     crv: MockERC20;
-    crvMinter: MockCurveMinter;
+    crvMinter: null;
     voting: MockVoting;
-    votingEscrow: MockCurveVoteEscrow;
-    feeDistribution: MockFeeDistributor;
+    votingEscrow: null;
+    feeDistribution: null;
     smartWalletChecker: MockWalletChecker;
-    gauges: MockCurveGauge[];
-    crvBpt: MockBalancerPoolToken;
-    balancerVault: MockBalancerVault;
+    gauges: [];
+    crvBpt: null;
+    balancerVault: null;
     bal: MockERC20;
     weth: MockERC20;
     addresses: ExtSystemConfig;
@@ -113,70 +107,15 @@ async function getMockMultisigs(
     };
 }
 
-async function deployMocks(hre: HardhatRuntimeEnvironment, signer: Signer, debug = false): Promise<DeployMocksResult> {
+const zeroAddress = '0x0000000000000000000000000000000000000000';
+
+async function deployBinanceTestMocks(tokenAddress, hre: HardhatRuntimeEnvironment, signer: Signer, debug = false): Promise<DeployMocksResult> {
     const deployer = signer;
     const deployerAddress = await deployer.getAddress();
 
     // -----------------------------
     // 1. Deployments
     // -----------------------------
-
-    const crv = await deployContract<MockERC20>(
-        hre,
-        new MockERC20__factory(deployer),
-        "MockCRV",
-        ["mockCrv", "mockCrv", 18, deployerAddress, 10000000],
-        {},
-        debug,
-    );
-
-    const crvBpt = await deployContract<MockBalancerPoolToken>(
-        hre,
-        new MockBalancerPoolToken__factory(deployer),
-        "MockBalancerPoolToken",
-        [18, deployerAddress, 100],
-        {},
-        debug,
-    );
-
-    const crvMinter = await deployContract<MockCurveMinter>(
-        hre,
-        new MockCurveMinter__factory(deployer),
-        "MockCurveMinter",
-        [crv.address, simpleToExactAmount(1, 18)],
-        {},
-        debug,
-    );
-
-    let tx = await crv.transfer(crvMinter.address, simpleToExactAmount(1, 22));
-    await tx.wait();
-
-    const lptoken = await deployContract<MockERC20>(
-        hre,
-        new MockERC20__factory(deployer),
-        "MockLPToken",
-        ["mockLPToken", "mockLPToken", 18, deployerAddress, 10000000],
-        {},
-        debug,
-    );
-
-    const feeDistro = await deployContract<MockFeeDistributor>(
-        hre,
-        new MockFeeDistributor__factory(deployer),
-        "MockFeeDistributor",
-        [
-            [lptoken.address, crv.address],
-            [simpleToExactAmount(1), simpleToExactAmount(1)],
-        ],
-        {},
-        debug,
-    );
-
-    tx = await lptoken.transfer(feeDistro.address, simpleToExactAmount(1, 22));
-    await tx.wait();
-
-    tx = await crv.transfer(feeDistro.address, simpleToExactAmount(1, 22));
-    await tx.wait();
 
     const smartWalletChecker = await deployContract<MockWalletChecker>(
         hre,
@@ -187,14 +126,14 @@ async function deployMocks(hre: HardhatRuntimeEnvironment, signer: Signer, debug
         debug,
     );
 
-    const votingEscrow = await deployContract<MockCurveVoteEscrow>(
-        hre,
-        new MockCurveVoteEscrow__factory(deployer),
-        "MockCurveVoteEscrow",
-        [smartWalletChecker.address, crvBpt.address],
-        {},
-        debug,
-    );
+    // const votingEscrow = await deployContract<MockCurveVoteEscrow>(
+    //     hre,
+    //     new MockCurveVoteEscrow__factory(deployer),
+    //     "MockCurveVoteEscrow",
+    //     [smartWalletChecker.address, crvBpt.address],
+    //     {},
+    //     debug,
+    // );
 
     const voting = await deployContract<MockVoting>(
         hre,
@@ -206,85 +145,113 @@ async function deployMocks(hre: HardhatRuntimeEnvironment, signer: Signer, debug
     );
 
     const gauges = [];
+    let lptoken;
 
-    for (let i = 0; i < 3; i++) {
-        const gauge = await deployContract<MockCurveGauge>(
-            hre,
-            new MockCurveGauge__factory(deployer),
-            "MockCurveGauge",
-            [`TestGauge_${i + 1}`, `tstGauge_${i + 1}`, lptoken.address, []],
-            {},
-            debug,
-        );
+    // for (let i = 0; i < 4; i++) {
+    //     const symbol = ['BUSD', 'USDC', 'USDT', 'DAI'][i];
+    //     lptoken = await deployContract<MockERC20>(
+    //         hre,
+    //         new MockERC20__factory(deployer),
+    //         "MockLPToken",
+    //         [symbol, symbol, 18, deployerAddress, 10000000],
+    //         {},
+    //         debug,
+    //     );
+    //     const gauge = await deployContract<MockCurveGauge>(
+    //         hre,
+    //         new MockCurveGauge__factory(deployer),
+    //         "MockCurveGauge",
+    //         [`TestGauge_${symbol}`, `tstGauge_${symbol}`, lptoken.address, []],
+    //         {},
+    //         debug,
+    //     );
+    //
+    //     const tx = await voting.vote_for_gauge_weights(gauge.address, 1);
+    //     await tx.wait();
+    //     gauges.push(gauge);
+    // }
 
-        const tx = await voting.vote_for_gauge_weights(gauge.address, 1);
-        await tx.wait();
-        gauges.push(gauge);
-    }
+    // const feeDistro = await deployContract<MockFeeDistributor>(
+    //     hre,
+    //     new MockFeeDistributor__factory(deployer),
+    //     "MockFeeDistributor",
+    //     [
+    //         [lptoken.address, tokenAddress],
+    //         [simpleToExactAmount(1), simpleToExactAmount(1)],
+    //     ],
+    //     {},
+    //     debug,
+    // );
+    //
+    // let tx = await lptoken.transfer(feeDistro.address, simpleToExactAmount(1, 22));
+    // await tx.wait();
 
-    tx = await crvBpt.setPrice(parseEther("2.40"));
-    await tx.wait();
+    // tx = await crv.transfer(feeDistro.address, simpleToExactAmount(1, 22));
+    // await tx.wait();
 
-    const balancerVault = await deployContract<MockBalancerVault>(
-        hre,
-        new MockBalancerVault__factory(deployer),
-        "MockBalancerVault",
-        [crvBpt.address],
-        {},
-        debug,
-    );
+    // tx = await crvBpt.setPrice(parseEther("2.40"));
+    // await tx.wait();
 
-    const bal = await deployContract<MockERC20>(
-        hre,
-        new MockERC20__factory(deployer),
-        "MockBAL",
-        ["mockBAL", "mockBAL", 18, deployerAddress, 10000000],
-        {},
-        debug,
-    );
+    // const balancerVault = await deployContract<MockBalancerVault>(
+    //     hre,
+    //     new MockBalancerVault__factory(deployer),
+    //     "MockBalancerVault",
+    //     [crvBpt.address],
+    //     {},
+    //     debug,
+    // );
 
-    const weth = await deployContract<MockERC20>(
-        hre,
-        new MockERC20__factory(deployer),
-        "MockWETH",
-        ["mockWETH", "mockWETH", 18, deployerAddress, 10000000],
-        {},
-        debug,
-    );
+    // const bal = await deployContract<MockERC20>(
+    //     hre,
+    //     new MockERC20__factory(deployer),
+    //     "MockBAL",
+    //     ["mockBAL", "mockBAL", 18, deployerAddress, 10000000],
+    //     {},
+    //     debug,
+    // );
+
+    // const weth = await deployContract<MockERC20>(
+    //     hre,
+    //     new MockERC20__factory(deployer),
+    //     "MockWETH",
+    //     ["mockWETH", "mockWETH", 18, deployerAddress, 10000000],
+    //     {},
+    //     debug,
+    // );
 
     return {
-        lptoken,
-        crv,
-        crvMinter,
+        lptoken: null,
+        crv: null,
+        crvMinter: null,
         voting,
-        votingEscrow,
+        votingEscrow: null,
         smartWalletChecker,
-        feeDistribution: feeDistro,
-        gauges,
-        crvBpt,
-        balancerVault,
-        bal,
-        weth,
+        feeDistribution: null,
+        gauges: [],
+        crvBpt: null,
+        balancerVault: null,
+        bal: null,
+        weth: null,
         addresses: {
-            token: crv.address,
-            tokenBpt: crvBpt.address,
+            token: zeroAddress,
+            tokenBpt: zeroAddress,
             tokenWhale: deployerAddress,
-            minter: crvMinter.address,
-            votingEscrow: votingEscrow.address,
-            feeDistribution: feeDistro.address,
+            minter: zeroAddress,
+            votingEscrow: zeroAddress,
+            feeDistribution: zeroAddress,
             gaugeController: voting.address,
             voteOwnership: voting.address,
             voteParameter: voting.address,
             gauges: gauges.map(g => g.address),
-            balancerVault: balancerVault.address,
+            balancerVault: zeroAddress,
             balancerPoolFactories: {
                 weightedPool2Tokens: ZERO_ADDRESS,
                 stablePool: ZERO_ADDRESS,
                 bootstrappingPool: ZERO_ADDRESS,
             },
             balancerPoolId: ZERO_KEY,
-            balancerMinOutBps: "9975",
-            weth: weth.address,
+            balancerMinOutBps: "0",
+            weth: zeroAddress,
             wethWhale: deployerAddress,
         },
         namingConfig: {
@@ -299,4 +266,151 @@ async function deployMocks(hre: HardhatRuntimeEnvironment, signer: Signer, debug
     };
 }
 
-export { deployMocks, DeployMocksResult, getMockDistro, getMockMultisigs };
+async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Signer, addEthMultiRewarder = true) {
+    const deployer = signer;
+    const deployerAddress = await deployer.getAddress();
+    const waitForBlocks = 1;
+    const debug = true;
+
+    const config: any = {};
+
+    const voting = await deployContract<MockVoting>(
+        hre,
+        new MockVoting__factory(deployer),
+        "MockVoting",
+        [],
+        {},
+        false,
+    );
+    console.log('voting', voting.address);
+
+    const wom = await deployContract<MockERC20>(
+        hre,
+        new MockERC20__factory(deployer),
+        "MockWOM",
+        ["mockWOM", "mockBAL", 18, deployerAddress, 10000000],
+        {},
+        debug,
+    );
+
+    const masterWombat = await deployContract<MasterWombatV2>(
+        hre,
+        new MasterWombatV2__factory(deployer),
+        "MasterWombatV2",
+        [
+            wom.address,
+            zeroAddress,
+            152207000000000,
+            375,
+            Math.round(new Date().getTime() / 1000)
+        ],
+        {},
+        debug,
+    );
+
+    const veWom = await deployContract<VeWom>(
+        hre,
+        new VeWom__factory(deployer),
+        "VeWom",
+        [wom.address, masterWombat.address],
+        {},
+        debug,
+    );
+
+    const lptoken = await deployContract<MockERC20>(
+        hre,
+        new MockERC20__factory(deployer),
+        "MockLP",
+        ["MockLP", "MockLP", 18, deployerAddress, 10000000],
+        {},
+        debug,
+    );
+
+    const weth = await deployContract<WETH>(
+        hre,
+        new WETH__factory(deployer),
+        "WETH",
+        [],
+        {},
+        debug,
+    );
+
+    let multiRewarderAddress = ZERO_ADDRESS;
+    if(addEthMultiRewarder) {
+        const multiRewarder = await deployContract<MultiRewarderPerSec>(
+            hre,
+            new MultiRewarderPerSec__factory(deployer),
+            "MultiRewarderPerSec",
+            [
+                masterWombat.address,
+                lptoken.address,
+                (await getTimestamp()).add(1),
+                zeroAddress,
+                152207000000000 / 2
+            ],
+            {},
+            debug,
+        );
+
+        await signer.sendTransaction({
+            to: multiRewarder.address,
+            value: BN.from(10).pow(20)
+        });
+
+        multiRewarderAddress = multiRewarder.address;
+    }
+
+    let tx = await masterWombat.add('1', lptoken.address, multiRewarderAddress);
+    await waitForTx(tx, true, waitForBlocks);
+
+    tx = await wom.transfer(masterWombat.address, BN.from(10).pow(18).mul(10000));
+    await waitForTx(tx, true, waitForBlocks);
+
+    tx = await masterWombat.setVeWom(veWom.address);
+    await waitForTx(tx, true, waitForBlocks);
+
+    config.weth = weth.address;
+    config.token = wom.address;
+    config.gaugeController = voting.address;
+    config.voteOwnership = voting.address;
+    config.voteParameter = voting.address;
+    config.tokenBpt = zeroAddress;
+    config.masterWombat = masterWombat.address;
+    config.veWom = veWom.address;
+
+    const voterProxy = await deployContract<VoterProxy>(
+        hre,
+        new VoterProxy__factory(deployer),
+        "VoterProxy",
+        [wom.address, veWom.address, weth.address],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('voterProxy', voterProxy.address);
+
+    return {
+        ...config,
+        weth,
+        voting,
+        lptoken,
+        voterProxy,
+        veWom,
+        masterWombat,
+        crvMinter: null,
+        crv: wom,
+        feeDistribution: null,
+        addresses: config,
+        namingConfig: {
+            cvxName: "Convex Finance",
+            cvxSymbol: "CVX",
+            vlCvxName: "Vote Locked CVX",
+            vlCvxSymbol: "vlCVX",
+            cvxCrvName: "Convex CRV",
+            cvxCrvSymbol: "cvxCRV",
+            tokenFactoryNamePostfix: " Convex Deposit",
+        },
+    } as any;
+}
+
+export { deployTestFirstStage, DeployMocksResult, getMockDistro, getMockMultisigs,deployBinanceTestMocks };

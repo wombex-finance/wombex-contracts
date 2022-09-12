@@ -3,10 +3,9 @@
     "description": "Aura Finance smart contracts",
     "version": "1.0.0",
     "scripts": {
-        "clean": "shx rm -rf ./artifacts ./cache ./coverage ./types/generated ./coverage.json ./contracts/convex-platform",
+        "clean": "shx rm -rf ./artifacts ./cache ./coverage ./types/generated ./coverage.json",
         "reset": "yarn clean && yarn compile",
-        "commit": "git-cz",
-        "compile": "yarn compile:cvx && yarn compile:aura  && yarn run compile:ts",
+        "compile": "yarn compile:cvx && yarn compile:aura",
         "compile:aura": "yarn hardhat compile --config hardhat.config.ts",
         "compile:cvx": "yarn hardhat compile --config hardhat-cvx.config.ts",
         "compile:ts": "npx tsc",
@@ -28,7 +27,7 @@
         "export-sol": "sh ./copy-to-public-repo.sh"
     },
     "dependencies": {
-        "convex-platform": "file:convex-platform/contracts"
+        "@openzeppelin/contracts-0.6": "npm:@openzeppelin/contracts@3.4.0"
     },
     "devDependencies": {
         "@balancer-labs/balancer-js": "^1.0.1",

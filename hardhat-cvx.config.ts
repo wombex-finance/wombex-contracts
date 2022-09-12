@@ -9,7 +9,7 @@ export default {
     },
     paths: {
         ...hardhatConfig.paths,
-        sources: "./convex-platform/contracts/contracts",
+        sources: "./contracts/vendor",
     },
     solidity: {
         version: "0.6.12",

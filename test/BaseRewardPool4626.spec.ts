@@ -1,8 +1,16 @@
-import { simpleToExactAmount } from "./../test-utils/math";
+import { simpleToExactAmount } from "../test-utils/math";
 import hre, { ethers } from "hardhat";
 import { expect } from "chai";
-import { deployPhase1, deployPhase2, deployPhase3, deployPhase4, SystemDeployed } from "../scripts/deploySystem";
-import { deployMocks, DeployMocksResult, getMockDistro, getMockMultisigs } from "../scripts/deployMocks";
+import {
+    deploy,
+    SystemDeployed,
+    updateDistributionByTokens
+} from "../scripts/deploySystem";
+import {
+    deployTestFirstStage,
+    getMockDistro,
+    getMockMultisigs
+} from "../scripts/deployMocks";
 import {
     Booster,
     ERC20__factory,
@@ -21,14 +29,13 @@ type Pool = {
     token: string;
     gauge: string;
     crvRewards: string;
-    stash: string;
     shutdown: boolean;
 };
 
 describe("BaseRewardPool4626", () => {
     let accounts: Signer[];
     let booster: Booster;
-    let mocks: DeployMocksResult;
+    let mocks: any;
     let pool: Pool;
     let contracts: SystemDeployed;
 
@@ -39,23 +46,12 @@ describe("BaseRewardPool4626", () => {
     let aliceAddress: string;
 
     const setup = async () => {
-        mocks = await deployMocks(hre, deployer);
+        mocks = await deployTestFirstStage(hre, deployer);
         const multisigs = await getMockMultisigs(accounts[4], accounts[5], accounts[6]);
         const distro = getMockDistro();
 
-        const phase1 = await deployPhase1(hre, deployer, mocks.addresses);
-        const phase2 = await deployPhase2(
-            hre,
-            deployer,
-            phase1,
-            distro,
-            multisigs,
-            mocks.namingConfig,
-            mocks.addresses,
-        );
-        const phase3 = await deployPhase3(hre, deployer, phase2, multisigs, mocks.addresses);
-        await phase3.poolManager.connect(accounts[6]).setProtectPool(false);
-        contracts = await deployPhase4(hre, deployer, phase3, mocks.addresses);
+        contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
+        await updateDistributionByTokens(accounts[6], contracts);
 
         ({ booster } = contracts);
 
@@ -77,6 +73,7 @@ describe("BaseRewardPool4626", () => {
     let alternateReceiver: Signer;
 
     before(async () => {
+        await hre.network.provider.send("hardhat_reset");
         accounts = await ethers.getSigners();
 
         deployer = accounts[0];
@@ -360,34 +357,6 @@ describe("BaseRewardPool4626", () => {
                     .connect(withdrawer)
                     ["withdraw(uint256,address,address)"](simpleToExactAmount(1), withdrawerAddress, depositorAddress),
             ).to.be.revertedWith("ERC4626: withdrawal amount exceeds allowance");
-        });
-    });
-    describe("checks methods", async () => {
-        it("should not add more than 12 extra rewards", async () => {
-            let crvRewards = BaseRewardPool4626__factory.connect(pool.crvRewards, alice);
-            const maxExtraRewards = 12;
-            const len = await crvRewards.extraRewardsLength();
-            const rewardManagerAddress = await crvRewards.rewardManager();
-            const rewardManager = await impersonateAccount(rewardManagerAddress);
-            crvRewards = crvRewards.connect(rewardManager.signer);
-            let randomTtn: MockERC20;
-
-            for (let i = len.toNumber(); i < maxExtraRewards; i++) {
-                randomTtn = await deployContract<MockERC20>(
-                    hre,
-                    new MockERC20__factory(deployer),
-                    `RandomToken${i}`,
-                    ["randomToken", "randomToken", 18, await deployer.getAddress(), 10000000],
-                    {},
-                    false,
-                );
-                await crvRewards.addExtraReward(randomTtn.address);
-            }
-
-            expect(await crvRewards.extraRewardsLength()).to.eq(maxExtraRewards);
-            // Test adding an extra reward once the limit is reached
-            await crvRewards.addExtraReward(DEAD_ADDRESS);
-            expect(await crvRewards.extraRewardsLength(), "extra reward not added").to.eq(maxExtraRewards);
         });
     });
 });

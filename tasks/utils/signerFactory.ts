@@ -10,6 +10,11 @@ export const getSigner = async (hre: HardhatRuntime = {}, useCache = true, key?:
     // If already initiated a signer, just return the singleton instance
     if (useCache && signerInstance) return signerInstance;
 
+    if (process.env.MNEMONIC) {
+        const wallet = Wallet.fromMnemonic(process.env.MNEMONIC);
+        return wallet.connect(hre.ethers.provider);
+    }
+
     const pk = key || process.env.PRIVATE_KEY;
     if (pk) {
         if (!pk.match(privateKey)) {

@@ -19,12 +19,10 @@ const copyExternalSrc = async (hre, externalSrc) => {
 const updatePathOnReport = async () => {
     const reportPath = path.resolve(__dirname, "../../coverage/lcov.info");
     const data = fs.readFileSync(reportPath, "utf8");
-    const result = data.replace(/aura-contracts\/contracts\/convex-platform/g, 'aura-contracts/convex-platform');
-    fs.writeFileSync(reportPath, result, "utf8");
+    fs.writeFileSync(reportPath, data, "utf8");
 }
 
 subtask("coverage:clean")
-    .addOptionalParam("externalSrc", "External smart contracts paths separeted by ','", "/convex-platform")
     .setAction(async function (taskArgs: TaskArguments, hre: HardhatRuntimeEnvironment, _: RunSuperFunction<any>) {
         // Delete temporary external sources from code base.
         const sources = taskArgs.externalSrc.split(",");
@@ -35,7 +33,6 @@ subtask("coverage:clean")
     });
 
 subtask("coverage:setup")
-    .addOptionalParam("externalSrc", "External smart contracts paths separeted by ','", "/convex-platform/contracts/contracts")
     .setAction(async function (taskArgs: TaskArguments, hre: HardhatRuntimeEnvironment, _: RunSuperFunction<any>) {
         // Copy external sources to the hre config path source directory.
         const sources = taskArgs.externalSrc.split(",");
@@ -45,7 +42,6 @@ subtask("coverage:setup")
     });
 
 task("coverage:externalSrc")
-    .addOptionalParam("externalSrc", "External smart contracts paths separeted by ','", "/convex-platform/contracts/contracts")
     .addOptionalParam("testfiles", "test/**/*.ts")
     .addOptionalParam("solcoverjs", "./.solcover.js")
     .addOptionalParam('temp', "artifacts")

@@ -20,6 +20,8 @@ const chainIds = {
     mainnet: 1,
     rinkeby: 4,
     ropsten: 3,
+    bnbt: 97,
+    bnb: 56,
 };
 
 const compilerSettings = {
@@ -36,11 +38,18 @@ const compilerSettings = {
     },
 };
 
+const accounts = {
+    mnemonic: require('./.solcover.js').providerOptions.mnemonic,
+    path: "m/44'/60'/0'/0",
+    initialIndex: 0,
+    count: 20,
+} as any;
+
 const config: HardhatUserConfig = {
     defaultNetwork: "hardhat",
     gasReporter: {
         currency: "USD",
-        enabled: true,
+        enabled: false,
         excludeContracts: [],
         src: "./contracts",
     },
@@ -48,6 +57,9 @@ const config: HardhatUserConfig = {
         hardhat: {
             chainId: chainIds.hardhat,
             allowUnlimitedContractSize: true,
+            accounts: {
+                accountsBalance: "1000000000000000000000000"
+            }
         },
         mainnet: {
             url: process.env.NODE_URL || "",
@@ -55,11 +67,24 @@ const config: HardhatUserConfig = {
         kovan: {
             url: process.env.NODE_URL || "",
             gasPrice: 3000000000,
+            accounts,
         },
         forking: {
             url: process.env.NODE_URL || "",
         },
-        rinkeby: { url: process.env.NODE_URL || "", gasPrice: 3000000000 },
+        rinkeby: { url: process.env.NODE_URL || "", gasPrice: 3000000000, accounts },
+        bnb: {
+            chainId: chainIds.bnb,
+            url: process.env.NODE_URL || "",
+            gasPrice: 10000000000,
+            accounts
+        },
+        bnbt: {
+            chainId: chainIds.bnbt,
+            url: process.env.NODE_URL || "",
+            gasPrice: 10000000000,
+            accounts
+        },
     },
     paths: {
         artifacts: "./artifacts",

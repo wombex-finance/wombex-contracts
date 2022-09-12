@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
 
-import { IExtraRewardsDistributor, IAuraLocker } from "./Interfaces.sol";
+import { IExtraRewardsDistributor, IWmxLocker} from "./Interfaces.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
@@ -10,12 +10,12 @@ import { ReentrancyGuard } from "@openzeppelin/contracts-0.8/security/Reentrancy
 /**
  * @title   ExtraRewardsDistributor
  * @author  adapted from ConvexFinance
- * @notice  Allows anyone to distribute rewards to the AuraLocker at a given epoch.
+ * @notice  Allows anyone to distribute rewards to the WmxLocker at a given epoch.
  */
 contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, Ownable {
     using SafeERC20 for IERC20;
 
-    IAuraLocker public immutable auraLocker;
+    IWmxLocker public immutable wmxLocker;
 
     // user -> canAdd
     mapping(address => bool) public canAddReward;
@@ -35,10 +35,10 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
 
     /**
      * @dev Simple constructoor
-     * @param _auraLocker Aura Locker address
+     * @param _wmxLocker Wmx Locker address
      */
-    constructor(address _auraLocker) Ownable() {
-        auraLocker = IAuraLocker(_auraLocker);
+    constructor(address _wmxLocker) Ownable() {
+        wmxLocker = IWmxLocker(_wmxLocker);
     }
 
     /* ========== ADD WHITELIST ========== */
@@ -56,9 +56,9 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
      * @param _amount   Amount of reward tokenπ
      */
     function addReward(address _token, uint256 _amount) external {
-        auraLocker.checkpointEpoch();
+        wmxLocker.checkpointEpoch();
 
-        uint256 latestEpoch = auraLocker.epochCount() - 1;
+        uint256 latestEpoch = wmxLocker.epochCount() - 1;
         _addReward(_token, _amount, latestEpoch);
     }
 
@@ -73,9 +73,9 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
         uint256 _amount,
         uint256 _epoch
     ) external {
-        auraLocker.checkpointEpoch();
+        wmxLocker.checkpointEpoch();
 
-        uint256 latestEpoch = auraLocker.epochCount() - 1;
+        uint256 latestEpoch = wmxLocker.epochCount() - 1;
         require(_epoch <= latestEpoch, "Cannot assign to the future");
 
         if (_epoch == latestEpoch) {
@@ -89,7 +89,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
     }
 
     /**
-     * @notice  Transfer reward tokens from sender to contract for vlCVX holders
+     * @notice  Transfer reward tokens from sender to contract for vlWMX holders
      * @dev     Add reward token for specific epoch
      * @param _token    Reward token address
      * @param _amount   Amount of reward tokens
@@ -107,7 +107,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
 
         //convert to reward per token
-        uint256 supply = auraLocker.totalSupplyAtEpoch(_epoch);
+        uint256 supply = wmxLocker.totalSupplyAtEpoch(_epoch);
         uint256 rPerT = (_amount * 1e20) / supply;
         rewardData[_token][_epoch] += rPerT;
 
@@ -125,7 +125,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
 
     /**
      * @notice Claim rewards for a specific token since the first epoch.
-     * @param _account  Address of vlCVX holder
+     * @param _account  Address of vlWMX holder
      * @param _token    Reward token address
      */
     function getReward(address _account, address _token) public {
@@ -143,7 +143,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
 
     /**
      * @notice Claim rewards for a specific token at a specific epoch
-     * @param _account     Address of vlCVX holder
+     * @param _account     Address of vlWMX holder
      * @param _token       Reward token address
      * @param _startIndex  Index of rewardEpochs[_token] to start checking for rewards from
      */
@@ -189,8 +189,8 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
     /* ========== VIEW REWARDS ========== */
 
     /**
-     * @notice Get claimable rewards (rewardToken) for vlCVX holder
-     * @param _account  Address of vlCVX holder
+     * @notice Get claimable rewards (rewardToken) for vlWMX holder
+     * @param _account  Address of vlWMX holder
      * @param _token    Reward token address
      */
     function claimableRewards(address _account, address _token) external view returns (uint256) {
@@ -200,7 +200,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
 
     /**
      * @notice Get claimable rewards for a token at a specific epoch
-     * @param _account     Address of vlCVX holder
+     * @param _account     Address of vlWMX holder
      * @param _token       Reward token address
      * @param _epoch       The epoch to check for rewards
      */
@@ -215,7 +215,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
     /**
      * @notice  Get all claimable rewards by looping through each epoch starting with the latest
      *          saved epoch the user last claimed from
-     * @param _account  Address of vlCVX holder
+     * @param _account  Address of vlWMX holder
      * @param _token    Reward token
      * @param _startIndex  Index of rewardEpochs[_token] to start checking for rewards from
      */
@@ -224,7 +224,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
         address _token,
         uint256 _startIndex
     ) internal view returns (uint256, uint256) {
-        uint256 latestEpoch = auraLocker.epochCount() - 1;
+        uint256 latestEpoch = wmxLocker.epochCount() - 1;
         // e.g. tokenEpochs = 31, 21
         uint256 tokenEpochs = rewardEpochs[_token].length;
 
@@ -252,7 +252,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
 
     /**
      * @notice Get claimable rewards for a token at a specific epoch
-     * @param _account     Address of vlCVX holder
+     * @param _account     Address of vlWMX holder
      * @param _token       Reward token address
      * @param _epoch       The epoch to check for rewards
      */
@@ -262,7 +262,7 @@ contract ExtraRewardsDistributor is ReentrancyGuard, IExtraRewardsDistributor, O
         uint256 _epoch
     ) internal view returns (uint256) {
         //get balance and calc share
-        uint256 balance = auraLocker.balanceAtEpochOf(_epoch, _account);
+        uint256 balance = wmxLocker.balanceAtEpochOf(_epoch, _account);
         return (balance * rewardData[_token][_epoch]) / 1e20;
     }
 

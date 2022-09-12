@@ -1,4 +1,3 @@
-import "./mainnet";
-import "./mainnet-crv";
-import "./kovan";
+import "./bnbt";
 import "./mainnet-config";
+import "./info";
