@@ -89,6 +89,7 @@ contract WmxMerkleDrop {
 
     function startEarly() external {
         require(msg.sender == dao, "!auth");
+        require(block.timestamp < startTime, "!earlier");
         startTime = block.timestamp;
         emit StartedEarly();
     }
