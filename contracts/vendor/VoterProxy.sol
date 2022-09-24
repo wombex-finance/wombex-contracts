@@ -38,7 +38,11 @@ contract VoterProxy {
 
     bytes4 constant internal EIP1271_MAGIC_VALUE = 0x1626ba7e;
 
+    event SetOwner(address newOwner);
     event SetGaugeLpTokenPid(address gauge, address lptoken, uint256 pid);
+    event SetRewardDeposit(address withdrawer, address rewardDeposit);
+    event SetDepositor(address depositor);
+    event SetOperator(address operator);
     event Deposit(address lptoken, address gauge, uint256 value);
     event Lock(uint256 amount, uint256 lockDays);
     event ReleaseLock(uint256 amount, uint256 slot);
@@ -75,6 +79,7 @@ contract VoterProxy {
     function setOwner(address _owner) external {
         require(msg.sender == owner, "!auth");
         owner = _owner;
+        emit SetOwner(_owner);
     }
 
     /**
@@ -105,6 +110,7 @@ contract VoterProxy {
         require(msg.sender == owner, "!auth");
         withdrawer = _withdrawer;
         rewardDeposit = _rewardDeposit;
+        emit SetRewardDeposit(_withdrawer, _rewardDeposit);
     }
 
     /**
@@ -116,6 +122,7 @@ contract VoterProxy {
         require(operator == address(0) || IDeposit(operator).isShutdown() == true, "needs shutdown");
 
         operator = _operator;
+        emit SetOperator(_operator);
     }
 
     /**
@@ -126,6 +133,7 @@ contract VoterProxy {
         require(msg.sender == owner, "!auth");
 
         depositor = _depositor;
+        emit SetDepositor(_depositor);
     }
 
     /**
