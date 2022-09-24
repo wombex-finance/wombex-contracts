@@ -360,8 +360,7 @@ contract Booster{
         PoolInfo storage pool = poolInfo[_pid];
 
         //withdraw from gauge
-        try IStaker(voterProxy).withdrawAllLp(pool.lptoken,pool.gauge){
-        }catch{}
+        IStaker(voterProxy).withdrawAllLp(pool.lptoken,pool.gauge);
 
         pool.shutdown = true;
 
