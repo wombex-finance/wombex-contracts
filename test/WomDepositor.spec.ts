@@ -16,7 +16,7 @@ import {
     WomDepositor
 } from "../types/generated";
 
-describe.only("WomDepositor", () => {
+describe("WomDepositor", () => {
     let accounts: Signer[];
     let mocks, veWom: VeWom;
     let deployer: Signer;
@@ -177,7 +177,7 @@ describe.only("WomDepositor", () => {
         expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(prevAmountToDeposit.mul(2));
         expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit));
         expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit.mul(2).add(prevAmountToDeposit.mul(3)));
-        expect(await womDepositor.checkOldSlot()).eq(2);
+        expect(await womDepositor.checkOldSlot()).eq(0);
         expect(await mocks.crv.balanceOf(womDepositor.address)).eq(amountToDeposit);
     });
 
