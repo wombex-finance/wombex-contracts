@@ -249,7 +249,6 @@ contract VoterProxy {
      * @param _amount   Amount of LP token to withdraw
      */
     function withdrawLp(address _lptoken, address _gauge, uint256 _amount) public returns(bool){
-        require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
         require(msg.sender == operator, "!auth");
         _withdrawSomeLp(_lptoken, _gauge, _amount);
         IERC20(_lptoken).safeTransfer(msg.sender, IERC20(_lptoken).balanceOf(address(this)));
@@ -263,7 +262,6 @@ contract VoterProxy {
      * @param _gauge  Gauge for this LP token
      */
     function withdrawAllLp(address _lptoken, address _gauge) external returns(bool){
-        require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
         require(msg.sender == operator, "!auth");
         withdrawLp(_lptoken, _gauge, balanceOfPool(_lptoken, _gauge));
         return true;
