@@ -125,6 +125,10 @@ contract WomDepositor is Ownable {
             return;
         }
 
+        if (currentSlot > 1 && checkOldSlot >= currentSlot - 1) {
+            checkOldSlot = 0;
+        }
+
         bool releaseExecuted = false;
         if (slotEnds[checkOldSlot] != 0 && slotEnds[checkOldSlot] < block.timestamp) {
             if (!lockedCustomSlots[checkOldSlot]) {
@@ -140,9 +144,6 @@ contract WomDepositor is Ownable {
             slot = slot.sub(1);
         } else {
             currentSlot = currentSlot.add(1);
-        }
-        if (currentSlot > 1 && checkOldSlot >= currentSlot - 1) {
-            checkOldSlot = 0;
         }
 
         uint256 senderLockDays = lockDays;
@@ -180,6 +181,9 @@ contract WomDepositor is Ownable {
         IERC20(wom).safeTransfer(msg.sender, slot.amount);
 
         lockedCustomSlots[slot.number] = false;
+        slotEnds[slot.number] = slotEnds[currentSlot.sub(1)];
+
+        checkOldSlot = slot.number.add(1);
 
         uint256 len = customLockSlots[msg.sender].length;
         if (_index != len - 1) {
