@@ -547,7 +547,7 @@ contract Booster{
                 if (tDistro.callQueue) {
                     IRewards(tDistro.distro).queueNewRewards(address(token), amount);
                 } else {
-                    token.transfer(tDistro.distro, amount);
+                    token.safeTransfer(tDistro.distro, amount);
                 }
                 sentSum = sentSum.add(amount);
             }
