@@ -35,9 +35,8 @@ contract BaseRewardPool4626 is BaseRewardPool, ReentrancyGuard, IERC4626 {
         address stakingToken_,
         address rewardToken_,
         address operator_,
-        address rewardManager_,
         address lptoken_
-    ) public BaseRewardPool(pid_, stakingToken_, rewardToken_, operator_, rewardManager_) {
+    ) public BaseRewardPool(pid_, stakingToken_, rewardToken_, operator_) {
         asset = lptoken_;
         IERC20(asset).safeApprove(operator_, type(uint256).max);
     }
