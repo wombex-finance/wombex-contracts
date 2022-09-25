@@ -124,4 +124,17 @@ contract Wmx is ERC20 {
         minterMinted += _amount;
         _mint(_to, _amount);
     }
+
+    function getFactAmounMint(uint256 _amount) external view returns(uint256 amount) {
+        uint256 emissionsMinted = totalSupply() - INIT_MINT_AMOUNT - minterMinted;
+        uint256 cliff = emissionsMinted.div(reductionPerCliff);
+        if (cliff < totalCliffs) {
+            uint256 reduction = totalCliffs.sub(cliff).mul(5).div(2).add(2);
+            amount = _amount.mul(reduction).div(totalCliffs);
+            uint256 amtTillMax = EMISSIONS_MAX_SUPPLY.sub(emissionsMinted);
+            if (amount > amtTillMax) {
+                amount = amtTillMax;
+            }
+        }
+    }
 }
