@@ -584,16 +584,18 @@ contract Booster{
 
         uint256 penalty;
         if (_lock) {
+            uint256 balanceBefore = IERC20(cvx).balanceOf(address(this));
             ITokenMinter(cvx).mint(address(this), mintAmount);
-            ICvxLocker(cvxLocker).lock(_address, mintAmount);
+            ICvxLocker(cvxLocker).lock(_address, IERC20(cvx).balanceOf(address(this)).sub(balanceBefore));
         } else {
             penalty = mintAmount.mul(penaltyShare).div(DENOMINATOR);
             mintAmount = mintAmount.sub(penalty);
             //mint reward to user, except the penalty
             ITokenMinter(cvx).mint(_address, mintAmount);
             if (penalty > 0) {
+                uint256 balanceBefore = IERC20(cvx).balanceOf(address(this));
                 ITokenMinter(cvx).mint(address(this), penalty);
-                extraRewardsDist.addReward(cvx, penalty);
+                extraRewardsDist.addReward(cvx, IERC20(cvx).balanceOf(address(this)).sub(balanceBefore));
             }
         }
         emit RewardClaimed(_pid, _address, _amount, _lock, mintAmount, penalty);

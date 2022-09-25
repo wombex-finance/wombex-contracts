@@ -48,25 +48,17 @@ describe("Booster", () => {
         const distro = getMockDistro();
 
         contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
-        console.log('updateDistributionByTokens');
         await updateDistributionByTokens(daoSigner, contracts);
-        console.log('({ booster, booster, cvxLocker, cvxCrvRewards } = deployment)');
-        // await deployment.poolManager.connect(daoSigner).setProtectPool(false);
-        // await deployment.booster.connect(daoSigner).setFeeInfo(mocks.lptoken.address, mocks.feeDistribution.address);
-        // await deployment.booster.connect(daoSigner).setFeeInfo(mocks.crv.address, mocks.feeDistribution.address);
 
         ({ cvx, booster, booster, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom } = contracts);
 
-        console.log('pool = await booster.poolInfo(0)');
         pool = await booster.poolInfo(0);
 
         // transfer LP tokens to accounts
-        console.log('const balance = await mocks.lptoken.balanceOf(deployerAddress)');
         const balance = await mocks.lptoken.balanceOf(deployerAddress);
         for (const account of accounts) {
             const accountAddress = await account.getAddress();
             const share = balance.div(accounts.length);
-            console.log('const tx = await mocks.lptoken.transfer(accountAddress, share)');
             const tx = await mocks.lptoken.transfer(accountAddress, share);
             await tx.wait();
         }
@@ -215,7 +207,11 @@ describe("Booster", () => {
 
             expect(await cvx.balanceOf(bobAddress)).eq(cvxBalanceBefore);
             expect(await cvx.balanceOf(contracts.extraRewardsDistributor.address)).eq(extraDistrBalanceBefore);
-            expect(await contracts.cvxLocker.balances(bobAddress).then(b => b.locked)).gt(lockerBalanceBefore);
+            expect(
+                await contracts.cvxLocker.balances(bobAddress).then(b => b.locked)
+            ).eq(
+                lockerBalanceBefore.add(await cvx.getFactAmounMint(boosterReward.amount))
+            );
 
             const crvBalance = await mocks.crv.balanceOf(bobAddress);
 
@@ -257,7 +253,12 @@ describe("Booster", () => {
 
             expect(await cvx.balanceOf(bobAddress)).eq(cvxBalanceBefore);
             expect(await cvx.balanceOf(contracts.extraRewardsDistributor.address)).eq(extraDistrBalanceBefore);
-            expect(await contracts.cvxLocker.balances(bobAddress).then(b => b.locked)).gt(lockerBalanceBefore);
+            const factMint = await cvx.getFactAmounMint(boosterReward.amount);
+            expect(
+                await contracts.cvxLocker.balances(bobAddress).then(b => b.locked)
+            ).eq(
+                lockerBalanceBefore.add(factMint.mul(mintRatio).div(10000))
+            );
 
             const crvBalance = await mocks.crv.balanceOf(bobAddress);
 
@@ -302,8 +303,18 @@ describe("Booster", () => {
             expect(boosterReward.penalty).eq(boosterReward.amount.mul(penaltyShare).div(10000));
 
             expect(await contracts.cvxLocker.balances(bobAddress).then(b => b.locked)).eq(lockerBalanceBefore);
-            expect(await cvx.balanceOf(bobAddress)).gt(cvxBalanceBefore);
-            expect(await cvx.balanceOf(contracts.extraRewardsDistributor.address)).gt(extraDistrBalanceBefore);
+
+            const factMint = await cvx.getFactAmounMint(boosterReward.amount);
+            expect(
+                await cvx.balanceOf(bobAddress)
+            ).eq(
+                cvxBalanceBefore.add(factMint.mul(10000 - penaltyShare).div(10000))
+            );
+            expect(
+                await cvx.balanceOf(contracts.extraRewardsDistributor.address)
+            ).eq(
+                extraDistrBalanceBefore.add(factMint.mul(penaltyShare).div(10000))
+            );
 
             const crvBalance = await mocks.crv.balanceOf(bobAddress);
 
@@ -465,6 +476,48 @@ describe("Booster", () => {
             await expect(booster.connect(voteDelegate).voteExecute(mocks.masterWombat.address, 0, voteData)).to.be.revertedWith("protected");
 
             await expect(contracts.voterProxy.connect(voteDelegate).execute(mockVoting.address, 0, voteData)).to.be.revertedWith("!auth");
+        });
+    });
+
+    describe("withdraw", async () => {
+        it("withdraw wrapped and lp tokens", async () => {
+            const amount = ethers.utils.parseEther("500");
+
+            const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
+            const lpToken = ERC20__factory.connect(pool.lptoken, deployer);
+            const depositToken = ERC20__factory.connect(pool.token, deployer);
+
+            let rsBalanceBefore = await crvRewards.balanceOf(bobAddress);
+            let lpBalanceBefore = await lpToken.balanceOf(bobAddress);
+            let dtRewardsBalanceBefore = await depositToken.balanceOf(crvRewards.address);
+
+            let tx = await crvRewards.connect(bob).withdrawAndUnwrap(amount, true);
+            await tx.wait();
+
+            expect(await depositToken.balanceOf(crvRewards.address)).to.equal(dtRewardsBalanceBefore.sub(amount));
+            expect(await crvRewards.balanceOf(bobAddress)).to.equal(rsBalanceBefore.sub(amount));
+            expect(await lpToken.balanceOf(bobAddress)).to.equal(lpBalanceBefore.add(amount));
+
+            let dtBalanceBefore = await depositToken.balanceOf(bobAddress);
+            lpBalanceBefore = await lpToken.balanceOf(bobAddress);
+            rsBalanceBefore = await crvRewards.balanceOf(bobAddress);
+            dtRewardsBalanceBefore = await depositToken.balanceOf(crvRewards.address);
+
+            tx = await crvRewards.connect(bob).withdraw(amount, true);
+            await tx.wait();
+
+            expect(await depositToken.balanceOf(crvRewards.address)).to.equal(dtRewardsBalanceBefore.sub(amount));
+            expect(await crvRewards.balanceOf(bobAddress)).to.equal(rsBalanceBefore.sub(amount));
+            expect(await depositToken.balanceOf(bobAddress)).to.equal(dtBalanceBefore.add(amount));
+            expect(await lpToken.balanceOf(bobAddress)).to.equal(lpBalanceBefore);
+
+            dtBalanceBefore = await depositToken.balanceOf(bobAddress);
+
+            tx = await booster.connect(bob).withdraw(0, amount);
+            await tx.wait();
+
+            expect(await depositToken.balanceOf(bobAddress)).to.equal(dtBalanceBefore.sub(amount));
+            expect(await lpToken.balanceOf(bobAddress)).to.equal(lpBalanceBefore.add(amount));
         });
     });
 });
