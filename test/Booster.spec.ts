@@ -48,7 +48,6 @@ describe("Booster", () => {
         const distro = getMockDistro();
 
         contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
-        await updateDistributionByTokens(daoSigner, contracts);
 
         ({ cvx, booster, booster, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom } = contracts);
 

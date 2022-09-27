@@ -13,7 +13,7 @@ import {
     VeWom, VeWom__factory,
     MasterWombatV2, MasterWombatV2__factory,
     MultiRewarderPerSec, MultiRewarderPerSec__factory,
-    WETH, WETH__factory,
+    WETH, WETH__factory, Pool__factory, Pool, Asset, Asset__factory,
 } from "../types/generated";
 import {deployContract, waitForTx} from "../tasks/utils";
 import { MultisigConfig, DistroList, ExtSystemConfig, NamingConfig } from "./deploySystem";
@@ -317,14 +317,40 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
         debug,
     );
 
-    const lptoken = await deployContract<MockERC20>(
+    const pool = await deployContract<Pool>(
+        hre,
+        new Pool__factory(deployer),
+        "Pool",
+        ['2000000000000000', '400000000000000'],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('pool', pool.address);
+
+    const underlying = await deployContract<MockERC20>(
         hre,
         new MockERC20__factory(deployer),
-        "MockLP",
-        ["MockLP", "MockLP", 18, deployerAddress, 10000000],
+        "MockERC20",
+        ["MockERC20", "MockERC20", 18, deployerAddress, simpleToExactAmount(10000000)],
         {},
         debug,
     );
+
+    const lptoken = await deployContract<Asset>(
+        hre,
+        new Asset__factory(deployer),
+        "Asset",
+        [underlying.address, 'MockLP', 'MockLP', pool.address],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lptoken', lptoken.address);
+
+    await pool.addAsset(underlying.address, lptoken.address);
+    await underlying.approve(pool.address, simpleToExactAmount(9000000));
+    await pool.deposit(underlying.address, simpleToExactAmount(9000000), '0', deployerAddress, new Date().getTime(), false);
 
     const weth = await deployContract<WETH>(
         hre,
@@ -392,6 +418,7 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
     return {
         ...config,
         weth,
+        pool,
         voting,
         lptoken,
         voterProxy,

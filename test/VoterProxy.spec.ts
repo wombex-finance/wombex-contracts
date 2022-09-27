@@ -72,7 +72,6 @@ describe("VoterProxy", () => {
         daoMultisig = await ethers.getSigner(multisigs.daoMultisig);
         const distro = getMockDistro();
         const contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
-        await updateDistributionByTokens(accounts[3], contracts);
 
         voterProxy = contracts.voterProxy;
         booster = contracts.booster;

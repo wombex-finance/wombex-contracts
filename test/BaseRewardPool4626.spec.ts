@@ -16,13 +16,9 @@ import {
     ERC20__factory,
     BaseRewardPool4626__factory,
     BaseRewardPool4626,
-    MockERC20,
-    MockERC20__factory,
 } from "../types/generated";
 import { Signer } from "ethers";
 import { DEAD_ADDRESS, ZERO_ADDRESS } from "../test-utils/constants";
-import { deployContract } from "../tasks/utils";
-import { impersonateAccount } from "../test-utils/fork";
 
 type Pool = {
     lptoken: string;
@@ -51,7 +47,6 @@ describe("BaseRewardPool4626", () => {
         const distro = getMockDistro();
 
         contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
-        await updateDistributionByTokens(accounts[6], contracts);
 
         ({ booster } = contracts);
 

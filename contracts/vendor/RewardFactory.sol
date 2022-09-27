@@ -40,7 +40,7 @@ contract RewardFactory {
 
         //operator = booster(deposit) contract so that new crv/wom can be added and distributed
 
-        BaseRewardPool4626 rewardPool = new BaseRewardPool4626(_pid,_depositToken,crv,operator, address(this), _lptoken);
+        BaseRewardPool4626 rewardPool = new BaseRewardPool4626(_pid, _depositToken, crv, operator, _lptoken);
 
         emit RewardPoolCreated(address(rewardPool), _pid, _depositToken);
         return address(rewardPool);

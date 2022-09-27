@@ -1,5 +1,6 @@
 import { task } from "hardhat/config";
 import { TaskArguments } from "hardhat/types";
+import {BaseRewardPool4626__factory, WETH__factory} from "../../types/generated";
 
 const ethers = require('ethers');
 const fs = require('fs');
@@ -46,4 +47,21 @@ task("info:wombat:save").setAction(async function (taskArguments: TaskArguments,
         bnbtConfig.lpTokens.push(poolInfo.lpToken);
     }
     fs.writeFileSync('bnbt.json', JSON.stringify(bnbtConfig, null, " "));
+});
+
+
+task("info:lpRewards")
+    .addParam("address", "The reward's address")
+    .setAction(async function (taskArgs: TaskArguments, hre) {
+    const baseRewards = BaseRewardPool4626__factory.connect(taskArgs.address, hre.ethers.provider);
+
+    const data = [
+        await baseRewards.pid().then(r => r.toString()),
+        await baseRewards.stakingToken(),
+        await baseRewards.boosterRewardToken(),
+        await baseRewards.operator(),
+        await baseRewards.rewardManager(),
+        await baseRewards.asset()
+    ];
+    fs.writeFileSync('busdRewards.js', 'module.exports = ' + JSON.stringify(data, null, " "));
 });

@@ -1,12 +1,42 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
 
+import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
+
 interface IWomDepositor {
     function deposit(uint256 _amount, address _stakeAddress) external returns (bool);
 }
 
-interface IAsset {
-    // solhint-disable-previous-line no-empty-blocks
+interface IAsset is IERC20 {
+    function underlyingToken() external view returns (address);
+
+    function pool() external view returns (address);
+
+    function cash() external view returns (uint120);
+
+    function liability() external view returns (uint120);
+
+    function decimals() external view returns (uint8);
+
+    function underlyingTokenDecimals() external view returns (uint8);
+
+    function setPool(address pool_) external;
+
+    function underlyingTokenBalance() external view returns (uint256);
+
+    function transferUnderlyingToken(address to, uint256 amount) external;
+
+    function mint(address to, uint256 amount) external;
+
+    function burn(address to, uint256 amount) external;
+
+    function addCash(uint256 amount) external;
+
+    function removeCash(uint256 amount) external;
+
+    function addLiability(uint256 amount) external;
+
+    function removeLiability(uint256 amount) external;
 }
 
 interface IWmxLocker {
@@ -76,3 +106,21 @@ interface IStaker{
     function setVote(bytes32 hash, bool valid) external;
 }
 
+interface IPool {
+    function deposit(
+        address token,
+        uint256 amount,
+        uint256 minimumLiquidity,
+        address to,
+        uint256 deadline,
+        bool shouldStake
+    ) external returns (uint256);
+}
+
+interface IMasterWombatV2 {
+    function getAssetPid(address) external view returns(uint256);
+}
+
+interface IBooster {
+    function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
+}

@@ -1,24 +1,29 @@
-import { ethers } from "hardhat";
+import { utils } from "ethers";
 import { Block } from "@ethersproject/abstract-provider";
 import { BigNumberish } from "@ethersproject/bignumber";
 import { BN } from "./math";
 import { ONE_WEEK } from "./constants";
 
 export const advanceBlock = async (blocks?: BN | number): Promise<void> => {
+    const {provider} = (global.hre?.ethers || require('hardhat').ethers);
     if (blocks === undefined) {
-        await ethers.provider.send("evm_mine", []);
+        await provider.send("evm_mine", []);
     } else {
-        await ethers.provider.send("hardhat_mine", [ethers.utils.hexlify(blocks)]);
+        await provider.send("hardhat_mine", [utils.hexlify(blocks)]);
         // work around for issue [hardhat_mine produces a failed tx when running in Coverage](https://github.com/NomicFoundation/hardhat/issues/2467)
-        await ethers.provider.send("hardhat_setNextBlockBaseFeePerGas", ["0x0"]);
+        await provider.send("hardhat_setNextBlockBaseFeePerGas", ["0x0"]);
     }
 };
 
 export const increaseTime = async (length: BN | number): Promise<void> => {
-    await ethers.provider.send("evm_increaseTime", [BN.from(length).toNumber()]);
+    const {provider} = (global.hre?.ethers || require('hardhat').ethers);
+    await provider.send("evm_increaseTime", [BN.from(length).toNumber()]);
     await advanceBlock();
 };
-export const latestBlock = async (): Promise<Block> => ethers.provider.getBlock(await ethers.provider.getBlockNumber());
+export const latestBlock = async (): Promise<Block> => {
+    const {provider} = (global.hre?.ethers || require('hardhat').ethers);
+    return provider.getBlock(await provider.getBlockNumber())
+};
 
 export const getTimestamp = async (): Promise<BN> => BN.from((await latestBlock()).timestamp);
 

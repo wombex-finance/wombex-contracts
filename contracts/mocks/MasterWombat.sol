@@ -50,6 +50,26 @@ library DSMath {
     function wdiv(uint256 x, uint256 y) internal pure returns (uint256) {
         return ((x * WAD) + (y / 2)) / y;
     }
+
+    // Convert x to WAD (18 decimals) from d decimals.
+    function toWad(uint256 x, uint8 d) internal pure returns (uint256) {
+        if (d < 18) {
+            return x * 10**(18 - d);
+        } else if (d > 18) {
+            return (x / (10**(d - 18)));
+        }
+        return x;
+    }
+
+    // Convert x from WAD (18 decimals) to d decimals.
+    function fromWad(uint256 x, uint8 d) internal pure returns (uint256) {
+        if (d < 18) {
+            return (x / (10**(18 - d)));
+        } else if (d > 18) {
+            return x * 10**(d - 18);
+        }
+        return x;
+    }
 }
 
 interface IMultiRewarder {
