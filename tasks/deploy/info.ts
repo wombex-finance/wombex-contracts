@@ -1,7 +1,7 @@
 import { task } from "hardhat/config";
 import { TaskArguments } from "hardhat/types";
 import {BaseRewardPool4626__factory, WETH__factory} from "../../types/generated";
-
+import {getSigner} from "../utils";
 const ethers = require('ethers');
 const fs = require('fs');
 
@@ -60,8 +60,22 @@ task("info:lpRewards")
         await baseRewards.stakingToken(),
         await baseRewards.boosterRewardToken(),
         await baseRewards.operator(),
-        await baseRewards.rewardManager(),
         await baseRewards.asset()
     ];
     fs.writeFileSync('busdRewards.js', 'module.exports = ' + JSON.stringify(data, null, " "));
 });
+
+task("info:test")
+    .setAction(async function (taskArgs: TaskArguments, hre) {
+        const deployer = await getSigner(hre);
+        deployer.getFeeData = () => new Promise((resolve) => resolve({
+            maxFeePerGas: null,
+            maxPriorityFeePerGas: null,
+            gasPrice: ethers.BigNumber.from(5000000000),
+        })) as any;
+        const deployerAddress = await deployer.getAddress();
+        await deployer.sendTransaction({
+            to: deployerAddress,
+            value: '0x0'
+        })
+    });

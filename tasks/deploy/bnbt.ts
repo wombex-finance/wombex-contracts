@@ -15,10 +15,17 @@ import {
     BaseRewardPool__factory,
     MockVoting,
     MockVoting__factory,
-    VoterProxy, WmxClaimZap, WmxClaimZap__factory, WETH__factory, MasterWombatV2__factory, IERC20__factory
+    VoterProxy,
+    WmxClaimZap,
+    WmxClaimZap__factory,
+    WETH__factory,
+    MasterWombatV2__factory,
+    IERC20__factory,
+    Pool__factory
 } from "../../types/generated";
 
 const fs = require('fs');
+const ethers = require('ethers');
 
 const forking = false;
 const waitForBlocks = forking ? undefined : 3;
@@ -28,6 +35,12 @@ const zeroAddress = '0x0000000000000000000000000000000000000000';
 task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
     const deployerAddress = await deployer.getAddress();
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
     console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
     const bnbtConfig = JSON.parse(fs.readFileSync('./bnbt.json', {encoding: 'utf8'}));
 
@@ -43,6 +56,7 @@ task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre)
 
     const weth = WETH__factory.connect('0x64690EB41E1Ae4A75501a54C1331ddfF5c26b8a6', deployer);
     const masterWombat = MasterWombatV2__factory.connect(bnbtConfig.masterWombat, deployer);
+    const pool = Pool__factory.connect(bnbtConfig.pool, deployer);
     const crv = IERC20__factory.connect(bnbtConfig.wom, deployer);
 
     bnbtConfig.token = bnbtConfig.wom;
@@ -69,7 +83,7 @@ task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre)
     const contracts = await deploy(
         hre,
         deployer,
-        { voterProxy, weth, masterWombat, crv },
+        { voterProxy, weth, masterWombat, crv, pool },
         getMockDistro(),
         await getMockMultisigs(deployer, deployer, deployer),
         {
@@ -89,7 +103,7 @@ task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre)
     [
         'cvx', 'minter', 'booster', 'boosterOwner', 'arbitratorVault', 'cvxCrv', 'cvxCrvRewards', 'initialCvxCrvStaking',
         'crvDepositor', 'cvxLocker', 'cvxStakingProxy', 'vestedEscrows', 'drops', 'lbpBpt', 'balLiquidityProvider',
-        'penaltyForwarder', 'extraRewardsDistributor', 'claimZap', 'feeCollector'
+        'penaltyForwarder', 'extraRewardsDistributor', 'claimZap', 'feeCollector', 'poolDepositor'
     ].map(name => {
         if (!contracts[name]) {
             return;
