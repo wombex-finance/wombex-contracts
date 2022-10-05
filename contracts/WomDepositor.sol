@@ -10,6 +10,8 @@ import { SafeMath } from "@openzeppelin/contracts-0.8/utils/math/SafeMath.sol";
 
 /**
  * @title   WomDepositor
+ * @notice  Deposit WOM in staker contract once in smartLockPeriod.
+            Have customLockDays mapping for instant custom deposits with specific days count.
  */
 contract WomDepositor is Ownable {
     using SafeERC20 for IERC20;
@@ -51,7 +53,6 @@ contract WomDepositor is Ownable {
      * @param _wom              WOM Token address
      * @param _staker           Voter Proxy address
      * @param _minter           Minter
-     *
      */
     constructor(
         address _wom,
@@ -70,6 +71,12 @@ contract WomDepositor is Ownable {
         emit SetLockConfig(_lockDays, _smartLockPeriod);
     }
 
+    /**
+     * @notice  Set custom lock options for specific account
+     * @param _account      Account of spender
+     * @param _lockDays     Specific days to lock WOM amount
+     * @param _minAmount    Minimum amount to lock by spender
+     */
     function setCustomLock(address _account, uint256 _lockDays, uint256 _minAmount) external onlyOwner {
         customLockDays[_account] = _lockDays;
         customLockMinAmount[_account] = _minAmount;
@@ -95,7 +102,7 @@ contract WomDepositor is Ownable {
     }
 
     /**
-     * @notice  Deposit tokens into the VeWom
+     * @notice  Deposit tokens into the VeWom and mint WmxWom to depositors.
      * @param _amount  Amount WOM to deposit
      * @param _stakeAddress  Staker to deposit WmxWom
      */
@@ -120,6 +127,10 @@ contract WomDepositor is Ownable {
         return true;
     }
 
+    /**
+     * @notice  Trying to releaseLock every time on deposit and lock cumulative balance once in smartLockPeriod.
+     * @param _amount  Amount WOM to deposit
+     */
     function _smartLock(uint256 _amount) internal {
         IERC20(wom).transferFrom(msg.sender, address(this), _amount);
 
@@ -165,12 +176,20 @@ contract WomDepositor is Ownable {
         emit SmartLock(msg.sender, customLockDays[msg.sender] > 0, slot, amountToLock, senderLockDays, currentSlot, checkOldSlot);
     }
 
+    /**
+     * @notice  Deposit tokens into the VeWom by custom lock options.
+     * @param _amount  Amount WOM to deposit
+     */
     function depositCustomLock(uint256 _amount) public {
         require(customLockDays[msg.sender] > 0, "!custom");
         require(_amount >= customLockMinAmount[msg.sender], "<customLockMinAmount");
         _smartLock(_amount);
     }
 
+    /**
+     * @notice  Release locked tokens from specific slot
+     * @param _index  Index of account slots
+     */
     function releaseCustomLock(uint256 _index) public {
         SlotInfo memory slot = customLockSlots[msg.sender][_index];
 
