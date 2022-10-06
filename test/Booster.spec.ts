@@ -5,13 +5,16 @@ import { getMockDistro, getMockMultisigs, deployTestFirstStage } from "../script
 import {
     Booster,
     ERC20__factory,
-    BaseRewardPool__factory, MockVoting, MockVoting__factory,
+    BaseRewardPool__factory,
+    MockVoting,
+    MockVoting__factory,
+    SafeMoon__factory, SafeMoon, MultiRewarderPerSec, MultiRewarderPerSec__factory, MockERC20, MockERC20__factory,
 } from "../types/generated";
 import { Signer} from "ethers";
-import { increaseTime, increaseTimeTo } from "../test-utils/time";
+import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
 import {simpleToExactAmount} from "../test-utils/math";
-import {impersonateAccount} from "../test-utils";
-import {deployContract} from "../tasks/utils";
+import {impersonateAccount, ZERO_ADDRESS} from "../test-utils";
+import {deployContract, waitForTx} from "../tasks/utils";
 
 type Pool = {
     lptoken: string;
@@ -71,10 +74,11 @@ describe("Booster", () => {
         voteDelegateAddress = await voteDelegate.getAddress();
     };
 
-    async function getBoosterReward(tx) {
+    async function getBoosterReward(tx, logsLength) {
         tx = await tx.wait(1);
-        const log = tx.events.find(e => e.address.toLowerCase() === booster.address.toLowerCase());
-        return booster.interface.decodeEventLog('RewardClaimed', log.data, log.topics);
+        const logs = tx.events.filter(e => e.address.toLowerCase() === booster.address.toLowerCase());
+        expect(logs.length, logsLength);
+        return booster.interface.decodeEventLog('RewardClaimed', logs[0].data, logs[0].topics);
     }
 
     before(async () => {
@@ -151,7 +155,7 @@ describe("Booster", () => {
 
             const cvxBalanceBefore = await cvx.balanceOf(bobAddress);
             tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
-            const boosterReward = await getBoosterReward(tx);
+            const boosterReward = await getBoosterReward(tx, 1);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(false);
@@ -199,8 +203,10 @@ describe("Booster", () => {
             const cvxBalanceBefore = await cvx.balanceOf(bobAddress);
             const extraDistrBalanceBefore = await cvx.balanceOf(contracts.extraRewardsDistributor.address);
             const lockerBalanceBefore = await contracts.cvxLocker.balances(bobAddress).then(b => b.locked);
+            const crvBalanceBefore = await mocks.crv.balanceOf(bobAddress);
+            const userRewardPerTokenPaid = await crvRewards.userRewardPerTokenPaid(mocks.crv.address, bobAddress);
             tx = await crvRewards["getReward(address,bool)"](bobAddress, true);
-            const boosterReward = await getBoosterReward(tx);
+            const boosterReward = await getBoosterReward(tx, 1);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(true);
@@ -213,13 +219,13 @@ describe("Booster", () => {
                 lockerBalanceBefore.add(await cvx.getFactAmounMint(boosterReward.amount))
             );
 
-            const crvBalance = await mocks.crv.balanceOf(bobAddress);
+            const receivedCrv = (await mocks.crv.balanceOf(bobAddress)).sub(crvBalanceBefore);
 
             const balance = await crvRewards.balanceOf(bobAddress);
-            const rewardPerToken = await crvRewards.rewardPerToken(mocks.crv.address);
+            const rewardPerToken = (await crvRewards.rewardPerToken(mocks.crv.address)).sub(userRewardPerTokenPaid);
             const expectedRewards = rewardPerToken.mul(balance).div(simpleToExactAmount(1));
 
-            expect(expectedRewards).to.equal(crvBalance);
+            expect(expectedRewards).to.equal(receivedCrv);
         });
 
         it("@method BaseRewardPool.getReward with lock and mintRatio", async () => {
@@ -246,7 +252,7 @@ describe("Booster", () => {
             const extraDistrBalanceBefore = await cvx.balanceOf(contracts.extraRewardsDistributor.address);
             const lockerBalanceBefore = await contracts.cvxLocker.balances(bobAddress).then(b => b.locked);
             tx = await crvRewards["getReward(address,bool)"](bobAddress, true);
-            const boosterReward = await getBoosterReward(tx);
+            const boosterReward = await getBoosterReward(tx, 1);
 
             expect(boosterReward.mintAmount).eq(boosterReward.amount.mul(mintRatio).div(10000));
             expect(boosterReward.lock).eq(true);
@@ -295,7 +301,7 @@ describe("Booster", () => {
             const extraDistrBalanceBefore = await cvx.balanceOf(contracts.extraRewardsDistributor.address);
             const lockerBalanceBefore = await contracts.cvxLocker.balances(bobAddress).then(b => b.locked);
             tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
-            const boosterReward = await getBoosterReward(tx);
+            const boosterReward = await getBoosterReward(tx, 1);
 
             expect(boosterReward.amount).gt(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(false);
@@ -323,6 +329,137 @@ describe("Booster", () => {
             const expectedRewards = rewardPerToken.mul(balance).div(simpleToExactAmount(1));
 
             expect(expectedRewards).to.equal(crvBalance);
+        });
+    });
+
+    describe("performing core functions with deflationary token", async () => {
+        let underlying, lptoken, defPool, multiRewarder;
+        const pid = 2;
+        before(async () => {
+            underlying = await deployContract<SafeMoon>(
+                hre,
+                new SafeMoon__factory(deployer),
+                "SafeMoon",
+                [],
+                {},
+                true,
+            );
+
+            lptoken = await deployContract<MockERC20>(
+                hre,
+                new MockERC20__factory(deployer),
+                "MockLP",
+                ["MockLP", "MockLP", 18, deployerAddress, 10000000],
+                {},
+                true,
+            );
+
+            multiRewarder = await deployContract<MultiRewarderPerSec>(
+                hre,
+                new MultiRewarderPerSec__factory(deployer),
+                "MultiRewarderPerSec",
+                [
+                    mocks.masterWombat.address,
+                    lptoken.address,
+                    (await getTimestamp()).add(1),
+                    underlying.address,
+                    152207
+                ],
+                {},
+                true,
+            );
+            let tx = await underlying.transfer(multiRewarder.address, simpleToExactAmount(100000, 9));
+            await waitForTx(tx, true, 1);
+
+            tx = await mocks.masterWombat.add('1', lptoken.address, multiRewarder.address);
+            await waitForTx(tx, true, 1);
+
+            await updateDistributionByTokens(daoSigner, contracts, 1);
+
+            defPool = await booster.poolInfo(pid);
+
+            const balance = await lptoken.balanceOf(deployerAddress);
+            for (const account of [alice, bob]) {
+                const accountAddress = await account.getAddress();
+                const tx = await lptoken.transfer(accountAddress, balance.div(2));
+                await tx.wait();
+            }
+        });
+
+        it("@method Booster.deposit", async () => {
+            expect(defPool.lptoken).to.eq(lptoken.address);
+            const stake = false;
+            const amount = simpleToExactAmount(1000, 9);
+            let tx = await lptoken.connect(bob).approve(booster.address, amount);
+            await tx.wait();
+
+            tx = await booster.connect(bob).deposit(pid, amount, stake);
+            await tx.wait();
+
+            const depositToken = ERC20__factory.connect(defPool.token, deployer);
+            const balance = await depositToken.balanceOf(bobAddress);
+
+            expect(balance).to.equal(amount);
+        });
+
+        it("@method BaseRewardPool.stake", async () => {
+            const depositToken = ERC20__factory.connect(defPool.token, bob);
+            const balance = await depositToken.balanceOf(bobAddress);
+            const crvRewards = BaseRewardPool__factory.connect(defPool.crvRewards, bob);
+
+            let tx = await depositToken.approve(crvRewards.address, balance);
+            await tx.wait();
+
+            const stakedBalanceBefore = await crvRewards.balanceOf(bobAddress);
+
+            tx = await crvRewards.stake(balance);
+            await tx.wait();
+
+            const stakedBalanceAfter = await crvRewards.balanceOf(bobAddress);
+
+            expect(stakedBalanceAfter.sub(stakedBalanceBefore)).to.equal(balance);
+        });
+
+        it("@method BaseRewardPool.getReward", async () => {
+            let tx = await booster.connect(daoSigner).setRewardClaimedPenalty(0);
+            await tx.wait();
+
+            await increaseTime(60 * 60 * 24 * 6);
+
+            tx = await booster.earmarkRewards(pid);
+            await tx.wait();
+
+            await increaseTime(60 * 60 * 24 * 6);
+
+            tx = await booster.earmarkRewards(pid);
+            await tx.wait();
+
+            const crvRewards = BaseRewardPool__factory.connect(defPool.crvRewards, bob);
+            const queuedRewards = await crvRewards.tokenRewards(mocks.crv.address).then(r => r.queuedRewards);
+            expect(queuedRewards).gt(0);
+
+            await increaseTime(60 * 60 * 24 * 6);
+
+            const cvxBalanceBefore = await cvx.balanceOf(bobAddress);
+            const crvBalanceBefore = await mocks.crv.balanceOf(bobAddress);
+            const userRewardPerTokenPaid = await crvRewards.userRewardPerTokenPaid(mocks.crv.address, bobAddress);
+            const underlyingBalanceBefore = await underlying.balanceOf(bobAddress);
+
+            tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
+            const boosterReward = await getBoosterReward(tx, 2);
+
+            expect(boosterReward.amount).eq(boosterReward.mintAmount);
+            expect(boosterReward.lock).eq(false);
+            expect(await cvx.balanceOf(bobAddress)).gt(cvxBalanceBefore);
+            expect(await underlying.balanceOf(bobAddress)).gt(underlyingBalanceBefore);
+
+            const receivedCrv = (await mocks.crv.balanceOf(bobAddress)).sub(crvBalanceBefore);
+
+            const balance = await crvRewards.balanceOf(bobAddress);
+            const rewardPerToken = (await crvRewards.rewardPerToken(mocks.crv.address)).sub(userRewardPerTokenPaid);
+            const expectedRewards = rewardPerToken.mul(balance).div(simpleToExactAmount(1));
+
+            expect(expectedRewards).to.equal(receivedCrv);
         });
     });
 

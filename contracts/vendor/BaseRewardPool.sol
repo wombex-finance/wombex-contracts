@@ -276,7 +276,10 @@ contract BaseRewardPool {
      * @dev Donate some extra rewards to this contract
      */
     function donate(address _token, uint256 _amount) external returns(bool){
+        uint256 balanceBefore = IERC20(_token).balanceOf(address(this));
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+        _amount = IERC20(_token).balanceOf(address(this)).sub(balanceBefore);
+
         tokenRewards[_token].queuedRewards = tokenRewards[_token].queuedRewards.add(_amount);
     }
 
@@ -303,7 +306,10 @@ contract BaseRewardPool {
     function queueNewRewards(address _token, uint256 _rewards) external returns(bool){
         require(msg.sender == operator, "!authorized");
 
+        uint256 balanceBefore = IERC20(_token).balanceOf(address(this));
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _rewards);
+
+        _rewards = IERC20(_token).balanceOf(address(this)).sub(balanceBefore);
 
         RewardState storage rState = tokenRewards[_token];
         if (rState.lastUpdateTime == 0) {

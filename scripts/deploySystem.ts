@@ -659,9 +659,11 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
                 );
                 await waitForTx(tx, true, waitForBlocks);
 
-                console.log('cvxLocker.connect(signer).addReward', token);
-                tx = await cvxLocker.connect(signer).addReward(token, booster.address);
-                await waitForTx(tx, true, waitForBlocks);
+                if (await cvxLocker.rewardData(token).then(rd => rd.lastUpdateTime.toString()) === '0') {
+                    console.log('cvxLocker.connect(signer).addReward', token);
+                    tx = await cvxLocker.connect(signer).addReward(token, booster.address);
+                    await waitForTx(tx, true, waitForBlocks);
+                }
             }
         }
     }

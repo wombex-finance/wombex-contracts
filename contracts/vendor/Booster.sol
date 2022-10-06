@@ -522,12 +522,12 @@ contract Booster{
 
         address gauge = pool.gauge;
         //claim crv/wom and bonus tokens
-        (address[] memory tokens, uint256[] memory balances) = IStaker(voterProxy).claimCrv(gauge, _pid);
-
+        address[] memory tokens = IStaker(voterProxy).claimCrv(pool.lptoken, gauge);
         uint256 tLen = tokens.length;
+
         for (uint256 i = 0; i < tLen; i++) {
             IERC20 token = IERC20(tokens[i]);
-            uint256 balance = balances[i];
+            uint256 balance = token.balanceOf(address(this));
 
             emit EarmarkRewards(address(token), balance);
 

@@ -277,33 +277,41 @@ contract VoterProxy {
      * @notice  Claim WOM from Wombat
      * @dev     Claim WOM for LP token staking from the masterWombat contract
      */
-    function claimCrv(address _gauge, uint256 _pid) external returns (IERC20[] memory tokens, uint256[] memory balances) {
+    function claimCrv(address _lptoken, address _gauge) external returns (IERC20[] memory tokens) {
         require(msg.sender == operator, "!auth");
+        require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
+        uint256 pid = lpTokenToPid[_gauge][_lptoken];
 
-        IMasterWombat(_gauge).deposit(_pid, 0);
-        (, , IMasterWombatRewarder rewarder, , , , ) = IMasterWombat(_gauge).poolInfo(_pid);
+        IMasterWombat(_gauge).deposit(pid, 0);
+        tokens = getGaugeRewardTokens(_lptoken, _gauge);
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (address(tokens[i]) == weth) {
+                IWETH(weth).deposit{value: address(this).balance}();
+            }
+            tokens[i].safeTransfer(operator, tokens[i].balanceOf(address(this)));
+        }
+    }
+
+    function getGaugeRewardTokens(address _lptoken, address _gauge) public returns (IERC20[] memory tokens) {
+        require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
+        uint256 pid = lpTokenToPid[_gauge][_lptoken];
+
+        (, , IMasterWombatRewarder rewarder, , , , ) = IMasterWombat(_gauge).poolInfo(pid);
+
         address[] memory bonusTokenAddresses;
         if (address(rewarder) != address(0)) {
             bonusTokenAddresses = rewarder.rewardTokens();
         }
         tokens = new IERC20[](bonusTokenAddresses.length + 1);
-        balances = new uint256[](bonusTokenAddresses.length + 1);
 
         tokens[0] = IERC20(wom);
-        balances[0] = IERC20(wom).balanceOf(address(this));
-        tokens[0].safeTransfer(operator, balances[0]);
-
         for (uint256 i = 0; i < bonusTokenAddresses.length; i++) {
             IERC20 token = IERC20(bonusTokenAddresses[i]);
             if (address(token) == address(0)) {
                 token = IERC20(weth);
-                IWETH(weth).deposit{value: address(this).balance}();
             }
-            uint256 balance = token.balanceOf(address(this));
-            token.safeTransfer(operator, balance);
-
             tokens[i + 1] = token;
-            balances[i + 1] = balance;
         }
     }
 

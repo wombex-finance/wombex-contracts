@@ -41,7 +41,7 @@ interface IStaker{
     function withdrawAllLp(address, address) external returns (bool);
     function lock(uint256 _lockDays) external;
     function releaseLock(uint256 _slot) external returns(bool);
-    function claimCrv(address, uint256) external returns (address[] memory tokens, uint256[] memory balances);
+    function claimCrv(address, address) external returns (address[] memory tokens);
     function balanceOfPool(address, address) external view returns (uint256);
     function operator() external view returns (address);
     function execute(address _to, uint256 _value, bytes calldata _data) external payable returns (bool, bytes memory);
