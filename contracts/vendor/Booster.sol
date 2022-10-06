@@ -285,6 +285,7 @@ contract Booster{
             emit TokenDistributionUpdate(_token, _distros[i], _shares[i], _callQueue[i]);
 
             if (_callQueue[i]) {
+                IERC20(_token).safeApprove(_distros[i], 0);
                 IERC20(_token).safeApprove(_distros[i], type(uint256).max);
             }
         }
@@ -344,6 +345,7 @@ contract Booster{
 
         uint256 distTokensLen = distributionTokens.length;
         for (uint256 i = 0; i < distTokensLen; i++) {
+            IERC20(distributionTokens[i]).safeApprove(newRewardPool, 0);
             IERC20(distributionTokens[i]).safeApprove(newRewardPool, type(uint256).max);
         }
 
@@ -361,6 +363,22 @@ contract Booster{
 
         //withdraw from gauge
         IStaker(voterProxy).withdrawAllLp(pool.lptoken,pool.gauge);
+
+        pool.shutdown = true;
+
+        emit PoolShutdown(_pid);
+        return true;
+    }
+
+    /**
+     * @notice Shuts down the pool and sets shutdown flag even if withdrawAllLp failed.
+     */
+    function forceShutdownPool(uint256 _pid) external returns(bool){
+        require(msg.sender==poolManager, "!auth");
+        PoolInfo storage pool = poolInfo[_pid];
+
+        //withdraw from gauge
+        try IStaker(voterProxy).withdrawAllLp(pool.lptoken, pool.gauge){} catch {}
 
         pool.shutdown = true;
 

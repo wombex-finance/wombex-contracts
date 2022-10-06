@@ -657,4 +657,41 @@ describe("Booster", () => {
             expect(await lpToken.balanceOf(bobAddress)).to.equal(lpBalanceBefore.add(amount));
         });
     });
+
+    describe("@method shutdownPool", () => {
+        it("reverts if not called by operator", async () => {
+            await expect(booster.connect(accounts[2]).shutdownPool(0)).to.revertedWith("!auth");
+        });
+
+        it("happy path", async () => {
+            const tx = await booster.connect(daoSigner).shutdownPool(0);
+            await tx.wait();
+
+            const pool = await booster.poolInfo(0);
+            expect(pool.shutdown).to.equal(true);
+        });
+
+        it("force shutdown", async () => {
+            const lptoken = await deployContract<MockERC20>(
+                hre,
+                new MockERC20__factory(deployer),
+                "MockLP",
+                ["MockLP", "MockLP", 18, deployerAddress, 10000000],
+                {},
+                true,
+            )
+            const poolLen = await booster.poolLength();
+            let tx = await booster.connect(daoSigner).addPool(lptoken.address, mocks.masterWombat.address);
+            await waitForTx(tx, true, 1);
+            const resPoolLen = await booster.poolLength();
+            expect(resPoolLen).to.eq(poolLen.add(1));
+
+            await expect(booster.connect(daoSigner).shutdownPool(resPoolLen.sub(1))).to.revertedWith("!lp_token_set");
+
+            tx = await booster.connect(daoSigner).forceShutdownPool(resPoolLen.sub(1));
+            await tx.wait();
+            const pool = await booster.poolInfo(resPoolLen.sub(1));
+            expect(pool.shutdown).to.equal(true);
+        });
+    });
 });
