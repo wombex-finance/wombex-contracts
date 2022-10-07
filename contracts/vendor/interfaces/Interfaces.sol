@@ -41,14 +41,18 @@ interface IStaker{
     function withdrawAllLp(address, address) external returns (bool);
     function lock(uint256 _lockDays) external;
     function releaseLock(uint256 _slot) external returns(bool);
+    function getGaugeRewardTokens(address _lptoken, address _gauge) external returns (address[] memory tokens);
     function claimCrv(address, address) external returns (address[] memory tokens);
     function balanceOfPool(address, address) external view returns (uint256);
     function operator() external view returns (address);
     function execute(address _to, uint256 _value, bytes calldata _data) external payable returns (bool, bytes memory);
     function setVote(bytes32 hash, bool valid) external;
+    function setOperator(address _operator) external;
+    function setOwner(address _owner) external;
 }
 
 interface IRewards{
+    function pid() external view returns(uint256);
     function stake(address, uint256) external;
     function stakeFor(address, uint256) external;
     function withdraw(address, uint256) external;
@@ -56,6 +60,7 @@ interface IRewards{
     function getReward(address) external;
     function queueNewRewards(address, uint256) external;
     function notifyRewardAmount(uint256) external;
+    function updateOperatorData(address, uint256) external;
     function addExtraReward(address) external;
     function extraRewardsLength() external view returns (uint256);
     function stakingToken() external view returns (address);
@@ -66,6 +71,7 @@ interface IRewards{
 interface ITokenMinter{
     function mint(address,uint256) external;
     function burn(address,uint256) external;
+    function updateOperator(address) external;
 }
 
 interface IDeposit{

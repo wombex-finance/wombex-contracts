@@ -8,7 +8,13 @@ import {
     BaseRewardPool__factory,
     MockVoting,
     MockVoting__factory,
-    SafeMoon__factory, SafeMoon, MultiRewarderPerSec, MultiRewarderPerSec__factory, MockERC20, MockERC20__factory,
+    SafeMoon__factory,
+    SafeMoon,
+    MultiRewarderPerSec,
+    MultiRewarderPerSec__factory,
+    MockERC20,
+    MockERC20__factory,
+    MockBoosterMigrator, MockBoosterMigrator__factory, MockNewBooster__factory, DepositToken__factory,
 } from "../types/generated";
 import { Signer} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
@@ -663,12 +669,60 @@ describe("Booster", () => {
             await expect(booster.connect(accounts[2]).shutdownPool(0)).to.revertedWith("!auth");
         });
 
-        it("happy path", async () => {
-            const tx = await booster.connect(daoSigner).shutdownPool(0);
+        it("shutdown and add created pool again", async () => {
+            let pool = await booster.poolInfo(0);
+
+            const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
+            let balanceBefore = await crvRewards.balanceOf(bobAddress);
+
+            const amount = ethers.utils.parseEther("1000");
+            let tx = await mocks.lptoken.connect(bob).approve(booster.address, amount);
+            await tx.wait();
+            tx = await booster.connect(bob).deposit(0, amount, true);
+            await tx.wait();
+            expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.add(amount));
+
+            tx = await booster.connect(daoSigner).shutdownPool(0);
             await tx.wait();
 
-            const pool = await booster.poolInfo(0);
+            pool = await booster.poolInfo(0);
+
             expect(pool.shutdown).to.equal(true);
+
+            balanceBefore = await crvRewards.balanceOf(bobAddress);
+            tx = await crvRewards.connect(bob).withdrawAndUnwrap(amount.div(2), true);
+            await tx.wait();
+            expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.sub(amount.div(2)));
+
+            const poolLength = await booster.poolLength();
+
+            tx = await booster.connect(daoSigner).addCreatedPool(pool.lptoken, pool.gauge, pool.token, pool.crvRewards);
+            await waitForTx(tx, true, 1);
+
+            expect(poolLength.add(1)).to.equal(await booster.poolLength());
+
+            const newPool = await booster.poolInfo(poolLength);
+            expect(pool.lptoken).to.equal(newPool.lptoken);
+            expect(pool.gauge).to.equal(newPool.gauge);
+            expect(pool.token).to.equal(newPool.token);
+            expect(pool.crvRewards).to.equal(newPool.crvRewards);
+            expect(pool.crvRewards).to.equal(crvRewards.address);
+
+            expect(await crvRewards.pid()).to.equal(poolLength);
+
+            balanceBefore = await crvRewards.balanceOf(bobAddress);
+
+            await expect(booster.connect(bob).deposit(0, amount, true)).to.revertedWith("pool is closed");
+
+            tx = await mocks.lptoken.connect(bob).approve(booster.address, amount);
+            await tx.wait();
+            tx = await booster.connect(bob).deposit(poolLength, amount, true);
+            await tx.wait();
+
+            expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.add(amount));
+
+            tx = await booster.connect(daoSigner).shutdownPool(poolLength);
+            await tx.wait();
         });
 
         it("force shutdown", async () => {
@@ -679,19 +733,153 @@ describe("Booster", () => {
                 ["MockLP", "MockLP", 18, deployerAddress, 10000000],
                 {},
                 true,
-            )
+            );
+            const balance = await lptoken.balanceOf(deployerAddress);
+            for (const account of [alice, bob]) {
+                const accountAddress = await account.getAddress();
+                const tx = await lptoken.transfer(accountAddress, balance.div(2));
+                await tx.wait();
+            }
+
             const poolLen = await booster.poolLength();
+            await expect(booster.addPool(lptoken.address, mocks.masterWombat.address)).to.revertedWith("!add");
+            await expect(booster.connect(daoSigner).addPool(lptoken.address, ZERO_ADDRESS)).to.revertedWith("!param");
             let tx = await booster.connect(daoSigner).addPool(lptoken.address, mocks.masterWombat.address);
             await waitForTx(tx, true, 1);
+
+            tx = await mocks.masterWombat.add('1', lptoken.address, ZERO_ADDRESS);
+            await waitForTx(tx, true, 1);
+
+            tx = await contracts.voterProxy.connect(daoSigner).setLpTokensPid(mocks.masterWombat.address);
+            await waitForTx(tx, true, 1);
+
             const resPoolLen = await booster.poolLength();
             expect(resPoolLen).to.eq(poolLen.add(1));
 
-            await expect(booster.connect(daoSigner).shutdownPool(resPoolLen.sub(1))).to.revertedWith("!lp_token_set");
+            const amount = ethers.utils.parseEther("1000");
+
+            tx = await lptoken.connect(bob).approve(booster.address, amount);
+            await tx.wait();
+            tx = await booster.connect(bob).deposit(poolLen, amount, true);
+            await tx.wait();
+
+            await mocks.masterWombat.setPause(true);
+
+            await expect(booster.connect(daoSigner).shutdownPool(resPoolLen.sub(1))).to.revertedWith("paused");
 
             tx = await booster.connect(daoSigner).forceShutdownPool(resPoolLen.sub(1));
             await tx.wait();
             const pool = await booster.poolInfo(resPoolLen.sub(1));
             expect(pool.shutdown).to.equal(true);
+
+            await mocks.masterWombat.setPause(false);
+
+            tx = await booster.connect(daoSigner).addCreatedPool(pool.lptoken, pool.gauge, pool.token, pool.crvRewards);
+            await waitForTx(tx, true, 1);
+
+            const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
+
+            const balanceBefore = await crvRewards.balanceOf(bobAddress);
+            tx = await crvRewards.connect(bob).withdrawAndUnwrap(amount.div(2), true);
+            await tx.wait();
+            expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.sub(amount.div(2)));
+        });
+    });
+
+    describe("migration to new booster", () => {
+        it("should migrate active pools successfully", async () => {
+            const lptoken = await deployContract<MockERC20>(
+                hre,
+                new MockERC20__factory(deployer),
+                "MockLP",
+                ["MockLP", "MockLP", 18, deployerAddress, 10000000],
+                {},
+                true,
+            );
+            const balance = await lptoken.balanceOf(deployerAddress);
+            for (const account of [alice, bob]) {
+                const accountAddress = await account.getAddress();
+                const tx = await lptoken.transfer(accountAddress, balance.div(2));
+                await tx.wait();
+            }
+
+            const poolLen = await booster.poolLength();
+            let tx = await booster.connect(daoSigner).addPool(lptoken.address, mocks.masterWombat.address);
+            await waitForTx(tx, true, 1);
+
+            tx = await mocks.masterWombat.add('1', lptoken.address, ZERO_ADDRESS);
+            await waitForTx(tx, true, 1);
+
+            tx = await contracts.voterProxy.connect(daoSigner).setLpTokensPid(mocks.masterWombat.address);
+            await waitForTx(tx, true, 1);
+
+            const resPoolLen = await booster.poolLength();
+            expect(resPoolLen).to.eq(poolLen.add(1));
+
+            const pool = await booster.poolInfo(poolLen);
+            const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
+            const depositToken = DepositToken__factory.connect(pool.token, bob);
+
+            const amount = ethers.utils.parseEther("1000");
+
+            tx = await lptoken.connect(bob).approve(booster.address, amount);
+            await tx.wait();
+            tx = await booster.connect(bob).deposit(poolLen, amount, true);
+            await tx.wait();
+
+            const boosterMigrator = await deployContract<MockBoosterMigrator>(
+                hre,
+                new MockBoosterMigrator__factory(deployer),
+                "MockBoosterMigrator",
+                [],
+                {},
+                true,
+            );
+
+            await booster.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
+            await contracts.voterProxy.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
+
+            expect(await booster.owner()).to.equal(boosterMigrator.address);
+            expect(await contracts.voterProxy.owner()).to.equal(boosterMigrator.address);
+
+            let migrateTx = await boosterMigrator.migrate(booster.address, await daoSigner.getAddress()).then(tx => tx.wait(1));
+
+            await expect(booster.connect(daoSigner).addPool(lptoken.address, mocks.masterWombat.address)).to.revertedWith("!add");
+
+            expect(await booster.isShutdown()).to.equal(true);
+            expect(await booster.owner()).to.equal(await daoSigner.getAddress());
+            expect(await contracts.voterProxy.owner()).to.equal(await daoSigner.getAddress());
+
+            const {newBooster, poolLength} = migrateTx.events.filter(e => e.event === 'Migrated')[0].args;
+            const newBoosterContract = MockNewBooster__factory.connect(newBooster, bob);
+
+            expect(await newBoosterContract.poolLength()).to.equal(poolLength);
+            expect(await newBoosterContract.poolLength()).to.lt(await booster.poolLength());
+            expect(await newBoosterContract.newMethod()).to.equal("test");
+            expect(await crvRewards.operator(), newBooster);
+            expect(await depositToken.operator(), newBooster);
+
+            const lastPid = poolLength.sub(1);
+
+            const migratedPool = await newBoosterContract.poolInfo(lastPid)
+            expect(crvRewards.address, migratedPool.crvRewards);
+            expect(lptoken.address, migratedPool.lptoken);
+
+            let balanceBefore = await crvRewards.balanceOf(bobAddress);
+
+            // await expect(booster.connect(bob).deposit(0, amount, true)).to.revertedWith("pool is closed");
+
+            tx = await lptoken.connect(bob).approve(newBoosterContract.address, amount);
+            await tx.wait();
+            tx = await newBoosterContract.connect(bob).deposit(lastPid, amount, true);
+            await tx.wait();
+
+            expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.add(amount));
+
+            balanceBefore = await crvRewards.balanceOf(bobAddress);
+            tx = await crvRewards.connect(bob).withdrawAndUnwrap(amount.div(2), true);
+            await tx.wait();
+            expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.sub(amount.div(2)));
         });
     });
 });

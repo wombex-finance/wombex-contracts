@@ -119,7 +119,6 @@ contract VoterProxy {
      */
     function setOperator(address _operator) external {
         require(msg.sender == owner, "!auth");
-        require(operator == address(0) || IDeposit(operator).isShutdown() == true, "needs shutdown");
 
         operator = _operator;
         emit SetOperator(_operator);

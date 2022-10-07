@@ -64,9 +64,9 @@ contract BaseRewardPool {
     uint256 public constant NEW_REWARD_RATIO = 830;
     uint256 public constant MAX_TOKENS = 100;
 
-    address public immutable operator;
+    address public operator;
+    uint256 public pid;
     address public immutable rewardManager;
-    uint256 public immutable pid;
 
     mapping(address => uint256) private _balances;
     uint256 private _totalSupply;
@@ -88,6 +88,7 @@ contract BaseRewardPool {
     mapping(address => mapping(address => uint256)) public userRewardPerTokenPaid;
     mapping(address => mapping(address => uint256)) public rewards;
 
+    event UpdateOperatorData(address indexed sender, address indexed operator, uint256 indexed pid);
     event RewardAdded(address indexed token, uint256 currentRewards, uint256 newRewards);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
@@ -112,6 +113,14 @@ contract BaseRewardPool {
         boosterRewardToken = IERC20(boosterRewardToken_);
         operator = operator_;
         rewardManager = rewardManager_;
+    }
+
+    function updateOperatorData(address operator_, uint256 pid_) external {
+        require(msg.sender == operator, "!authorized");
+        operator = operator_;
+        pid = pid_;
+
+        emit UpdateOperatorData(msg.sender, operator_, pid_);
     }
 
     function totalSupply() public view virtual returns (uint256) {
