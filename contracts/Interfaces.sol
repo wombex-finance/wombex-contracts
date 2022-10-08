@@ -76,6 +76,7 @@ interface IRewards{
     function stake(address, uint256) external;
     function stakeFor(address, uint256) external;
     function withdraw(address, uint256) external;
+    function withdraw(uint256 assets, address receiver, address owner) external;
     function exit(address) external;
     function getReward(address) external;
     function queueNewRewards(address, uint256) external;
@@ -115,6 +116,14 @@ interface IPool {
         uint256 deadline,
         bool shouldStake
     ) external returns (uint256);
+
+    function withdraw(
+        address token,
+        uint256 liquidity,
+        uint256 minimumAmount,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amount);
 }
 
 interface IMasterWombatV2 {
@@ -122,5 +131,6 @@ interface IMasterWombatV2 {
 }
 
 interface IBooster {
+    function poolInfo(uint256 _pid) external view returns(address lptoken, address token, address gauge, address crvRewards, bool shutdown);
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
 }

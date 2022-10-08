@@ -46,4 +46,16 @@ contract PoolDepositor {
         uint256 pid = IMasterWombatV2(masterWombat).getAssetPid(_lptoken);
         IBooster(booster).depositFor(pid, resultLpAmount, _stake, msg.sender);
     }
+
+    function withdraw(address _lptoken, uint256 _amount, uint256 _minOut) external {
+        uint256 pid = IMasterWombatV2(masterWombat).getAssetPid(_lptoken);
+        (, , , address crvRewards, ) = IBooster(booster).poolInfo(pid);
+
+        IRewards(crvRewards).withdraw(_amount, address(this), msg.sender);
+
+        address underlying = IAsset(_lptoken).underlyingToken();
+
+        IERC20(_lptoken).approve(pool, _amount);
+        IPool(pool).withdraw(underlying, _amount, _minOut, msg.sender, block.timestamp + 1);
+    }
 }
