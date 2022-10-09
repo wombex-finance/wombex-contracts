@@ -37,6 +37,9 @@ describe("WmxVestedEscrow", () => {
     let bob: Signer;
     let bobAddress: string;
 
+    let dan: Signer;
+    let danAddress: string;
+
     before(async () => {
         await hre.network.provider.send("hardhat_reset");
 
@@ -52,6 +55,8 @@ describe("WmxVestedEscrow", () => {
         aliceAddress = await alice.getAddress();
         bob = accounts[3];
         bobAddress = await bob.getAddress();
+        dan = accounts[4];
+        danAddress = await dan.getAddress();
 
         deployer = accounts[0];
         mocks = await deployTestFirstStage(hre, deployer);
@@ -326,6 +331,65 @@ describe("WmxVestedEscrow", () => {
             userLocksLen = await wmxLocker.userLocksLen(aliceAddress);
             let newUserLock = await wmxLocker.userLocks(aliceAddress, userLocksLen.sub(1));
             expect(lastUserLock.amount.sub(newUserLock.amount)).lt(simpleToExactAmount(0.01));
+        });
+
+        // fast forward 6 months, available balances should be visible
+        it("transferVestedTokens", async () => {
+            let tx = await vestedEscrowLockOnly.connect(bob).claim();
+            await tx.wait(1);
+
+            await increaseTime(ONE_WEEK.mul(10));
+
+            const locked = await vestedEscrowLockOnly.totalLocked(bobAddress);
+            const claimed = await vestedEscrowLockOnly.totalClaimed(bobAddress);
+
+            const available = await vestedEscrowLockOnly.available(bobAddress);
+
+            tx = await vestedEscrowLockOnly.connect(bob).transferVestedTokens(danAddress);
+
+            await expect(tx).to.emit(vestedEscrowLockOnly, "TransferVestedToken").withArgs(bobAddress, danAddress, locked, claimed);
+
+            expect(await vestedEscrowLockOnly.totalLocked(bobAddress)).eq(0);
+            expect(await vestedEscrowLockOnly.totalClaimed(bobAddress)).eq(0);
+
+            expect(await vestedEscrowLockOnly.totalLocked(bobAddress)).not.eq(locked);
+            expect(await vestedEscrowLockOnly.totalClaimed(bobAddress)).not.eq(claimed);
+
+            expect(await vestedEscrowLockOnly.totalLocked(danAddress)).eq(locked);
+            expect(await vestedEscrowLockOnly.totalClaimed(danAddress)).eq(claimed);
+
+            expect(await vestedEscrowLockOnly.available(bobAddress)).eq(0);
+
+            expect(await vestedEscrowLockOnly.available(danAddress)).gt(available);
+            expect(await vestedEscrowLockOnly.available(danAddress)).lt(available.add(simpleToExactAmount(0.01)));
+
+            tx = await vestedEscrowLockOnly.connect(dan).claim();
+            await tx.wait(1);
+
+            expect(await vestedEscrowLockOnly.available(danAddress)).eq(0);
+
+            const claimedByDan = await wmxLocker.userLocks(aliceAddress,0).then(r => r.amount);
+            expect(claimedByDan).lt(available);
+
+            await increaseTime(ONE_WEEK.mul(20));
+
+            tx = await vestedEscrowLockOnly.connect(dan).claim();
+            await tx.wait(1);
+
+            const bobLockedBalance = await wmxLocker.lockedBalances(bobAddress);
+            const danLockedBalance = await wmxLocker.lockedBalances(danAddress);
+            expect(
+                bobLockedBalance.locked.add(bobLockedBalance.unlockable)
+                    .add(danLockedBalance.locked.add(danLockedBalance.unlockable))
+            ).eq(simpleToExactAmount(100));
+
+            expect(await vestedEscrowLockOnly.available(danAddress)).eq(0);
+            expect(await vestedEscrowLockOnly.available(bobAddress)).eq(0);
+
+            await increaseTime(ONE_WEEK.mul(20));
+
+            expect(await vestedEscrowLockOnly.available(danAddress)).eq(0);
+            expect(await vestedEscrowLockOnly.available(bobAddress)).eq(0);
         });
     });
 });

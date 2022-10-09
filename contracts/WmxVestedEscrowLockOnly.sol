@@ -38,6 +38,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
     event Funded(address indexed recipient, uint256 reward);
     event Cancelled(address indexed recipient);
     event Claim(address indexed user, uint256 amount);
+    event TransferVestedToken(address indexed user, address indexed recipient, uint256 lockedAmount, uint256 claimedAmount);
 
     /**
      * @param rewardToken_    Reward token (WMX)
@@ -150,5 +151,19 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
         wmxLocker.lock(_recipient, claimable);
 
         emit Claim(_recipient, claimable);
+    }
+
+    /**
+     * @dev Transfer locked rewards to _recipient
+     * @param _recipient  Address to receive locked rewards.
+     */
+    function transferVestedTokens(address _recipient) external nonReentrant {
+        totalLocked[_recipient] = totalLocked[msg.sender];
+        totalClaimed[_recipient] = totalClaimed[msg.sender];
+
+        totalLocked[msg.sender] = 0;
+        totalClaimed[msg.sender] = 0;
+
+        emit TransferVestedToken(msg.sender, _recipient, totalLocked[_recipient], totalClaimed[_recipient]);
     }
 }
