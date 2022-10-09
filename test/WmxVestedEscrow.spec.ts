@@ -272,6 +272,7 @@ describe("WmxVestedEscrow", () => {
             deployTime = await getTimestamp();
             vestedEscrowLockOnly = await new WmxVestedEscrowLockOnly__factory(deployer).deploy(
                 wmx.address,
+                fundAdminAddress,
                 wmxLocker.address,
                 deployTime.add(ONE_WEEK),
                 deployTime.add(ONE_WEEK.mul(53)),
