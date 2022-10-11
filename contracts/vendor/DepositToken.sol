@@ -21,6 +21,8 @@ contract DepositToken is ERC20 {
 
     address public operator;
 
+    event UpdateOperator(address indexed sender, address indexed operator);
+
     /**
      * @param _operator         Booster
      * @param _lptoken          Underlying LP token for deposits
@@ -42,6 +44,13 @@ contract DepositToken is ERC20 {
         )
     {
         operator =  _operator;
+    }
+
+    function updateOperator(address operator_) external {
+        require(msg.sender == operator, "!authorized");
+        operator = operator_;
+
+        emit UpdateOperator(msg.sender, operator_);
     }
 
     function mint(address _to, uint256 _amount) external {

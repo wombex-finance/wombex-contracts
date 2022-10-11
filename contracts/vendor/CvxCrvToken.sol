@@ -19,6 +19,8 @@ contract CvxCrvToken is ERC20 {
     using Address for address;
     using SafeMath for uint256;
 
+    event SetOperator(address operator);
+
     address public operator;
 
     constructor(string memory _nameArg, string memory _symbolArg)
@@ -38,6 +40,7 @@ contract CvxCrvToken is ERC20 {
     function setOperator(address _operator) external {
         require(msg.sender == operator, "!auth");
         operator = _operator;
+        emit SetOperator(_operator);
     }
 
     /**

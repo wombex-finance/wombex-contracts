@@ -47,6 +47,7 @@ contract WmxRewardPool {
     event RewardPaid(address indexed user, uint256 reward, bool locked);
     event PenaltyForwarded(uint256 amount);
     event Rescued();
+    event SetLocker(address locker);
 
     /**
      * @dev Simple constructoor
@@ -219,6 +220,7 @@ contract WmxRewardPool {
     function setLocker(address _newLocker) external {
         require(msg.sender == rewardManager, "!auth");
         wmxLocker = IWmxLocker(_newLocker);
+        emit SetLocker(_newLocker);
     }
 
     /**
