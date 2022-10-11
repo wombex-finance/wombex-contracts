@@ -48,8 +48,8 @@ describe("WomDepositor", () => {
         ({ crvDepositor: womDepositor, cvxCrvRewards, voterProxy } = contracts);
         await updateDistributionByTokens(daoSigner, contracts);
 
-        await mocks.crv.transfer(aliceAddress, simpleToExactAmount(1000));
-        await mocks.crv.transfer(bobAddress, simpleToExactAmount(1000));
+        await mocks.crv.transfer(aliceAddress, simpleToExactAmount(2000));
+        await mocks.crv.transfer(bobAddress, simpleToExactAmount(2000));
     });
 
     it("setLockConfig can be configured", async () => {
@@ -165,7 +165,7 @@ describe("WomDepositor", () => {
         expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(prevAmountToDeposit.mul(2));
         expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit));
         expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit.mul(2).add(prevAmountToDeposit.mul(3)));
-        expect(await womDepositor.checkOldSlot()).eq(0);
+        expect(await womDepositor.checkOldSlot()).eq(2);
         expect(await mocks.crv.balanceOf(womDepositor.address)).eq(0);
 
         await increaseTime(ONE_HOUR.div(2));
@@ -228,6 +228,7 @@ describe("WomDepositor", () => {
         await womDepositor.connect(bob)["releaseCustomLock(uint256)"](0).then(r => r.wait(1));
         expect(await mocks.crv.balanceOf(bobAddress)).eq(womBalanceBefore.add(amountToDeposit));
         expect(await womDepositor.currentSlot()).eq(2);
+        expect(await womDepositor.checkOldSlot()).eq(3);
         expect(await veWom.getBreedingLen(voterProxy.address)).eq(2);
         expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3)));
         expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(prevAmountToDeposit.add(prev2xAmountToDeposit));
@@ -254,7 +255,7 @@ describe("WomDepositor", () => {
         expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3)));
         expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(prevAmountToDeposit.add(prev2xAmountToDeposit));
         expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit);
-        expect(await womDepositor.checkOldSlot()).eq(1);
+        expect(await womDepositor.checkOldSlot()).eq(0);
         expect(await mocks.crv.balanceOf(womDepositor.address)).eq(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2)));
 
         expect(await womDepositor.customLockSlots(bobAddress, 0).then(s => s.number)).eq(2);
@@ -276,7 +277,7 @@ describe("WomDepositor", () => {
         expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(prevAmountToDeposit.add(prev2xAmountToDeposit));
         expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit);
         expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
-        expect(await womDepositor.checkOldSlot()).eq(1);
+        expect(await womDepositor.checkOldSlot()).eq(0);
         expect(await mocks.crv.balanceOf(womDepositor.address)).eq(0);
 
         await increaseTime(ONE_HOUR);
@@ -289,7 +290,7 @@ describe("WomDepositor", () => {
         expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit);
         expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
         expect(await veWom.getBreeding(voterProxy.address, 4).then(b => b.womAmount)).eq(amountToDeposit);
-        expect(await womDepositor.checkOldSlot()).eq(1);
+        expect(await womDepositor.checkOldSlot()).eq(0);
         expect(await mocks.crv.balanceOf(womDepositor.address)).eq(0);
 
         await increaseTime(ONE_WEEK);
@@ -298,12 +299,12 @@ describe("WomDepositor", () => {
         expect(await womDepositor.lastLockAt()).eq(await getTxTimestamp(tx));
         expect(await womDepositor.currentSlot()).eq(5);
         expect(await veWom.getBreedingLen(voterProxy.address)).eq(5);
-        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3)));
-        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(prevAmountToDeposit.add(prev2xAmountToDeposit));
         expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit);
         expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
-        expect(await veWom.getBreeding(voterProxy.address, 4).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit)));
-        expect(await womDepositor.checkOldSlot()).eq(2);
+        expect(await veWom.getBreeding(voterProxy.address, 4).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3))));
+        expect(await womDepositor.checkOldSlot()).eq(1);
         expect(await mocks.crv.balanceOf(womDepositor.address)).eq(0);
 
         expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.unlockTime)).eq(await womDepositor.slotEnds(0));
@@ -316,42 +317,69 @@ describe("WomDepositor", () => {
 
         tx = await womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
         expect(await womDepositor.lastLockAt()).eq(await getTxTimestamp(tx));
-        expect(await womDepositor.currentSlot()).eq(6);
-        expect(await veWom.getBreedingLen(voterProxy.address)).eq(6);
-        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3)));
-        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await womDepositor.currentSlot()).eq(5);
+        expect(await veWom.getBreedingLen(voterProxy.address)).eq(5);
+        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3))));
         expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit);
         expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
         expect(await veWom.getBreeding(voterProxy.address, 4).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit)));
-        expect(await veWom.getBreeding(voterProxy.address, 5).then(b => b.womAmount)).eq(amountToDeposit);
-        expect(await womDepositor.checkOldSlot()).eq(3);
+        expect(await womDepositor.checkOldSlot()).eq(2);
         expect(await mocks.crv.balanceOf(womDepositor.address)).eq(0);
 
         await increaseTime(ONE_HOUR);
 
-        tx = await womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
+        tx = await womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit.mul(2), stakeAddress).then(r => r.wait(1));
         expect(await womDepositor.lastLockAt()).eq(await getTxTimestamp(tx));
         expect(await womDepositor.currentSlot()).eq(6);
         expect(await veWom.getBreedingLen(voterProxy.address)).eq(6);
-        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3)));
-        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3))));
         expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit);
-        expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
         expect(await veWom.getBreeding(voterProxy.address, 4).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit)));
-        expect(await veWom.getBreeding(voterProxy.address, 5).then(b => b.womAmount)).eq(amountToDeposit.mul(2).add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
+        expect(await veWom.getBreeding(voterProxy.address, 5).then(b => b.womAmount)).eq(amountToDeposit.mul(2));
+        expect(await womDepositor.checkOldSlot()).eq(3);
+        expect(await mocks.crv.balanceOf(womDepositor.address)).eq(0);
+
+        await increaseTime(ONE_WEEK.mul(2));
+
+        tx = await womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit.mul(3), stakeAddress).then(r => r.wait(1));
+        expect(await womDepositor.lastLockAt()).eq(await getTxTimestamp(tx));
+        expect(await womDepositor.currentSlot()).eq(6);
+        expect(await veWom.getBreedingLen(voterProxy.address)).eq(6);
+        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3))));
+        expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit.mul(2));
+        expect(await veWom.getBreeding(voterProxy.address, 4).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit)));
+        expect(await veWom.getBreeding(voterProxy.address, 5).then(b => b.womAmount)).eq(amountToDeposit.mul(4).add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
         expect(await womDepositor.checkOldSlot()).eq(4);
         expect(await mocks.crv.balanceOf(womDepositor.address)).eq(0);
 
         womBalanceBefore = await mocks.crv.balanceOf(bobAddress);
-        await womDepositor.connect(bob)["releaseCustomLock(uint256)"](0).then(r => r.wait(1));
+        const res = await womDepositor.connect(bob)["releaseCustomLock(uint256)"](0).then(r => r.wait(1));
+        const {slot} = res.events.filter(e => e.event === 'ReleaseCustomLock')[0].args;
+        expect(slot).eq(2);
+
         expect(await mocks.crv.balanceOf(bobAddress)).eq(womBalanceBefore.add(amountToDeposit));
         expect(await womDepositor.currentSlot()).eq(5);
         expect(await veWom.getBreedingLen(voterProxy.address)).eq(5);
-        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3)));
-        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit);
-        expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit.mul(2).add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
-        expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.womAmount)).eq(amountToDeposit);
+        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.mul(2).add(prev2xAmountToDeposit.mul(3))));
+        expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.womAmount)).eq(amountToDeposit.mul(4).add(prevAmountToDeposit.add(prev2xAmountToDeposit.mul(2))));
+        expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.womAmount)).eq(amountToDeposit.mul(2));
         expect(await veWom.getBreeding(voterProxy.address, 4).then(b => b.womAmount)).eq(amountToDeposit.add(prevAmountToDeposit.add(prev2xAmountToDeposit)));
+
+        expect(await veWom.getBreeding(voterProxy.address, 0).then(b => b.unlockTime)).eq(await womDepositor.slotEnds(0));
+        expect(await veWom.getBreeding(voterProxy.address, 1).then(b => b.unlockTime)).eq(await womDepositor.slotEnds(1));
+        expect(await veWom.getBreeding(voterProxy.address, 2).then(b => b.unlockTime)).eq(await womDepositor.slotEnds(2));
+        expect(await veWom.getBreeding(voterProxy.address, 3).then(b => b.unlockTime)).eq(await womDepositor.slotEnds(3));
+        expect(await veWom.getBreeding(voterProxy.address, 4).then(b => b.unlockTime)).eq(await womDepositor.slotEnds(4));
+
+        expect(await womDepositor.checkOldSlot()).eq(3);
+        expect(await womDepositor.slotEnds(2)).gt(await womDepositor.slotEnds(3));
+
     });
 
     async function getTxTimestamp(tx) {

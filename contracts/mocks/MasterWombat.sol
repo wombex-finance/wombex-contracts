@@ -162,6 +162,8 @@ contract MasterWombatV2 {
     // Mapping of asset to pid. Offset by +1 to distinguish with default value
     mapping(address => uint256) internal assetPid;
 
+    bool public pause;
+
     event Add(uint256 indexed pid, uint256 allocPoint, IERC20 indexed lpToken, IMultiRewarder indexed rewarder);
     event Set(uint256 indexed pid, uint256 allocPoint, IMultiRewarder indexed rewarder, bool overwrite);
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
@@ -198,6 +200,10 @@ contract MasterWombatV2 {
         basePartition = _basePartition;
         startTimestamp = _startTimestamp;
         totalAllocPoint = 0;
+    }
+
+    function setPause(bool _pause) external {
+        pause = _pause;
     }
 
     /// @notice returns pool length
@@ -572,6 +578,7 @@ contract MasterWombatV2 {
     /// @param _pid the pool id
     /// @param _amount the amount to withdraw
     function withdraw(uint256 _pid, uint256 _amount) external returns (uint256, uint256[] memory) {
+        require(!pause, "paused");
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, 'withdraw: not good');

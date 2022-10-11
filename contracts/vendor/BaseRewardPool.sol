@@ -64,9 +64,9 @@ contract BaseRewardPool {
     uint256 public constant NEW_REWARD_RATIO = 830;
     uint256 public constant MAX_TOKENS = 100;
 
-    address public immutable operator;
+    address public operator;
+    uint256 public pid;
     address public immutable rewardManager;
-    uint256 public immutable pid;
 
     mapping(address => uint256) private _balances;
     uint256 private _totalSupply;
@@ -88,6 +88,7 @@ contract BaseRewardPool {
     mapping(address => mapping(address => uint256)) public userRewardPerTokenPaid;
     mapping(address => mapping(address => uint256)) public rewards;
 
+    event UpdateOperatorData(address indexed sender, address indexed operator, uint256 indexed pid);
     event RewardAdded(address indexed token, uint256 currentRewards, uint256 newRewards);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
@@ -112,6 +113,14 @@ contract BaseRewardPool {
         boosterRewardToken = IERC20(boosterRewardToken_);
         operator = operator_;
         rewardManager = rewardManager_;
+    }
+
+    function updateOperatorData(address operator_, uint256 pid_) external {
+        require(msg.sender == operator, "!authorized");
+        operator = operator_;
+        pid = pid_;
+
+        emit UpdateOperatorData(msg.sender, operator_, pid_);
     }
 
     function totalSupply() public view virtual returns (uint256) {
@@ -276,7 +285,10 @@ contract BaseRewardPool {
      * @dev Donate some extra rewards to this contract
      */
     function donate(address _token, uint256 _amount) external returns(bool){
+        uint256 balanceBefore = IERC20(_token).balanceOf(address(this));
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+        _amount = IERC20(_token).balanceOf(address(this)).sub(balanceBefore);
+
         tokenRewards[_token].queuedRewards = tokenRewards[_token].queuedRewards.add(_amount);
     }
 
@@ -303,7 +315,10 @@ contract BaseRewardPool {
     function queueNewRewards(address _token, uint256 _rewards) external returns(bool){
         require(msg.sender == operator, "!authorized");
 
+        uint256 balanceBefore = IERC20(_token).balanceOf(address(this));
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _rewards);
+
+        _rewards = IERC20(_token).balanceOf(address(this)).sub(balanceBefore);
 
         RewardState storage rState = tokenRewards[_token];
         if (rState.lastUpdateTime == 0) {

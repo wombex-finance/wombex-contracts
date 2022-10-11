@@ -38,7 +38,11 @@ contract VoterProxy {
 
     bytes4 constant internal EIP1271_MAGIC_VALUE = 0x1626ba7e;
 
+    event SetOwner(address newOwner);
     event SetGaugeLpTokenPid(address gauge, address lptoken, uint256 pid);
+    event SetRewardDeposit(address withdrawer, address rewardDeposit);
+    event SetDepositor(address depositor);
+    event SetOperator(address operator);
     event Deposit(address lptoken, address gauge, uint256 value);
     event Lock(uint256 amount, uint256 lockDays);
     event ReleaseLock(uint256 amount, uint256 slot);
@@ -75,6 +79,7 @@ contract VoterProxy {
     function setOwner(address _owner) external {
         require(msg.sender == owner, "!auth");
         owner = _owner;
+        emit SetOwner(_owner);
     }
 
     /**
@@ -105,6 +110,7 @@ contract VoterProxy {
         require(msg.sender == owner, "!auth");
         withdrawer = _withdrawer;
         rewardDeposit = _rewardDeposit;
+        emit SetRewardDeposit(_withdrawer, _rewardDeposit);
     }
 
     /**
@@ -113,9 +119,9 @@ contract VoterProxy {
      */
     function setOperator(address _operator) external {
         require(msg.sender == owner, "!auth");
-        require(operator == address(0) || IDeposit(operator).isShutdown() == true, "needs shutdown");
 
         operator = _operator;
+        emit SetOperator(_operator);
     }
 
     /**
@@ -126,6 +132,7 @@ contract VoterProxy {
         require(msg.sender == owner, "!auth");
 
         depositor = _depositor;
+        emit SetDepositor(_depositor);
     }
 
     /**
@@ -241,7 +248,6 @@ contract VoterProxy {
      * @param _amount   Amount of LP token to withdraw
      */
     function withdrawLp(address _lptoken, address _gauge, uint256 _amount) public returns(bool){
-        require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
         require(msg.sender == operator, "!auth");
         _withdrawSomeLp(_lptoken, _gauge, _amount);
         IERC20(_lptoken).safeTransfer(msg.sender, IERC20(_lptoken).balanceOf(address(this)));
@@ -255,7 +261,6 @@ contract VoterProxy {
      * @param _gauge  Gauge for this LP token
      */
     function withdrawAllLp(address _lptoken, address _gauge) external returns(bool){
-        require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
         require(msg.sender == operator, "!auth");
         withdrawLp(_lptoken, _gauge, balanceOfPool(_lptoken, _gauge));
         return true;
@@ -271,33 +276,41 @@ contract VoterProxy {
      * @notice  Claim WOM from Wombat
      * @dev     Claim WOM for LP token staking from the masterWombat contract
      */
-    function claimCrv(address _gauge, uint256 _pid) external returns (IERC20[] memory tokens, uint256[] memory balances) {
+    function claimCrv(address _lptoken, address _gauge) external returns (IERC20[] memory tokens) {
         require(msg.sender == operator, "!auth");
+        require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
+        uint256 pid = lpTokenToPid[_gauge][_lptoken];
 
-        IMasterWombat(_gauge).deposit(_pid, 0);
-        (, , IMasterWombatRewarder rewarder, , , , ) = IMasterWombat(_gauge).poolInfo(_pid);
+        IMasterWombat(_gauge).deposit(pid, 0);
+        tokens = getGaugeRewardTokens(_lptoken, _gauge);
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (address(tokens[i]) == weth) {
+                IWETH(weth).deposit{value: address(this).balance}();
+            }
+            tokens[i].safeTransfer(operator, tokens[i].balanceOf(address(this)));
+        }
+    }
+
+    function getGaugeRewardTokens(address _lptoken, address _gauge) public returns (IERC20[] memory tokens) {
+        require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
+        uint256 pid = lpTokenToPid[_gauge][_lptoken];
+
+        (, , IMasterWombatRewarder rewarder, , , , ) = IMasterWombat(_gauge).poolInfo(pid);
+
         address[] memory bonusTokenAddresses;
         if (address(rewarder) != address(0)) {
             bonusTokenAddresses = rewarder.rewardTokens();
         }
         tokens = new IERC20[](bonusTokenAddresses.length + 1);
-        balances = new uint256[](bonusTokenAddresses.length + 1);
 
         tokens[0] = IERC20(wom);
-        balances[0] = IERC20(wom).balanceOf(address(this));
-        tokens[0].safeTransfer(operator, balances[0]);
-
         for (uint256 i = 0; i < bonusTokenAddresses.length; i++) {
             IERC20 token = IERC20(bonusTokenAddresses[i]);
             if (address(token) == address(0)) {
                 token = IERC20(weth);
-                IWETH(weth).deposit{value: address(this).balance}();
             }
-            uint256 balance = token.balanceOf(address(this));
-            token.safeTransfer(operator, balance);
-
             tokens[i + 1] = token;
-            balances[i + 1] = balance;
         }
     }
 

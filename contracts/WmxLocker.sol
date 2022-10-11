@@ -863,7 +863,10 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
 
         RewardData storage rdata = rewardData[_rewardsToken];
 
+        uint256 balanceBefore = IERC20(_rewardsToken).balanceOf(address(this));
         IERC20(_rewardsToken).safeTransferFrom(msg.sender, address(this), _rewards);
+
+        _rewards = IERC20(_rewardsToken).balanceOf(address(this)).sub(balanceBefore);
 
         _rewards = _rewards.add(queuedRewards[_rewardsToken]);
         require(_rewards < 1e25, "!rewards");

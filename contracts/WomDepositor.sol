@@ -10,6 +10,8 @@ import { SafeMath } from "@openzeppelin/contracts-0.8/utils/math/SafeMath.sol";
 
 /**
  * @title   WomDepositor
+ * @notice  Deposit WOM in staker contract once in smartLockPeriod.
+            Have customLockDays mapping for instant custom deposits with specific days count.
  */
 contract WomDepositor is Ownable {
     using SafeERC20 for IERC20;
@@ -42,14 +44,15 @@ contract WomDepositor is Ownable {
     event SetLockConfig(uint256 lockDays, uint256 smartLockPeriod);
     event SetCustomLockDays(address indexed account, uint256 lockDays, uint256 minAmount);
     event Deposit(address indexed account, address stakeAddress, uint256 amount);
-    event SmartLock(address indexed sender, bool indexed customLockDays, uint256 indexed slot, uint256 amountToLock, uint256 senderLockDays, uint256 currentSlot, uint256 checkOldSlot, bool releaseExecuted);
+    event SmartLockReleased(address indexed sender, uint256 indexed slot);
+    event SmartLockCheck(address indexed sender, uint256 indexed checkOldSlot, bool isLockedCustomSlot);
+    event SmartLock(address indexed sender, bool indexed customLockDays, uint256 indexed slot, uint256 amountToLock, uint256 senderLockDays, uint256 currentSlot, uint256 checkOldSlot);
     event ReleaseCustomLock(address indexed sender, uint256 index, uint256 indexed slot, uint256 amount);
 
     /**
      * @param _wom              WOM Token address
      * @param _staker           Voter Proxy address
      * @param _minter           Minter
-     *
      */
     constructor(
         address _wom,
@@ -68,6 +71,12 @@ contract WomDepositor is Ownable {
         emit SetLockConfig(_lockDays, _smartLockPeriod);
     }
 
+    /**
+     * @notice  Set custom lock options for specific account
+     * @param _account      Account of spender
+     * @param _lockDays     Specific days to lock WOM amount
+     * @param _minAmount    Minimum amount to lock by spender
+     */
     function setCustomLock(address _account, uint256 _lockDays, uint256 _minAmount) external onlyOwner {
         customLockDays[_account] = _lockDays;
         customLockMinAmount[_account] = _minAmount;
@@ -93,7 +102,7 @@ contract WomDepositor is Ownable {
     }
 
     /**
-     * @notice  Deposit tokens into the VeWom
+     * @notice  Deposit tokens into the VeWom and mint WmxWom to depositors.
      * @param _amount  Amount WOM to deposit
      * @param _stakeAddress  Staker to deposit WmxWom
      */
@@ -118,32 +127,34 @@ contract WomDepositor is Ownable {
         return true;
     }
 
+    /**
+     * @notice  Trying to releaseLock every time on deposit and lock cumulative balance once in smartLockPeriod.
+     * @param _amount  Amount WOM to deposit
+     */
     function _smartLock(uint256 _amount) internal {
         IERC20(wom).transferFrom(msg.sender, address(this), _amount);
+
+        if (currentSlot > 1 && checkOldSlot >= currentSlot - 1) {
+            checkOldSlot = 0;
+        }
+
+        if (slotEnds[checkOldSlot] != 0 && slotEnds[checkOldSlot] < block.timestamp) {
+            if (!lockedCustomSlots[checkOldSlot]) {
+                IStaker(staker).releaseLock(checkOldSlot);
+                slotEnds[checkOldSlot] = slotEnds[currentSlot - 1];
+                currentSlot = currentSlot.sub(1);
+                emit SmartLockReleased(msg.sender, checkOldSlot);
+            }
+            checkOldSlot = checkOldSlot.add(1);
+            emit SmartLockCheck(msg.sender, checkOldSlot, lockedCustomSlots[checkOldSlot]);
+        }
 
         if (lastLockAt + smartLockPeriod > block.timestamp && customLockDays[msg.sender] == 0) {
             return;
         }
 
-        bool releaseExecuted = false;
-        if (slotEnds[checkOldSlot] != 0 && slotEnds[checkOldSlot] < block.timestamp) {
-            if (!lockedCustomSlots[checkOldSlot]) {
-                IStaker(staker).releaseLock(checkOldSlot);
-                releaseExecuted = true;
-                slotEnds[checkOldSlot] = slotEnds[currentSlot - 1];
-            }
-            checkOldSlot++;
-        }
-
         uint256 slot = currentSlot;
-        if (releaseExecuted) {
-            slot = slot.sub(1);
-        } else {
-            currentSlot = currentSlot.add(1);
-        }
-        if (currentSlot > 1 && checkOldSlot >= currentSlot - 1) {
-            checkOldSlot = 0;
-        }
+        currentSlot = currentSlot.add(1);
 
         uint256 senderLockDays = lockDays;
         uint256 amountToLock = _amount;
@@ -162,15 +173,23 @@ contract WomDepositor is Ownable {
 
         lastLockAt = block.timestamp;
 
-        emit SmartLock(msg.sender, customLockDays[msg.sender] > 0, slot, amountToLock, senderLockDays, currentSlot, checkOldSlot, releaseExecuted);
+        emit SmartLock(msg.sender, customLockDays[msg.sender] > 0, slot, amountToLock, senderLockDays, currentSlot, checkOldSlot);
     }
 
+    /**
+     * @notice  Deposit tokens into the VeWom by custom lock options.
+     * @param _amount  Amount WOM to deposit
+     */
     function depositCustomLock(uint256 _amount) public {
         require(customLockDays[msg.sender] > 0, "!custom");
         require(_amount >= customLockMinAmount[msg.sender], "<customLockMinAmount");
         _smartLock(_amount);
     }
 
+    /**
+     * @notice  Release locked tokens from specific slot
+     * @param _index  Index of account slots
+     */
     function releaseCustomLock(uint256 _index) public {
         SlotInfo memory slot = customLockSlots[msg.sender][_index];
 
@@ -180,6 +199,9 @@ contract WomDepositor is Ownable {
         IERC20(wom).safeTransfer(msg.sender, slot.amount);
 
         lockedCustomSlots[slot.number] = false;
+        slotEnds[slot.number] = slotEnds[currentSlot.sub(1)];
+
+        checkOldSlot = slot.number.add(1);
 
         uint256 len = customLockSlots[msg.sender].length;
         if (_index != len - 1) {
