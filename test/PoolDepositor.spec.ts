@@ -3,6 +3,7 @@ import { expect } from "chai";
 import { deploy, SystemDeployed } from "../scripts/deploySystem";
 import { getMockDistro, getMockMultisigs, deployTestFirstStage } from "../scripts/deployMocks";
 import {
+    BaseRewardPool4626__factory,
     BaseRewardPool__factory,
     Booster, MockERC20, MockERC20__factory,
     PoolDepositor,
@@ -99,6 +100,24 @@ describe("PoolDepositor", () => {
             await tx.wait();
 
             expect(await depositToken.balanceOf(aliceAddress)).to.equal(depositedBalanceBefore.add(amount));
+        });
+    });
+
+    describe("withdraw", async () => {
+        it("@method PoolDepositor.withdraw", async () => {
+            const crvRewards = BaseRewardPool4626__factory.connect(poolInfo.crvRewards, alice);
+            const stakedBalanceBefore = await crvRewards.balanceOf(aliceAddress);
+            const underlyingBalanceBefore = await underlying.balanceOf(aliceAddress);
+
+            const amount = ethers.utils.parseEther("1000");
+            let tx = await crvRewards.connect(alice).approve(poolDepositor.address, amount);
+            await tx.wait();
+
+            tx = await poolDepositor.connect(alice).withdraw(mocks.lptoken.address, amount, 0);
+            await tx.wait();
+
+            expect(await crvRewards.balanceOf(aliceAddress)).to.equal(stakedBalanceBefore.sub(amount));
+            expect(await underlying.balanceOf(aliceAddress)).to.equal(underlyingBalanceBefore.add(amount));
         });
     });
 });
