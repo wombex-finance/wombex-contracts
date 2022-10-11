@@ -423,7 +423,7 @@ contract Booster{
         require(isShutdown, "!shutdown");
 
         uint256 len = _rewards.length;
-        require(len == _rewards.length, "!length");
+        require(len == _pids.length, "!length");
 
         for (uint256 i = 0; i < len; i++) {
             if (_rewards[i] == address(0)) {

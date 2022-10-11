@@ -817,6 +817,7 @@ describe("Booster", () => {
             expect(resPoolLen).to.eq(poolLen.add(1));
 
             const pool = await booster.poolInfo(poolLen);
+
             const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
             const depositToken = DepositToken__factory.connect(pool.token, bob);
 
@@ -844,6 +845,7 @@ describe("Booster", () => {
 
             let migrateTx = await boosterMigrator.migrate(booster.address, await daoSigner.getAddress()).then(tx => tx.wait(1));
 
+            await expect(booster.connect(daoSigner).migrateRewards([pool.crvRewards], [], ZERO_ADDRESS)).to.revertedWith("!length");
             await expect(booster.connect(daoSigner).addPool(lptoken.address, mocks.masterWombat.address)).to.revertedWith("!add");
 
             expect(await booster.isShutdown()).to.equal(true);
