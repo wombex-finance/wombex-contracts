@@ -705,6 +705,8 @@ contract SafeMoon is Context, IERC20, Ownable {
     using SafeMath for uint256;
     using Address for address;
 
+    bool paused;
+
     mapping (address => uint256) private _rOwned;
     mapping (address => uint256) private _tOwned;
     mapping (address => mapping (address => uint256)) private _allowances;
@@ -997,11 +999,17 @@ contract SafeMoon is Context, IERC20, Ownable {
         emit Approval(owner, spender, amount);
     }
 
+    function pause(bool _paused) public {
+        paused = _paused;
+    }
+
     function _transfer(
         address from,
         address to,
         uint256 amount
     ) private {
+        require(!paused, "paused");
+
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");

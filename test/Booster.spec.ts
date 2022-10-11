@@ -446,13 +446,13 @@ describe("Booster", () => {
 
             await increaseTime(60 * 60 * 24 * 6);
 
-            const cvxBalanceBefore = await cvx.balanceOf(bobAddress);
-            const crvBalanceBefore = await mocks.crv.balanceOf(bobAddress);
+            let cvxBalanceBefore = await cvx.balanceOf(bobAddress);
+            let crvBalanceBefore = await mocks.crv.balanceOf(bobAddress);
+            let underlyingBalanceBefore = await underlying.balanceOf(bobAddress);
             const userRewardPerTokenPaid = await crvRewards.userRewardPerTokenPaid(mocks.crv.address, bobAddress);
-            const underlyingBalanceBefore = await underlying.balanceOf(bobAddress);
 
             tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
-            const boosterReward = await getBoosterReward(tx, 2);
+            let boosterReward = await getBoosterReward(tx, 2);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(false);
@@ -466,6 +466,42 @@ describe("Booster", () => {
             const expectedRewards = rewardPerToken.mul(balance).div(simpleToExactAmount(1));
 
             expect(expectedRewards).to.equal(receivedCrv);
+
+            await increaseTime(60 * 60 * 24 * 6);
+
+            tx = await booster.earmarkRewards(pid);
+            await tx.wait();
+
+            tx = await underlying.connect(daoSigner).pause(true);
+            await tx.wait();
+
+            await expect(crvRewards["getReward(address,bool)"](bobAddress, false)).to.be.revertedWith("pause");
+            await expect(booster.setRewardTokenPausedInPools([crvRewards.address], underlying.address, true)).to.be.revertedWith("!auth");
+
+            tx = await booster.connect(daoSigner).setRewardTokenPausedInPools([crvRewards.address], underlying.address, true);
+            await tx.wait();
+
+            cvxBalanceBefore = await cvx.balanceOf(bobAddress);
+            underlyingBalanceBefore = await underlying.balanceOf(bobAddress);
+
+            tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
+            boosterReward = await getBoosterReward(tx, 2);
+
+            expect(boosterReward.amount).eq(boosterReward.mintAmount);
+            expect(boosterReward.lock).eq(false);
+            expect(await cvx.balanceOf(bobAddress)).gt(cvxBalanceBefore);
+            expect(await underlying.balanceOf(bobAddress)).eq(underlyingBalanceBefore);
+
+            tx = await underlying.connect(daoSigner).pause(false);
+            await tx.wait();
+
+            tx = await booster.connect(daoSigner).setRewardTokenPausedInPools([crvRewards.address], underlying.address, false);
+            await tx.wait();
+
+            tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
+            await tx.wait();
+
+            expect(await underlying.balanceOf(bobAddress)).gt(underlyingBalanceBefore);
         });
     });
 

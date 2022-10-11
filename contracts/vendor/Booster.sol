@@ -203,6 +203,14 @@ contract Booster{
         emit PenaltyShareUpdated(_penaltyShare);
     }
 
+    function setRewardTokenPausedInPools(address[] memory _rewardPools, address _token, bool _paused) external {
+        require(msg.sender==owner, "!auth");
+
+        for (uint256 i = 0; i < _rewardPools.length; i++) {
+            IRewards(_rewardPools[i]).setRewardTokenPaused(_token, _paused);
+        }
+    }
+
     /**
      * @notice Vote Delegate has the rights to cast votes on the VoterProxy via the Booster
      */
