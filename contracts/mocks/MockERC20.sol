@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
 
 contract MockERC20 is ERC20 {
     uint8 dec;
+    bool paused;
 
     constructor(
         string memory _name,
@@ -23,5 +24,17 @@ contract MockERC20 is ERC20 {
 
     function mint(uint256 amount) public {
         _mint(msg.sender, amount);
+    }
+
+    function pause(bool _paused) public {
+        paused = _paused;
+    }
+    function _transfer(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) internal override {
+        require(!paused, "paused");
+        super._transfer(sender, recipient, amount);
     }
 }

@@ -60,6 +60,7 @@ interface IRewards{
     function getReward(address) external;
     function queueNewRewards(address, uint256) external;
     function notifyRewardAmount(uint256) external;
+    function setRewardTokenPaused(address, bool) external;
     function updateOperatorData(address, uint256) external;
     function addExtraReward(address) external;
     function extraRewardsLength() external view returns (uint256);
