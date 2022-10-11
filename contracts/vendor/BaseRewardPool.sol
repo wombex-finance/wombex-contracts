@@ -93,6 +93,7 @@ contract BaseRewardPool {
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed token, address indexed user, uint256 reward);
+    event Donate(address indexed token, uint256 amount);
 
     /**
      * @dev This is called directly from RewardFactory
@@ -290,6 +291,8 @@ contract BaseRewardPool {
         _amount = IERC20(_token).balanceOf(address(this)).sub(balanceBefore);
 
         tokenRewards[_token].queuedRewards = tokenRewards[_token].queuedRewards.add(_amount);
+
+        emit Donate(_token, _amount);
     }
 
     /**

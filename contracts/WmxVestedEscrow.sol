@@ -39,6 +39,8 @@ contract WmxVestedEscrow is ReentrancyGuard {
     event Funded(address indexed recipient, uint256 reward);
     event Cancelled(address indexed recipient);
     event Claim(address indexed user, uint256 amount, bool locked);
+    event SetAdmin(address indexed admin);
+    event SetLocker(address indexed locker);
 
     /**
      * @param rewardToken_    Reward token (WMX)
@@ -79,6 +81,7 @@ contract WmxVestedEscrow is ReentrancyGuard {
     function setAdmin(address _admin) external {
         require(msg.sender == admin, "!auth");
         admin = _admin;
+        emit SetAdmin(admin);
     }
 
     /**
@@ -88,6 +91,7 @@ contract WmxVestedEscrow is ReentrancyGuard {
     function setLocker(address _wmxLocker) external {
         require(msg.sender == admin, "!auth");
         wmxLocker = IWmxLocker(_wmxLocker);
+        emit SetLocker(_wmxLocker);
     }
 
     /**

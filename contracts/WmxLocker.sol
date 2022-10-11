@@ -135,6 +135,9 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
     event KickIncentiveSet(uint256 rate, uint256 delay);
     event Shutdown();
 
+    event AddReward(address indexed rewardsToken, address indexed distributor);
+    event ApproveRewardDistributor(address indexed rewardsToken, address indexed distributor, bool approved);
+
     /***************************************
                     CONSTRUCTOR
     ****************************************/
@@ -225,6 +228,8 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
         rewardData[_rewardsToken].lastUpdateTime = uint32(block.timestamp);
         rewardData[_rewardsToken].periodFinish = uint32(block.timestamp);
         rewardDistributors[_rewardsToken][_distributor] = true;
+
+        emit AddReward(_rewardsToken, _distributor);
     }
 
     // Modify approval for an address to call notifyRewardAmount
@@ -235,6 +240,7 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
     ) external onlyOwner {
         require(rewardData[_rewardsToken].lastUpdateTime > 0, "Reward does not exist");
         rewardDistributors[_rewardsToken][_distributor] = _approved;
+        emit ApproveRewardDistributor(_rewardsToken, _distributor, _approved);
     }
 
     //set kick incentive
