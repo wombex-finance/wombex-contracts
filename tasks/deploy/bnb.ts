@@ -2,10 +2,7 @@ import { task } from "hardhat/config";
 import { HardhatRuntimeEnvironment, TaskArguments } from "hardhat/types";
 import { getSigner } from "../utils";
 import { deployContract, logContracts, waitForTx } from "./../utils/deploy-utils";
-import {
-    deploy,
-} from "../../scripts/deploySystem";
-import { getMockDistro, getMockMultisigs } from "../../scripts/deployMocks";
+import { deployFirstStage } from "../../scripts/deploySystem";
 import {
     VoterProxy__factory,
     VoterProxy,
@@ -26,8 +23,8 @@ task("deploy:bnb").setAction(async function (taskArguments: TaskArguments, hre) 
     const deployerAddress = await deployer.getAddress();
 
     //BNB
-    const vestingMultisig = deployerAddress;
     const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const vestingMultisig = daoMultisig;
     const treasuryMultisig = daoMultisig;
     const wbnb = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
 
@@ -61,12 +58,11 @@ task("deploy:bnb").setAction(async function (taskArguments: TaskArguments, hre) 
     bnbtConfig.voterProxy = voterProxy.address;
     fs.writeFileSync('./bnb.json', JSON.stringify(bnbtConfig), {encoding: 'utf8'});
 
-    console.log('deployPhase2');
-    const contracts = await deploy(
+    console.log('deployFirstStage');
+    const contracts = await deployFirstStage(
         hre,
         deployer,
         { voterProxy, weth, masterWombat, crv, pool },
-        null,
         { vestingMultisig,  treasuryMultisig, daoMultisig },
         {
             cvxName: "Wombex Token",

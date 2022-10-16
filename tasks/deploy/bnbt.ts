@@ -4,7 +4,7 @@ import { getSigner } from "../utils";
 import { deployContract, logContracts, waitForTx } from "./../utils/deploy-utils";
 import { parseUnits } from "@ethersproject/units";
 import {
-    deploy,
+    deploy, deployFirstStage,
     updateDistributionByTokens,
 } from "../../scripts/deploySystem";
 import { getMockDistro, getMockMultisigs } from "../../scripts/deployMocks";
@@ -29,8 +29,6 @@ const ethers = require('ethers');
 
 const forking = false;
 const waitForBlocks = forking ? undefined : 3;
-
-const zeroAddress = '0x0000000000000000000000000000000000000000';
 
 task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
@@ -71,11 +69,11 @@ task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre)
     fs.writeFileSync('./bnbt.json', JSON.stringify(bnbtConfig), {encoding: 'utf8'});
 
     console.log('deployPhase2');
-    const contracts = await deploy(
+    const contracts = await deployFirstStage(
         hre,
         deployer,
         { voterProxy, weth, masterWombat, crv, pool },
-        getMockDistro(), { vestingMultisig,  treasuryMultisig, daoMultisig },
+        { vestingMultisig,  treasuryMultisig, daoMultisig },
         {
             cvxName: "Wombex Token",
             cvxSymbol: "WMX",

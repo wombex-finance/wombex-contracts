@@ -209,6 +209,152 @@ async function deploy(
     const deployer = signer;
     const deployerAddress = await deployer.getAddress();
 
+    const firstStage = await deployFirstStage(hre, signer, deployment, multisigs, naming, config, debug, waitForBlocks);
+    const {cvxCrv, cvx, cvxLocker: wmxLocker, penaltyForwarder, booster, cvxCrvRewards } = firstStage;
+
+    let initialCvxCrvStaking;
+    let drops: WmxMerkleDrop[] = [];
+    const vestedEscrows = [];
+    // STAGE 2
+
+    const DELAY = ONE_WEEK;
+
+    console.log('initialCvxCrvStaking', [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY])
+    initialCvxCrvStaking = await deployContract<WmxRewardPool>(
+        hre,
+        new WmxRewardPool__factory(deployer),
+        "WmxRewardPool",
+        [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY],
+        {},
+        debug,
+        waitForBlocks,
+    );
+
+    let tx = await booster.connect(daoSigner).setLockRewardContracts(cvxCrvRewards.address, wmxLocker.address);
+    await waitForTx(tx, debug, waitForBlocks);
+
+    const premineIncetives = distroList.lpIncentives
+        .add(distroList.airdrops.reduce((p, c) => p.add(c.amount), BN.from(0)))
+        .add(distroList.cvxCrvBootstrap)
+        .add(distroList.lbp.tknAmount)
+        .add(distroList.lbp.matching);
+    const totalVested = distroList.vesting
+        .concat(distroList.immutableVesting)
+        .reduce((p, c) => p.add(c.recipients.reduce((pp, cc) => pp.add(cc.amount), BN.from(0))), BN.from(0));
+    const premine = premineIncetives.add(totalVested);
+    const checksum = premine.add(distroList.miningRewards);
+    if (!checksum.eq(simpleToExactAmount(100, 24)) || !premine.eq(simpleToExactAmount(50, 24))) {
+        console.log(checksum.toString());
+        throw console.error();
+    }
+    // -----------------------------
+    // 2.2. Token liquidity:
+    //     - Schedule: vesting (team, treasury, etc)
+    //     - Schedule: 2% emission for cvxCrv staking
+    //     - Create:   cvxCRV/CRV BPT Stableswap
+    //     - Schedule: chef (or other) & cvxCRV/CRV incentives
+    //     - Schedule: Airdrop(s)
+    //     - Schedule: LBP
+    // -----------------------------
+    //
+    // -----------------------------
+    // 2.2.1 Schedule: vesting (team, treasury, etc)
+    // -----------------------------
+
+    const currentTime = BN.from((await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp);
+    const vestingStart = currentTime.add(DELAY);
+
+    const vestingDistro = distroList.vesting
+        .map(v => ({ ...v, admin: multisigs.daoMultisig }))
+        .concat(distroList.immutableVesting.map(v => ({ ...v, admin: ZERO_ADDRESS })));
+
+    for (let i = 0; i < vestingDistro.length; i++) {
+        const vestingGroup = vestingDistro[i];
+        const groupVestingAmount = vestingGroup.recipients.reduce((p, c) => p.add(c.amount), BN.from(0));
+        const vestingEnd = vestingStart.add(vestingGroup.period);
+
+        console.log('vestedEscrow', [cvx.address, vestingGroup.admin, wmxLocker.address, vestingStart, vestingEnd])
+        const vestedEscrow = await deployContract<WmxVestedEscrow>(
+            hre,
+            new WmxVestedEscrow__factory(deployer),
+            "WmxVestedEscrow",
+            [cvx.address, vestingGroup.admin, wmxLocker.address, vestingStart, vestingEnd],
+            {},
+            debug,
+            waitForBlocks,
+        );
+
+        tx = await cvx.connect(daoSigner).transfer(deployerAddress, groupVestingAmount);
+
+        tx = await cvx.approve(vestedEscrow.address, groupVestingAmount);
+        await waitForTx(tx, debug, waitForBlocks);
+        const vestingAddr = vestingGroup.recipients.map(m => m.address);
+        const vestingAmounts = vestingGroup.recipients.map(m => m.amount);
+        tx = await vestedEscrow.fund(vestingAddr, vestingAmounts);
+        await waitForTx(tx, debug, waitForBlocks);
+
+        vestedEscrows.push(vestedEscrow);
+    }
+
+    // -----------------------------
+    // 2.2.2 Schedule: 2% emission for cvxCrv staking
+    // -----------------------------
+
+    console.log('cvx.transfer', initialCvxCrvStaking.address, distroList.cvxCrvBootstrap)
+    tx = await cvx.connect(daoSigner).transfer(initialCvxCrvStaking.address, distroList.cvxCrvBootstrap);
+    await waitForTx(tx, debug, waitForBlocks);
+
+    // -----------------------------
+    // 2.2.5 Schedule: Airdrop(s)
+    // -----------------------------
+
+    const dropCount = distroList.airdrops.length;
+    drops = [];
+    for (let i = 0; i < dropCount; i++) {
+        const { merkleRoot, startDelay, length, amount } = distroList.airdrops[i];
+        const airdrop = await deployContract<WmxMerkleDrop>(
+            hre,
+            new WmxMerkleDrop__factory(deployer),
+            "WmxMerkleDrop",
+            [
+                multisigs.treasuryMultisig,
+                merkleRoot,
+                cvx.address,
+                wmxLocker.address,
+                startDelay,
+                length,
+            ],
+            {},
+            debug,
+            waitForBlocks,
+        );
+        tx = await cvx.connect(daoSigner).transfer(airdrop.address, amount);
+        await waitForTx(tx, debug, waitForBlocks);
+        drops.push(airdrop);
+    }
+
+    return {
+        ...deployment,
+        ...firstStage,
+        vestedEscrows,
+        drops,
+    };
+}
+
+async function deployFirstStage(
+    hre: HardhatRuntimeEnvironment,
+    signer: Signer,
+    deployment: Phase1Deployed,
+    multisigs: MultisigConfig,
+    naming: NamingConfig,
+    config: ExtSystemConfig,
+    debug = false,
+    waitForBlocks = 0,
+): Promise<SystemDeployed> {
+    const { ethers } = hre;
+    const deployer = signer;
+    const deployerAddress = await deployer.getAddress();
+
     const { token } = config;
     const { voterProxy, pool, masterWombat } = deployment;
 
@@ -481,126 +627,6 @@ async function deploy(
     tx = await cvx.init(multisigs.daoMultisig, minter.address);
     await waitForTx(tx, debug, waitForBlocks);
 
-    let initialCvxCrvStaking;
-    let drops: WmxMerkleDrop[] = [];
-    const vestedEscrows = [];
-    // STAGE 2
-
-    const DELAY = ONE_WEEK;
-
-    console.log('initialCvxCrvStaking', [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY])
-    initialCvxCrvStaking = await deployContract<WmxRewardPool>(
-        hre,
-        new WmxRewardPool__factory(deployer),
-        "WmxRewardPool",
-        [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY],
-        {},
-        debug,
-        waitForBlocks,
-    );
-
-    tx = await booster.connect(daoSigner).setLockRewardContracts(cvxCrvRewards.address, wmxLocker.address);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    const premineIncetives = distroList.lpIncentives
-        .add(distroList.airdrops.reduce((p, c) => p.add(c.amount), BN.from(0)))
-        .add(distroList.cvxCrvBootstrap)
-        .add(distroList.lbp.tknAmount)
-        .add(distroList.lbp.matching);
-    const totalVested = distroList.vesting
-        .concat(distroList.immutableVesting)
-        .reduce((p, c) => p.add(c.recipients.reduce((pp, cc) => pp.add(cc.amount), BN.from(0))), BN.from(0));
-    const premine = premineIncetives.add(totalVested);
-    const checksum = premine.add(distroList.miningRewards);
-    if (!checksum.eq(simpleToExactAmount(100, 24)) || !premine.eq(simpleToExactAmount(50, 24))) {
-        console.log(checksum.toString());
-        throw console.error();
-    }
-    // -----------------------------
-    // 2.2. Token liquidity:
-    //     - Schedule: vesting (team, treasury, etc)
-    //     - Schedule: 2% emission for cvxCrv staking
-    //     - Create:   cvxCRV/CRV BPT Stableswap
-    //     - Schedule: chef (or other) & cvxCRV/CRV incentives
-    //     - Schedule: Airdrop(s)
-    //     - Schedule: LBP
-    // -----------------------------
-    //
-    // -----------------------------
-    // 2.2.1 Schedule: vesting (team, treasury, etc)
-    // -----------------------------
-
-    const currentTime = BN.from((await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp);
-    const vestingStart = currentTime.add(DELAY);
-
-    const vestingDistro = distroList.vesting
-        .map(v => ({ ...v, admin: multisigs.daoMultisig }))
-        .concat(distroList.immutableVesting.map(v => ({ ...v, admin: ZERO_ADDRESS })));
-
-    for (let i = 0; i < vestingDistro.length; i++) {
-        const vestingGroup = vestingDistro[i];
-        const groupVestingAmount = vestingGroup.recipients.reduce((p, c) => p.add(c.amount), BN.from(0));
-        const vestingEnd = vestingStart.add(vestingGroup.period);
-
-        console.log('vestedEscrow', [cvx.address, vestingGroup.admin, wmxLocker.address, vestingStart, vestingEnd])
-        const vestedEscrow = await deployContract<WmxVestedEscrow>(
-            hre,
-            new WmxVestedEscrow__factory(deployer),
-            "WmxVestedEscrow",
-            [cvx.address, vestingGroup.admin, wmxLocker.address, vestingStart, vestingEnd],
-            {},
-            debug,
-            waitForBlocks,
-        );
-
-        tx = await cvx.connect(daoSigner).transfer(deployerAddress, groupVestingAmount);
-
-        tx = await cvx.approve(vestedEscrow.address, groupVestingAmount);
-        await waitForTx(tx, debug, waitForBlocks);
-        const vestingAddr = vestingGroup.recipients.map(m => m.address);
-        const vestingAmounts = vestingGroup.recipients.map(m => m.amount);
-        tx = await vestedEscrow.fund(vestingAddr, vestingAmounts);
-        await waitForTx(tx, debug, waitForBlocks);
-
-        vestedEscrows.push(vestedEscrow);
-    }
-
-    // -----------------------------
-    // 2.2.2 Schedule: 2% emission for cvxCrv staking
-    // -----------------------------
-
-    console.log('cvx.transfer', initialCvxCrvStaking.address, distroList.cvxCrvBootstrap)
-    tx = await cvx.connect(daoSigner).transfer(initialCvxCrvStaking.address, distroList.cvxCrvBootstrap);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    // -----------------------------
-    // 2.2.5 Schedule: Airdrop(s)
-    // -----------------------------
-
-    const dropCount = distroList.airdrops.length;
-    drops = [];
-    for (let i = 0; i < dropCount; i++) {
-        const { merkleRoot, startDelay, length, amount } = distroList.airdrops[i];
-        const airdrop = await deployContract<WmxMerkleDrop>(
-            hre,
-            new WmxMerkleDrop__factory(deployer),
-            "WmxMerkleDrop",
-            [
-                multisigs.treasuryMultisig,
-                merkleRoot,
-                cvx.address,
-                wmxLocker.address,
-                startDelay,
-                length,
-            ],
-            {},
-            debug,
-            waitForBlocks,
-        );
-        tx = await cvx.connect(daoSigner).transfer(airdrop.address, amount);
-        await waitForTx(tx, debug, waitForBlocks);
-        drops.push(airdrop);
-    }
 
     return {
         ...deployment,
@@ -623,13 +649,13 @@ async function deploy(
         arbitratorVault: null,
         cvxCrv,
         cvxCrvRewards,
-        initialCvxCrvStaking,
+        initialCvxCrvStaking: null,
         crvDepositor: (womDepositor as unknown) as WomDepositor,
         crvDepositorWrapper: null,
         poolManager: null,
         cvxLocker: wmxLocker,
-        vestedEscrows,
-        drops,
+        vestedEscrows: [],
+        drops: [],
         feeCollector: null,
         claimZap,
         penaltyForwarder,
@@ -706,6 +732,7 @@ export {
     BalancerPoolDeployed,
     NamingConfig,
     deploy,
+    deployFirstStage,
     updateDistributionByTokens,
     Phase1Deployed,
     Phase2Deployed,
