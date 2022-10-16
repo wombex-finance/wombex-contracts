@@ -165,18 +165,15 @@ contract Booster{
      */
     function setFactories(address _rfactory, address _tfactory) external {
         require(msg.sender == owner, "!auth");
+        require(rewardFactory == address(0), "!zero");
 
         //reward factory only allow this to be called once even if owner
         //removes ability to inject malicious staking contracts
         //token factory can also be immutable
-        if(rewardFactory == address(0)){
-            rewardFactory = _rfactory;
-            tokenFactory = _tfactory;
+        rewardFactory = _rfactory;
+        tokenFactory = _tfactory;
 
-            emit FactoriesUpdated(_rfactory, _tfactory);
-        } else {
-            emit FactoriesUpdated(address(0), address(0));
-        }
+        emit FactoriesUpdated(_rfactory, _tfactory);
     }
 
     /**
