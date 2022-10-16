@@ -25,6 +25,8 @@ interface IWmxLocker {
     function getReward(address _account, bool _stake) external;
 
     function getReward(address _account) external;
+
+    function balanceOf(address _account) external view returns (uint256 amount);
 }
 
 interface IExtraRewardsDistributor {
