@@ -1,6 +1,7 @@
 .DS_*
 # directories
 .yarn/*
+args/*
 !.yarn/patches
 !.yarn/releases
 !.yarn/plugins
@@ -25,6 +26,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 contracts.json
+bnbt.json
+bnb.json
 
 # types
 types/generated/**/*
