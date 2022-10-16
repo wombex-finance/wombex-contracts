@@ -54,13 +54,6 @@ contract Booster{
     }
     address[] distributionTokens;
 
-    mapping(address => FeeDistro) public feeTokens;
-    struct FeeDistro {
-        address distro;
-        address rewards;
-        bool active;
-    }
-
     bool public isShutdown;
 
     struct PoolInfo {
@@ -78,8 +71,9 @@ contract Booster{
     event Deposited(address indexed user, uint256 indexed poolid, uint256 amount);
     event Withdrawn(address indexed user, uint256 indexed poolid, uint256 amount);
 
-    event PoolAdded(address indexed lpToken, address gauge, address token, address rewardPool, uint256 pid);
+    event PoolAdded(address indexed lpToken, address gauge, address token, address crvRewards, uint256 pid);
     event PoolShutdown(uint256 indexed poolId);
+    event RewardMigrate(address indexed crvRewards, address indexed newBooster, uint256 indexed poolId);
 
     event OwnerUpdated(address newOwner);
     event FeeManagerUpdated(address newFeeManager);
@@ -171,18 +165,15 @@ contract Booster{
      */
     function setFactories(address _rfactory, address _tfactory) external {
         require(msg.sender == owner, "!auth");
+        require(rewardFactory == address(0), "!zero");
 
         //reward factory only allow this to be called once even if owner
         //removes ability to inject malicious staking contracts
         //token factory can also be immutable
-        if(rewardFactory == address(0)){
-            rewardFactory = _rfactory;
-            tokenFactory = _tfactory;
+        rewardFactory = _rfactory;
+        tokenFactory = _tfactory;
 
-            emit FactoriesUpdated(_rfactory, _tfactory);
-        } else {
-            emit FactoriesUpdated(address(0), address(0));
-        }
+        emit FactoriesUpdated(_rfactory, _tfactory);
     }
 
     /**
@@ -207,6 +198,14 @@ contract Booster{
         penaltyShare = _penaltyShare;
 
         emit PenaltyShareUpdated(_penaltyShare);
+    }
+
+    function setRewardTokenPausedInPools(address[] memory _rewardPools, address _token, bool _paused) external {
+        require(msg.sender==owner, "!auth");
+
+        for (uint256 i = 0; i < _rewardPools.length; i++) {
+            IRewards(_rewardPools[i]).setRewardTokenPaused(_token, _paused);
+        }
     }
 
     /**
@@ -285,6 +284,7 @@ contract Booster{
             emit TokenDistributionUpdate(_token, _distros[i], _shares[i], _callQueue[i]);
 
             if (_callQueue[i]) {
+                IERC20(_token).safeApprove(_distros[i], 0);
                 IERC20(_token).safeApprove(_distros[i], type(uint256).max);
             }
         }
@@ -317,10 +317,6 @@ contract Booster{
      *         contracts (DepositToken, RewardPool) and then adds to the list!
      */
     function addPool(address _lptoken, address _gauge) external returns(bool){
-        require(msg.sender==poolManager && !isShutdown, "!add");
-        require(_gauge != address(0) && _lptoken != address(0),"!param");
-        require(feeTokens[_gauge].distro == address(0), "!gauge");
-
         //the next pool's pid
         uint256 pid = poolInfo.length;
 
@@ -329,25 +325,46 @@ contract Booster{
         //create a reward contract for crv rewards
         address newRewardPool = IRewardFactory(rewardFactory).CreateCrvRewards(pid,token,_lptoken);
 
-        IERC20(token).safeApprove(newRewardPool, type(uint256).max);
+        return addCreatedPool(_lptoken, _gauge, token, newRewardPool);
+    }
+
+
+    /**
+     * @notice Called by the PoolManager (i.e. PoolManagerProxy) to add a new pool - creates all the required
+     *         contracts (DepositToken, RewardPool) and then adds to the list!
+     */
+    function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) public returns(bool){
+        require(msg.sender==poolManager && !isShutdown, "!add");
+        require(_gauge != address(0) && _lptoken != address(0),"!param");
+
+        //the next pool's pid
+        uint256 pid = poolInfo.length;
+
+        if (IRewards(_crvRewards).pid() != pid) {
+            IRewards(_crvRewards).updateOperatorData(address(this), pid);
+        }
+
+        IERC20(_token).safeApprove(_crvRewards, 0);
+        IERC20(_token).safeApprove(_crvRewards, type(uint256).max);
 
         //add the new pool
         poolInfo.push(
             PoolInfo({
                 lptoken: _lptoken,
-                token: token,
+                token: _token,
                 gauge: _gauge,
-                crvRewards: newRewardPool,
+                crvRewards: _crvRewards,
                 shutdown: false
             })
         );
 
         uint256 distTokensLen = distributionTokens.length;
         for (uint256 i = 0; i < distTokensLen; i++) {
-            IERC20(distributionTokens[i]).safeApprove(newRewardPool, type(uint256).max);
+            IERC20(distributionTokens[i]).safeApprove(_crvRewards, 0);
+            IERC20(distributionTokens[i]).safeApprove(_crvRewards, type(uint256).max);
         }
 
-        emit PoolAdded(_lptoken, _gauge, token, newRewardPool, pid);
+        emit PoolAdded(_lptoken, _gauge, _token, _crvRewards, pid);
         return true;
     }
 
@@ -360,8 +377,23 @@ contract Booster{
         PoolInfo storage pool = poolInfo[_pid];
 
         //withdraw from gauge
-        try IStaker(voterProxy).withdrawAllLp(pool.lptoken,pool.gauge){
-        }catch{}
+        IStaker(voterProxy).withdrawAllLp(pool.lptoken,pool.gauge);
+
+        pool.shutdown = true;
+
+        emit PoolShutdown(_pid);
+        return true;
+    }
+
+    /**
+     * @notice Shuts down the pool and sets shutdown flag even if withdrawAllLp failed.
+     */
+    function forceShutdownPool(uint256 _pid) external returns(bool){
+        require(msg.sender==poolManager, "!auth");
+        PoolInfo storage pool = poolInfo[_pid];
+
+        //withdraw from gauge
+        try IStaker(voterProxy).withdrawAllLp(pool.lptoken, pool.gauge){} catch {}
 
         pool.shutdown = true;
 
@@ -388,6 +420,24 @@ contract Booster{
             try IStaker(voterProxy).withdrawAllLp(token,gauge){
                 pool.shutdown = true;
             }catch{}
+        }
+    }
+
+    function migrateRewards(address[] calldata _rewards, uint256[] calldata _pids, address _newBooster) external {
+        require(msg.sender == owner, "!auth");
+        require(isShutdown, "!shutdown");
+
+        uint256 len = _rewards.length;
+        require(len == _pids.length, "!length");
+
+        for (uint256 i = 0; i < len; i++) {
+            if (_rewards[i] == address(0)) {
+                continue;
+            }
+            IRewards(_rewards[i]).updateOperatorData(_newBooster, _pids[i]);
+            address stakingToken = IRewards(_rewards[i]).stakingToken();
+            ITokenMinter(stakingToken).updateOperator(_newBooster);
+            emit RewardMigrate(_rewards[i], _newBooster, _pids[i]);
         }
     }
 
@@ -531,12 +581,19 @@ contract Booster{
 
         address gauge = pool.gauge;
         //claim crv/wom and bonus tokens
-        (address[] memory tokens, uint256[] memory balances) = IStaker(voterProxy).claimCrv(gauge, _pid);
-
+        address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, gauge);
         uint256 tLen = tokens.length;
+        uint256[] memory balances = new uint256[](tLen);
+
+        for (uint256 i = 0; i < tLen; i++) {
+            balances[i] = IERC20(tokens[i]).balanceOf(address(this));
+        }
+
+        IStaker(voterProxy).claimCrv(pool.lptoken, gauge);
+
         for (uint256 i = 0; i < tLen; i++) {
             IERC20 token = IERC20(tokens[i]);
-            uint256 balance = balances[i];
+            uint256 balance = token.balanceOf(address(this)).sub(balances[i]);
 
             emit EarmarkRewards(address(token), balance);
 
@@ -555,7 +612,7 @@ contract Booster{
                 if (tDistro.callQueue) {
                     IRewards(tDistro.distro).queueNewRewards(address(token), amount);
                 } else {
-                    token.transfer(tDistro.distro, amount);
+                    token.safeTransfer(tDistro.distro, amount);
                 }
                 sentSum = sentSum.add(amount);
             }
@@ -593,16 +650,18 @@ contract Booster{
 
         uint256 penalty;
         if (_lock) {
+            uint256 balanceBefore = IERC20(cvx).balanceOf(address(this));
             ITokenMinter(cvx).mint(address(this), mintAmount);
-            ICvxLocker(cvxLocker).lock(_address, mintAmount);
+            ICvxLocker(cvxLocker).lock(_address, IERC20(cvx).balanceOf(address(this)).sub(balanceBefore));
         } else {
             penalty = mintAmount.mul(penaltyShare).div(DENOMINATOR);
             mintAmount = mintAmount.sub(penalty);
             //mint reward to user, except the penalty
             ITokenMinter(cvx).mint(_address, mintAmount);
             if (penalty > 0) {
+                uint256 balanceBefore = IERC20(cvx).balanceOf(address(this));
                 ITokenMinter(cvx).mint(address(this), penalty);
-                extraRewardsDist.addReward(cvx, penalty);
+                extraRewardsDist.addReward(cvx, IERC20(cvx).balanceOf(address(this)).sub(balanceBefore));
             }
         }
         emit RewardClaimed(_pid, _address, _amount, _lock, mintAmount, penalty);

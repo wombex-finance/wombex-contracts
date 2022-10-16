@@ -15,10 +15,10 @@ import {WmxMath} from "./WmxMath.sol";
  * @dev     Adaptations:
  *           - One time initialisation
  *           - Consolidation of fundAdmin/admin
- *           - Lock in WmxLocker by default
+ *           - Only one way to lock in WmxLocker
  *           - Start and end time
  */
-contract WmxVestedEscrow is ReentrancyGuard {
+contract WmxVestedEscrowLockOnly is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable rewardToken;
@@ -38,13 +38,12 @@ contract WmxVestedEscrow is ReentrancyGuard {
 
     event Funded(address indexed recipient, uint256 reward);
     event Cancelled(address indexed recipient);
-    event Claim(address indexed user, uint256 amount, bool locked);
-    event SetAdmin(address indexed admin);
-    event SetLocker(address indexed locker);
+    event Claim(address indexed user, uint256 amount);
+    event TransferVestedToken(address indexed user, address indexed recipient, uint256 lockedAmount, uint256 claimedAmount);
 
     /**
      * @param rewardToken_    Reward token (WMX)
-     * @param admin_          Admin to cancel rewards
+     * @param admin_          Admin to cancel rewards (will be set to zero address after funds check)
      * @param wmxLocker_     Contract where rewardToken can be staked
      * @param starttime_      Timestamp when claim starts
      * @param endtime_        When vesting ends
@@ -81,7 +80,6 @@ contract WmxVestedEscrow is ReentrancyGuard {
     function setAdmin(address _admin) external {
         require(msg.sender == admin, "!auth");
         admin = _admin;
-        emit SetAdmin(admin);
     }
 
     /**
@@ -91,7 +89,6 @@ contract WmxVestedEscrow is ReentrancyGuard {
     function setLocker(address _wmxLocker) external {
         require(msg.sender == admin, "!auth");
         wmxLocker = IWmxLocker(_wmxLocker);
-        emit SetLocker(_wmxLocker);
     }
 
     /**
@@ -126,7 +123,7 @@ contract WmxVestedEscrow is ReentrancyGuard {
         require(msg.sender == admin, "!auth");
         require(totalLocked[_recipient] > 0, "!funding");
 
-        _claim(_recipient, false);
+        _claim(_recipient);
 
         uint256 delta = remaining(_recipient);
         rewardToken.safeTransfer(admin, delta);
@@ -176,28 +173,37 @@ contract WmxVestedEscrow is ReentrancyGuard {
                     CLAIM
     ****************************************/
 
-    function claim(bool _lock) external nonReentrant {
-        _claim(msg.sender, _lock);
+    function claim() external nonReentrant {
+        _claim(msg.sender);
     }
 
     /**
      * @dev Claim reward token (Wmx) and lock it.
      * @param _recipient  Address to receive rewards.
-     * @param _lock       Lock rewards immediately.
      */
-    function _claim(address _recipient, bool _lock) internal {
+    function _claim(address _recipient) internal {
         uint256 claimable = available(_recipient);
 
         totalClaimed[_recipient] += claimable;
 
-        if (_lock) {
-            require(address(wmxLocker) != address(0), "!wmxLocker");
-            rewardToken.safeApprove(address(wmxLocker), claimable);
-            wmxLocker.lock(_recipient, claimable);
-        } else {
-            rewardToken.safeTransfer(_recipient, claimable);
-        }
+        require(address(wmxLocker) != address(0), "!wmxLocker");
+        rewardToken.safeApprove(address(wmxLocker), claimable);
+        wmxLocker.lock(_recipient, claimable);
 
-        emit Claim(_recipient, claimable, _lock);
+        emit Claim(_recipient, claimable);
+    }
+
+    /**
+     * @dev Transfer locked rewards to _recipient
+     * @param _recipient  Address to receive locked rewards.
+     */
+    function transferVestedTokens(address _recipient) external nonReentrant {
+        totalLocked[_recipient] = totalLocked[msg.sender];
+        totalClaimed[_recipient] = totalClaimed[msg.sender];
+
+        totalLocked[msg.sender] = 0;
+        totalClaimed[msg.sender] = 0;
+
+        emit TransferVestedToken(msg.sender, _recipient, totalLocked[_recipient], totalClaimed[_recipient]);
     }
 }

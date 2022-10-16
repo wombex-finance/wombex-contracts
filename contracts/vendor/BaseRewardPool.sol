@@ -58,14 +58,14 @@ contract BaseRewardPool {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    uint256 public immutable pid;
     IERC20 public immutable stakingToken;
     IERC20 public immutable boosterRewardToken;
-    address public immutable operator;
-
     uint256 public constant DURATION = 7 days;
     uint256 public constant NEW_REWARD_RATIO = 830;
     uint256 public constant MAX_TOKENS = 100;
+
+    address public operator;
+    uint256 public pid;
 
     mapping(address => uint256) private _balances;
     uint256 private _totalSupply;
@@ -79,6 +79,7 @@ contract BaseRewardPool {
         uint256 queuedRewards;
         uint256 currentRewards;
         uint256 historicalRewards;
+        bool paused;
     }
 
     mapping(address => RewardState) public tokenRewards;
@@ -87,10 +88,13 @@ contract BaseRewardPool {
     mapping(address => mapping(address => uint256)) public userRewardPerTokenPaid;
     mapping(address => mapping(address => uint256)) public rewards;
 
+    event UpdateOperatorData(address indexed sender, address indexed operator, uint256 indexed pid);
+    event SetRewardTokenPaused(address indexed sender, address indexed token, bool indexed paused);
     event RewardAdded(address indexed token, uint256 currentRewards, uint256 newRewards);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed token, address indexed user, uint256 reward);
+    event Donate(address indexed token, uint256 amount);
 
     /**
      * @dev This is called directly from RewardFactory
@@ -109,6 +113,22 @@ contract BaseRewardPool {
         stakingToken = IERC20(stakingToken_);
         boosterRewardToken = IERC20(boosterRewardToken_);
         operator = operator_;
+    }
+
+    function updateOperatorData(address operator_, uint256 pid_) external {
+        require(msg.sender == operator, "!authorized");
+        operator = operator_;
+        pid = pid_;
+
+        emit UpdateOperatorData(msg.sender, operator_, pid_);
+    }
+
+    function setRewardTokenPaused(address token_, bool paused_) external {
+        require(msg.sender == operator, "!authorized");
+
+        tokenRewards[token_].paused = paused_;
+
+        emit SetRewardTokenPaused(msg.sender, token_, paused_);
     }
 
     function totalSupply() public view virtual returns (uint256) {
@@ -255,6 +275,9 @@ contract BaseRewardPool {
         uint256 len = allRewardTokens.length;
         for (uint256 i = 0; i < len; i++) {
             RewardState storage rState = tokenRewards[allRewardTokens[i]];
+            if (rState.paused) {
+                continue;
+            }
 
             uint256 reward = _earned(rState, _account);
             if (reward > 0) {
@@ -281,8 +304,13 @@ contract BaseRewardPool {
      * @dev Donate some extra rewards to this contract
      */
     function donate(address _token, uint256 _amount) external returns(bool){
+        uint256 balanceBefore = IERC20(_token).balanceOf(address(this));
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+        _amount = IERC20(_token).balanceOf(address(this)).sub(balanceBefore);
+
         tokenRewards[_token].queuedRewards = tokenRewards[_token].queuedRewards.add(_amount);
+
+        emit Donate(_token, _amount);
     }
 
     /**
@@ -308,7 +336,10 @@ contract BaseRewardPool {
     function queueNewRewards(address _token, uint256 _rewards) external returns(bool){
         require(msg.sender == operator, "!authorized");
 
+        uint256 balanceBefore = IERC20(_token).balanceOf(address(this));
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _rewards);
+
+        _rewards = IERC20(_token).balanceOf(address(this)).sub(balanceBefore);
 
         RewardState storage rState = tokenRewards[_token];
         if (rState.lastUpdateTime == 0) {
