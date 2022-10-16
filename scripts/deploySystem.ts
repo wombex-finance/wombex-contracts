@@ -260,6 +260,7 @@ async function deploy(
         hre,
         new Booster__factory(deployer),
         "Booster",
+        //TODO: mintRatio values
         [voterProxy.address, cvx.address, token, 8000, 12000],
         {},
         debug,
@@ -407,7 +408,7 @@ async function deploy(
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setEarmarkIncentive')
-    tx = await booster.setEarmarkIncentive(50);
+    tx = await booster.setEarmarkIncentive(10);
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setExtraRewardsDistributor')
@@ -476,24 +477,24 @@ async function deploy(
     tx = await claimZap.setApprovals();
     await waitForTx(tx, debug, waitForBlocks);
 
-    const DELAY = ONE_WEEK;
-
-    console.log('initialCvxCrvStaking', [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY])
-    const initialCvxCrvStaking = await deployContract<WmxRewardPool>(
-        hre,
-        new WmxRewardPool__factory(deployer),
-        "WmxRewardPool",
-        [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY],
-        {},
-        debug,
-        waitForBlocks,
-    );
-
     console.log('cvx.init')
     tx = await cvx.init(multisigs.daoMultisig, minter.address);
     await waitForTx(tx, debug, waitForBlocks);
 
     // STAGE 2
+
+    // const DELAY = ONE_WEEK;
+    //
+    // console.log('initialCvxCrvStaking', [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY])
+    // const initialCvxCrvStaking = await deployContract<WmxRewardPool>(
+    //     hre,
+    //     new WmxRewardPool__factory(deployer),
+    //     "WmxRewardPool",
+    //     [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY],
+    //     {},
+    //     debug,
+    //     waitForBlocks,
+    // );
 
     // tx = await booster.setLockRewardContracts(cvxCrvRewards.address, wmxLocker.address);
     // await waitForTx(tx, debug, waitForBlocks);
@@ -654,7 +655,7 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
     tx = await booster.connect(signer).updateDistributionByTokens(
         crv.address,
         [cvxCrvRewards.address, cvxStakingProxy.address],
-        [550, 1100],
+        [500, 1000],
         [true, true]
     );
     await waitForTx(tx, true, waitForBlocks);
@@ -679,16 +680,16 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
                 tx = await booster.connect(signer).updateDistributionByTokens(
                     token,
                     [cvxCrvRewards.address, cvxLocker.address],
-                    [550, 1100],
+                    [500, 1000],
                     [true, true]
                 );
                 await waitForTx(tx, true, waitForBlocks);
 
-                if (await cvxLocker.rewardData(token).then(rd => rd.lastUpdateTime.toString()) === '0') {
-                    console.log('cvxLocker.connect(signer).addReward', token);
-                    tx = await cvxLocker.connect(signer).addReward(token, booster.address);
-                    await waitForTx(tx, true, waitForBlocks);
-                }
+                // if (await cvxLocker.rewardData(token).then(rd => rd.lastUpdateTime.toString()) === '0') {
+                //     console.log('cvxLocker.connect(signer).addReward', token);
+                //     tx = await cvxLocker.connect(signer).addReward(token, booster.address);
+                //     await waitForTx(tx, true, waitForBlocks);
+                // }
             }
         }
     }

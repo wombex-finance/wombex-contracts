@@ -31,7 +31,6 @@ task("info:wombat").setAction(async function (taskArguments: TaskArguments, hre)
     }
 });
 
-
 task("info:wombat:save").setAction(async function (taskArguments: TaskArguments, hre) {
     const masterWombat = new ethers.Contract('0x78baec04d81fcf87551a8495d87035911a7875c6', masterWombatAbi, hre.ethers.provider);
 
@@ -48,6 +47,24 @@ task("info:wombat:save").setAction(async function (taskArguments: TaskArguments,
     }
     fs.writeFileSync('bnbt.json', JSON.stringify(bnbtConfig, null, " "));
 });
+
+task("info:main-wombat:save").setAction(async function (taskArguments: TaskArguments, hre) {
+    const masterWombat = new ethers.Contract('0x6cff948ccce8dc7eba0dda3b1818298e2088fe8e', masterWombatAbi, hre.ethers.provider);
+
+    const bnbtConfig = {
+        masterWombat: masterWombat.address,
+        wom: await masterWombat.wom(),
+        veWom: await masterWombat.veWom(),
+        lpTokens: []
+    };
+    const poolLength = parseInt(await masterWombat.poolLength().then(pl => pl.toString()));
+    for (let i = 0; i < poolLength; i++) {
+        const poolInfo = await masterWombat.poolInfo(i);
+        bnbtConfig.lpTokens.push(poolInfo.lpToken);
+    }
+    fs.writeFileSync('bnb.json', JSON.stringify(bnbtConfig, null, " "));
+});
+
 
 
 task("info:lpRewards")

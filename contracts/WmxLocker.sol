@@ -917,6 +917,10 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
         emit RewardAdded(_rewardsToken, _reward);
     }
 
+    function userLocksLen(address _account) external view returns (uint256) {
+        return userLocks[_account].length;
+    }
+
     function rewardTokensLen() external view returns (uint256) {
         return rewardTokens.length;
     }
