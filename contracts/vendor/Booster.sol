@@ -435,8 +435,10 @@ contract Booster{
                 continue;
             }
             IRewards(_rewards[i]).updateOperatorData(_newBooster, _pids[i]);
-            address stakingToken = IRewards(_rewards[i]).stakingToken();
-            ITokenMinter(stakingToken).updateOperator(_newBooster);
+            if (_rewards[i] != crvLockRewards) {
+                address stakingToken = IRewards(_rewards[i]).stakingToken();
+                ITokenMinter(stakingToken).updateOperator(_newBooster);
+            }
             emit RewardMigrate(_rewards[i], _newBooster, _pids[i]);
         }
     }

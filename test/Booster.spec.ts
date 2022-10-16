@@ -81,10 +81,10 @@ describe("Booster", () => {
         voteDelegateAddress = await voteDelegate.getAddress();
     };
 
-    async function getBoosterReward(tx, logsLength) {
+    async function getBoosterReward(tx, _booster, logsLength) {
         tx = await tx.wait(1);
-        const logs = tx.events.filter(e => e.address.toLowerCase() === booster.address.toLowerCase());
-        expect(logs.length, logsLength);
+        const logs = tx.events.filter(e => e.address.toLowerCase() === _booster.address.toLowerCase());
+        expect(logs.length).eq(logsLength);
         return booster.interface.decodeEventLog('RewardClaimed', logs[0].data, logs[0].topics);
     }
 
@@ -162,7 +162,7 @@ describe("Booster", () => {
 
             const cvxBalanceBefore = await cvx.balanceOf(bobAddress);
             tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
-            const boosterReward = await getBoosterReward(tx, 1);
+            const boosterReward = await getBoosterReward(tx, booster, 1);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(false);
@@ -213,7 +213,7 @@ describe("Booster", () => {
             const crvBalanceBefore = await mocks.crv.balanceOf(bobAddress);
             const userRewardPerTokenPaid = await crvRewards.userRewardPerTokenPaid(mocks.crv.address, bobAddress);
             tx = await crvRewards["getReward(address,bool)"](bobAddress, true);
-            const boosterReward = await getBoosterReward(tx, 1);
+            const boosterReward = await getBoosterReward(tx, booster, 1);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(true);
@@ -259,7 +259,7 @@ describe("Booster", () => {
             const extraDistrBalanceBefore = await cvx.balanceOf(contracts.extraRewardsDistributor.address);
             const lockerBalanceBefore = await contracts.cvxLocker.balances(bobAddress).then(b => b.locked);
             tx = await crvRewards["getReward(address,bool)"](bobAddress, true);
-            const boosterReward = await getBoosterReward(tx, 1);
+            const boosterReward = await getBoosterReward(tx, booster, 1);
 
             expect(boosterReward.mintAmount).eq(boosterReward.amount.mul(mintRatio).div(10000));
             expect(boosterReward.lock).eq(true);
@@ -308,7 +308,7 @@ describe("Booster", () => {
             const extraDistrBalanceBefore = await cvx.balanceOf(contracts.extraRewardsDistributor.address);
             const lockerBalanceBefore = await contracts.cvxLocker.balances(bobAddress).then(b => b.locked);
             tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
-            const boosterReward = await getBoosterReward(tx, 1);
+            const boosterReward = await getBoosterReward(tx, booster, 1);
 
             expect(boosterReward.amount).gt(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(false);
@@ -477,7 +477,7 @@ describe("Booster", () => {
             const userRewardPerTokenPaid = await crvRewards.userRewardPerTokenPaid(mocks.crv.address, bobAddress);
 
             tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
-            let boosterReward = await getBoosterReward(tx, 2);
+            let boosterReward = await getBoosterReward(tx, booster, 1);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(false);
@@ -510,7 +510,7 @@ describe("Booster", () => {
             underlyingBalanceBefore = await underlying.balanceOf(bobAddress);
 
             tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
-            boosterReward = await getBoosterReward(tx, 2);
+            boosterReward = await getBoosterReward(tx, booster, 1);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(false);
@@ -918,17 +918,18 @@ describe("Booster", () => {
             const {newBooster, poolLength} = migrateTx.events.filter(e => e.event === 'Migrated')[0].args;
             const newBoosterContract = MockNewBooster__factory.connect(newBooster, bob);
 
+            expect(await newBoosterContract.owner()).to.equal(await daoSigner.getAddress());
             expect(await newBoosterContract.poolLength()).to.equal(poolLength);
             expect(await newBoosterContract.poolLength()).to.lt(await booster.poolLength());
             expect(await newBoosterContract.newMethod()).to.equal("test");
-            expect(await crvRewards.operator(), newBooster);
-            expect(await depositToken.operator(), newBooster);
+            expect(await crvRewards.operator()).eq(newBooster);
+            expect(await depositToken.operator()).eq(newBooster);
 
             const lastPid = poolLength.sub(1);
 
             const migratedPool = await newBoosterContract.poolInfo(lastPid)
-            expect(crvRewards.address, migratedPool.crvRewards);
-            expect(lptoken.address, migratedPool.lptoken);
+            expect(crvRewards.address).eq(migratedPool.crvRewards);
+            expect(lptoken.address).eq(migratedPool.lptoken);
 
             let balanceBefore = await crvRewards.balanceOf(bobAddress);
 
@@ -945,6 +946,45 @@ describe("Booster", () => {
             tx = await crvRewards.connect(bob).withdrawAndUnwrap(amount.div(2), true);
             await tx.wait();
             expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.sub(amount.div(2)));
+
+            expect(await contracts.cvx.operator()).eq(booster.address);
+            await contracts.cvx.updateOperator();
+            expect(await contracts.cvx.operator()).eq(newBooster);
+
+            await increaseTime(60 * 60 * 24 * 6);
+
+            const distribution1 = await booster.distributionByTokens(contracts.crv.address, 0);
+            const distribution2 = await booster.distributionByTokens(contracts.crv.address, 1);
+            await (await newBoosterContract.connect(daoSigner).updateDistributionByTokens(
+                contracts.crv.address,
+                [distribution1.distro, distribution2.distro],
+                [distribution1.share, distribution2.share],
+                [distribution1.callQueue, distribution2.callQueue]
+            )).wait(1);
+
+            const distributionWeth1 = await booster.distributionByTokens(mocks.weth.address, 0);
+            const distributionWeth2 = await booster.distributionByTokens(mocks.weth.address, 1);
+            await (await newBoosterContract.connect(daoSigner).updateDistributionByTokens(
+                contracts.weth.address,
+                [distributionWeth1.distro, distributionWeth2.distro],
+                [distributionWeth1.share, distributionWeth2.share],
+                [distributionWeth1.callQueue, distributionWeth2.callQueue]
+            )).wait(1);
+
+            console.log('earmarkRewards');
+            tx = await newBoosterContract.earmarkRewards(lastPid);
+            await tx.wait();
+
+            // tx = await booster.connect(daoSigner).setRewardTokenPausedInPools([crvRewards.address], underlying.address, true);
+            // await tx.wait();
+
+            const cvxBalanceBefore = await cvx.balanceOf(bobAddress);
+            tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
+            const boosterReward = await getBoosterReward(tx, newBoosterContract, 1);
+            expect(await cvx.balanceOf(bobAddress)).gt(cvxBalanceBefore);
+
+            expect(boosterReward.amount).eq(boosterReward.mintAmount);
+            expect(boosterReward.lock).eq(false);
         });
     });
 });
