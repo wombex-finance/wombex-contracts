@@ -75,7 +75,7 @@ contract WmxRewardPool {
         require(_penaltyForwarder != address(0), "!forwarder");
         penaltyForwarder = _penaltyForwarder;
 
-        require(_startDelay > 4 days && _startDelay < 2 weeks, "!delay");
+        require(_startDelay < 2 weeks, "!delay");
         startTime = block.timestamp + _startDelay;
     }
 
