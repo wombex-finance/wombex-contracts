@@ -17,8 +17,8 @@ contract MockBoosterMigrator is Ownable {
         _oldBooster.shutdownSystem();
 
         uint256 poolLen = _oldBooster.poolLength();
-        address[] memory crvRewards = new address[](poolLen);
-        uint256[] memory pids = new uint256[](poolLen);
+        address[] memory crvRewards = new address[](poolLen + 1);
+        uint256[] memory pids = new uint256[](poolLen + 1);
 
         for (uint256 i = 0; i < poolLen; i++) {
             (, , , address rewards, bool shutdown) = _oldBooster.poolInfo(i);
@@ -28,6 +28,9 @@ contract MockBoosterMigrator is Ownable {
             pids[i] = i;
             crvRewards[i] = rewards;
         }
+
+        crvRewards[poolLen] = _oldBooster.crvLockRewards();
+        pids[poolLen] = 0;
 
         _oldBooster.migrateRewards(crvRewards, pids, address(newBooster));
 
@@ -42,6 +45,8 @@ contract MockBoosterMigrator is Ownable {
 
         _oldBooster.setOwner(_newOwner);
         voterProxy.setOwner(_newOwner);
+
+        newBooster.setOwner(_newOwner);
 
         emit Migrated(address(newBooster), newBooster.poolLength());
     }
