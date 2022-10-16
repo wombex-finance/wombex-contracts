@@ -225,7 +225,7 @@ describe("WmxLocker", () => {
         const multisigs = await getMockMultisigs(accounts[5], accounts[6], accounts[7]);
         const distro = getMockDistro();
 
-        const contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
+        const contracts = await deploy(hre, deployer, accounts[7], mocks, distro, multisigs, mocks.namingConfig, mocks);
 
         alice = accounts[1];
         aliceAddress = await alice.getAddress();

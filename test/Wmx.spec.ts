@@ -34,7 +34,7 @@ describe("Wmx", () => {
         multisigs = await getMockMultisigs(accounts[0], accounts[0], accounts[0]);
         distro = getMockDistro();
 
-        const deployment = await deploy(hre, deployer, mocks, distro, multisigs, mocks['namingConfig'], mocks['addresses']);
+        const deployment = await deploy(hre, deployer, deployer, mocks, distro, multisigs, mocks['namingConfig'], mocks['addresses']);
 
         alice = accounts[1];
         aliceAddress = await alice.getAddress();
