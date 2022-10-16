@@ -80,6 +80,7 @@ contract BaseRewardPool {
         uint256 queuedRewards;
         uint256 currentRewards;
         uint256 historicalRewards;
+        bool paused;
     }
 
     mapping(address => RewardState) public tokenRewards;
@@ -89,6 +90,7 @@ contract BaseRewardPool {
     mapping(address => mapping(address => uint256)) public rewards;
 
     event UpdateOperatorData(address indexed sender, address indexed operator, uint256 indexed pid);
+    event SetRewardTokenPaused(address indexed sender, address indexed token, bool indexed paused);
     event RewardAdded(address indexed token, uint256 currentRewards, uint256 newRewards);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
@@ -122,6 +124,14 @@ contract BaseRewardPool {
         pid = pid_;
 
         emit UpdateOperatorData(msg.sender, operator_, pid_);
+    }
+
+    function setRewardTokenPaused(address token_, bool paused_) external {
+        require(msg.sender == operator, "!authorized");
+
+        tokenRewards[token_].paused = paused_;
+
+        emit SetRewardTokenPaused(msg.sender, token_, paused_);
     }
 
     function totalSupply() public view virtual returns (uint256) {
@@ -260,6 +270,9 @@ contract BaseRewardPool {
         uint256 len = allRewardTokens.length;
         for (uint256 i = 0; i < len; i++) {
             RewardState storage rState = tokenRewards[allRewardTokens[i]];
+            if (rState.paused) {
+                continue;
+            }
 
             uint256 reward = _earned(rState, _account);
             if (reward > 0) {
