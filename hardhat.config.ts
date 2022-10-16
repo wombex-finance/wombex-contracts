@@ -76,8 +76,7 @@ const config: HardhatUserConfig = {
         bnb: {
             chainId: chainIds.bnb,
             url: process.env.NODE_URL || "",
-            gasPrice: 10000000000,
-            accounts
+            gasPrice: 10000000000
         },
         bnbt: {
             chainId: chainIds.bnbt,
