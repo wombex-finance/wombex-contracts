@@ -46,7 +46,6 @@ describe("WomDepositor", () => {
         const distro = getMockDistro();
         contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
         ({ crvDepositor: womDepositor, cvxCrvRewards, voterProxy } = contracts);
-        await updateDistributionByTokens(daoSigner, contracts);
 
         await mocks.crv.transfer(aliceAddress, simpleToExactAmount(2000));
         await mocks.crv.transfer(bobAddress, simpleToExactAmount(2000));

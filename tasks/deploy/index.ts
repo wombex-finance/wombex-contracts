@@ -1,3 +1,3 @@
 import "./bnbt";
-import "./mainnet-config";
+// import "./mainnet-config";
 import "./info";

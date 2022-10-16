@@ -5,6 +5,7 @@ import { deployContract, logContracts, waitForTx } from "./../utils/deploy-utils
 import { parseUnits } from "@ethersproject/units";
 import {
     deploy,
+    updateDistributionByTokens,
 } from "../../scripts/deploySystem";
 import { getMockDistro, getMockMultisigs } from "../../scripts/deployMocks";
 import { simpleToExactAmount } from "./../../test-utils/math";
@@ -14,7 +15,7 @@ import {
     BaseRewardPool__factory,
     MockVoting,
     MockVoting__factory,
-    VoterProxy, AuraClaimZap, AuraClaimZap__factory
+    VoterProxy, WmxClaimZap, WmxClaimZap__factory, WETH__factory, MasterWombatV2__factory, IERC20__factory
 } from "../../types/generated";
 
 const fs = require('fs');
@@ -27,6 +28,7 @@ const zeroAddress = '0x0000000000000000000000000000000000000000';
 task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
     const deployerAddress = await deployer.getAddress();
+    console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
     const bnbtConfig = JSON.parse(fs.readFileSync('./bnbt.json', {encoding: 'utf8'}));
 
     const voting = await deployContract<MockVoting>(
@@ -39,6 +41,10 @@ task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre)
     );
     console.log('voting', voting.address);
 
+    const weth = WETH__factory.connect('0x64690EB41E1Ae4A75501a54C1331ddfF5c26b8a6', deployer);
+    const masterWombat = MasterWombatV2__factory.connect(bnbtConfig.masterWombat, deployer);
+    const crv = IERC20__factory.connect(bnbtConfig.wom, deployer);
+
     bnbtConfig.token = bnbtConfig.wom;
     bnbtConfig.gaugeController = voting.address;
     bnbtConfig.voteOwnership = voting.address;
@@ -49,16 +55,12 @@ task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre)
         hre,
         new VoterProxy__factory(deployer),
         "VoterProxy",
-        [bnbtConfig.token, bnbtConfig.veWom, bnbtConfig.gaugeController],
+        [bnbtConfig.token, bnbtConfig.veWom, weth.address],
         {},
         true,
         waitForBlocks,
     );
     console.log('voterProxy', voterProxy.address);
-
-    let tx = await voterProxy.setSystemConfig(bnbtConfig.gaugeController, bnbtConfig.veWom, '7');
-    await waitForTx(tx, true, waitForBlocks);
-
 
     bnbtConfig.voterProxy = voterProxy.address;
     fs.writeFileSync('./bnbt.json', JSON.stringify(bnbtConfig), {encoding: 'utf8'});
@@ -67,16 +69,16 @@ task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre)
     const contracts = await deploy(
         hre,
         deployer,
-        { voterProxy },
+        { voterProxy, weth, masterWombat, crv },
         getMockDistro(),
         await getMockMultisigs(deployer, deployer, deployer),
         {
             cvxName: "Wombex Finance",
             cvxSymbol: "WMX",
-            vlCvxName: "Tightly tied Wombex",
-            vlCvxSymbol: "ttWMX",
-            cvxCrvName: "Wombex BUL",
-            cvxCrvSymbol: "slkBUL",
+            vlCvxName: "vlWMX",
+            vlCvxSymbol: "vlWMX",
+            cvxCrvName: "WMX WOM",
+            cvxCrvSymbol: "wmxWom",
             tokenFactoryNamePostfix: " Wombex rope",
         },
         bnbtConfig,
@@ -102,20 +104,9 @@ task("deploy:bnbt").setAction(async function (taskArguments: TaskArguments, hre)
 
     logContracts(contracts as unknown as { [key: string]: { address: string } });
 
-    tx = await voting.vote_for_gauge_weights(bnbtConfig.masterWombat, '1');
-    await waitForTx(tx, true, waitForBlocks);
-
-    for (let i = 0; i < bnbtConfig.lpTokens.length; i++) {
-        const lpToken = bnbtConfig.lpTokens[i];
-        tx = await contracts.voterProxy["setLpTokenPid(address,address,uint256)"](bnbtConfig.masterWombat, lpToken, i);
-        await waitForTx(tx, true, waitForBlocks);
-        tx = await contracts.booster["addPool(address,address,uint256)"](lpToken, bnbtConfig.masterWombat, '0');
-        await waitForTx(tx, true, waitForBlocks);
-    }
-
     const poolInfo = await contracts.booster.poolInfo(0);
     const lp = await ERC20__factory.connect(poolInfo.lptoken, deployer);
-    tx = await lp.approve(contracts.booster.address, simpleToExactAmount(1));
+    let tx = await lp.approve(contracts.booster.address, simpleToExactAmount(1));
     await waitForTx(tx, true, waitForBlocks);
 
     tx = await contracts.booster.deposit(0, simpleToExactAmount(1), true);
@@ -171,10 +162,10 @@ task("bnbt:claimzap").setAction(async function (taskArguments: TaskArguments, hr
     const deployer = await getSigner(hre);
     const bnbtConfig = JSON.parse(fs.readFileSync('./bnbt.json', {encoding: 'utf8'}));
 
-    const claimZap = await deployContract<AuraClaimZap>(
+    const claimZap = await deployContract<WmxClaimZap>(
         hre,
-        new AuraClaimZap__factory(deployer),
-        "AuraClaimZap",
+        new WmxClaimZap__factory(deployer),
+        "WmxClaimZap",
         [bnbtConfig.wom, bnbtConfig.cvx, bnbtConfig.cvxCrv, bnbtConfig.crvDepositor, bnbtConfig.cvxCrvRewards, bnbtConfig.cvxLocker],
         {},
         true,

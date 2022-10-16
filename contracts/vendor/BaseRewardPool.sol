@@ -66,7 +66,6 @@ contract BaseRewardPool {
 
     address public operator;
     uint256 public pid;
-    address public immutable rewardManager;
 
     mapping(address => uint256) private _balances;
     uint256 private _totalSupply;
@@ -99,23 +98,21 @@ contract BaseRewardPool {
 
     /**
      * @dev This is called directly from RewardFactory
-     * @param pid_           Effectively the pool identifier - used in the Booster
-     * @param stakingToken_  Pool LP token
-     * @param operator_      Booster
-     * @param rewardManager_ RewardFactory
+     * @param pid_                  Effectively the pool identifier - used in the Booster
+     * @param stakingToken_         Pool LP token
+     * @param boosterRewardToken_   Reward token for call booster on queueNewRewards
+     * @param operator_             Booster
      */
     constructor(
         uint256 pid_,
         address stakingToken_,
         address boosterRewardToken_,
-        address operator_,
-        address rewardManager_
+        address operator_
     ) public {
         pid = pid_;
         stakingToken = IERC20(stakingToken_);
         boosterRewardToken = IERC20(boosterRewardToken_);
         operator = operator_;
-        rewardManager = rewardManager_;
     }
 
     function updateOperatorData(address operator_, uint256 pid_) external {
@@ -167,6 +164,14 @@ contract BaseRewardPool {
 
     function earned(address _token, address _account) public view returns (uint256) {
         return _earned(tokenRewards[_token], _account);
+    }
+
+    function claimableRewards(address _account) external view returns (address[] memory tokens, uint256[] memory amounts) {
+        tokens = allRewardTokens;
+        amounts = new uint256[](allRewardTokens.length);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            amounts[i] = _earned(tokenRewards[tokens[i]], _account);
+        }
     }
 
     function stake(uint256 _amount)
@@ -409,5 +414,13 @@ contract BaseRewardPool {
                 .mul(1e18)
                 .div(totalSupply())
             );
+    }
+
+    function rewardTokensLen() external view returns (uint256) {
+        return allRewardTokens.length;
+    }
+
+    function rewardTokensList() external view returns (address[] memory) {
+        return allRewardTokens;
     }
 }

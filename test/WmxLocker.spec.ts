@@ -9,7 +9,6 @@ import {
 } from "../scripts/deployMocks";
 import {
     deploy,
-    updateDistributionByTokens
 } from "../scripts/deploySystem";
 import { deployContract } from "../tasks/utils";
 import {
@@ -227,7 +226,6 @@ describe("WmxLocker", () => {
         const distro = getMockDistro();
 
         const contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
-        await updateDistributionByTokens(accounts[7], contracts);
 
         alice = accounts[1];
         aliceAddress = await alice.getAddress();

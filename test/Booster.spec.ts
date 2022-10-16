@@ -339,9 +339,10 @@ describe("Booster", () => {
     });
 
     describe("performing core functions with deflationary token", async () => {
-        let underlying, lptoken, defPool, multiRewarder;
-        const pid = 2;
+        let underlying, lptoken, defPool, multiRewarder, pid;
         before(async () => {
+            pid = await booster.poolLength();
+
             underlying = await deployContract<SafeMoon>(
                 hre,
                 new SafeMoon__factory(deployer),
@@ -380,7 +381,30 @@ describe("Booster", () => {
             tx = await mocks.masterWombat.add('1', lptoken.address, multiRewarder.address);
             await waitForTx(tx, true, 1);
 
-            await updateDistributionByTokens(daoSigner, contracts, 1);
+            tx = await contracts.voterProxy.connect(daoSigner).setLpTokensPid(mocks.masterWombat.address);
+            await waitForTx(tx, true, 1);
+
+            tx = await booster.connect(daoSigner).updateDistributionByTokens(
+                contracts.crv.address,
+                [cvxCrvRewards.address, cvxStakingProxy.address],
+                [550, 1100],
+                [true, true]
+            );
+            await waitForTx(tx, true, 1);
+
+            tx = await booster.connect(daoSigner).addPool(lptoken.address, mocks.masterWombat.address);
+            await waitForTx(tx, true, 1);
+
+            tx = await booster.connect(daoSigner).updateDistributionByTokens(
+                underlying.address,
+                [cvxCrvRewards.address, cvxLocker.address],
+                [550, 1100],
+                [true, true]
+            );
+            await waitForTx(tx, true, 1);
+
+            tx = await cvxLocker.connect(daoSigner).addReward(underlying.address, booster.address);
+            await waitForTx(tx, true, 1);
 
             defPool = await booster.poolInfo(pid);
 

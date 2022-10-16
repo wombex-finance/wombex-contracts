@@ -446,6 +446,14 @@ contract Booster{
      *          and subsequently stakes that on BaseRewardPool
      */
     function deposit(uint256 _pid, uint256 _amount, bool _stake) public returns(bool){
+        return depositFor(_pid, _amount, _stake, msg.sender);
+    }
+
+    /**
+     * @notice  Deposits an "_amount" to a given gauge (specified by _pid), mints a `DepositToken`
+     *          and subsequently stakes that on BaseRewardPool
+     */
+    function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) public returns(bool){
         require(!isShutdown,"shutdown");
         PoolInfo storage pool = poolInfo[_pid];
         require(pool.shutdown == false, "pool is closed");
@@ -463,13 +471,13 @@ contract Booster{
         if(_stake){
             //mint here and send to rewards on user behalf
             ITokenMinter(token).mint(address(this), _amount);
-            IRewards(pool.crvRewards).stakeFor(msg.sender, _amount);
+            IRewards(pool.crvRewards).stakeFor(_receiver, _amount);
         }else{
             //add user balance directly
-            ITokenMinter(token).mint(msg.sender, _amount);
+            ITokenMinter(token).mint(_receiver, _amount);
         }
 
-        emit Deposited(msg.sender, _pid, _amount);
+        emit Deposited(_receiver, _pid, _amount);
         return true;
     }
 
