@@ -13,8 +13,9 @@ import { simpleToExactAmount } from "../test-utils/math";
 import {
     BaseRewardPool,
     VeWom, VoterProxy,
-    WomDepositor
+    WomDepositor, WomDepositor__factory
 } from "../types/generated";
+import {deployContract} from "../tasks/utils";
 
 describe("WomDepositor", () => {
     let accounts: Signer[];
@@ -378,7 +379,43 @@ describe("WomDepositor", () => {
 
         expect(await womDepositor.checkOldSlot()).eq(3);
         expect(await womDepositor.slotEnds(2)).gt(await womDepositor.slotEnds(3));
+    });
 
+    it("womDepositor", async () => {
+        expect(await voterProxy.depositor()).to.be.eq(womDepositor.address);
+        expect(await contracts.cvxCrv.operator()).to.be.eq(womDepositor.address);
+
+        const newWomDepositor = await deployContract<WomDepositor>(
+            hre,
+            new WomDepositor__factory(deployer),
+            "WomDepositor",
+            [mocks.crv.address, voterProxy.address, contracts.cvxCrv.address],
+            {},
+            true,
+            1,
+        );
+        await newWomDepositor.setLockConfig(1461, 24 * 60 * 60).then(tx => tx.wait(1));
+        await voterProxy.connect(daoSigner).setDepositor(newWomDepositor.address).then(tx => tx.wait(1));
+
+        expect(await voterProxy.depositor()).to.be.eq(newWomDepositor.address);
+        expect(await contracts.cvxCrv.operator()).to.be.eq(womDepositor.address);
+        expect(await womDepositor.minter()).to.be.eq(contracts.cvxCrv.address);
+
+        await womDepositor.connect(daoSigner).updateMinterOperator().then(tx => tx.wait(1));
+
+        expect(await contracts.cvxCrv.operator()).to.be.eq(newWomDepositor.address);
+
+        const amountToDeposit = simpleToExactAmount(10);
+        let cvxCrvBalanceBefore = await cvxCrvRewards.balanceOf(aliceAddress);
+        const stakeAddress = contracts.cvxCrvRewards.address;
+
+        await mocks.crv.connect(alice).approve(womDepositor.address, await mocks.crv.balanceOf(aliceAddress));
+        await expect(womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress)).to.be.revertedWith("!auth");
+
+        await mocks.crv.connect(alice).approve(newWomDepositor.address, await mocks.crv.balanceOf(aliceAddress));
+        await newWomDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
+
+        expect(await cvxCrvRewards.balanceOf(aliceAddress)).eq(cvxCrvBalanceBefore.add(amountToDeposit));
     });
 
     async function getTxTimestamp(tx) {

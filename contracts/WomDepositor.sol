@@ -41,6 +41,7 @@ contract WomDepositor is Ownable {
     }
     mapping(address => SlotInfo[]) public customLockSlots;
 
+    event UpdateOperator(address operator);
     event SetLockConfig(uint256 lockDays, uint256 smartLockPeriod);
     event SetCustomLockDays(address indexed account, uint256 lockDays, uint256 minAmount);
     event Deposit(address indexed account, address stakeAddress, uint256 amount);
@@ -69,6 +70,12 @@ contract WomDepositor is Ownable {
         smartLockPeriod = _smartLockPeriod;
 
         emit SetLockConfig(_lockDays, _smartLockPeriod);
+    }
+
+    function updateMinterOperator() external onlyOwner {
+        address depositor = IStaker(staker).depositor();
+        ITokenMinter(minter).setOperator(depositor);
+        emit UpdateOperator(depositor);
     }
 
     /**

@@ -93,6 +93,7 @@ interface IRewards{
 interface ITokenMinter{
     function mint(address,uint256) external;
     function burn(address,uint256) external;
+    function setOperator(address) external;
 }
 
 interface IStaker{
@@ -105,6 +106,7 @@ interface IStaker{
     function claimCrv(address, uint256) external returns (address[] memory tokens, uint256[] memory balances);
     function balanceOfPool(address, address) external view returns (uint256);
     function operator() external view returns (address);
+    function depositor() external view returns (address);
     function execute(address _to, uint256 _value, bytes calldata _data) external returns (bool, bytes memory);
     function setVote(bytes32 hash, bool valid) external;
 }
