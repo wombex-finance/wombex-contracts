@@ -1,6 +1,21 @@
 import { task } from "hardhat/config";
 import { TaskArguments } from "hardhat/types";
-import {BaseRewardPool4626__factory, WETH__factory} from "../../types/generated";
+import {
+    BaseRewardPool4626__factory,
+    BaseRewardPool__factory,
+    Booster__factory,
+    CvxCrvToken__factory, DepositToken__factory, ExtraRewardsDistributor__factory, PoolDepositor__factory,
+    VoterProxy__factory,
+    WETH__factory, Wmx__factory, WmxClaimZap__factory,
+    WmxLocker__factory,
+    WmxMinter__factory,
+    WmxPenaltyForwarder__factory,
+    WmxRewardPool,
+    WmxRewardPool__factory,
+    WomDepositor__factory,
+    WomStakingProxy__factory
+} from "../../types/generated";
+import {BigNumber as BN} from "@ethersproject/bignumber/lib/bignumber";
 
 const ethers = require('ethers');
 const fs = require('fs');
@@ -60,8 +75,149 @@ task("info:lpRewards")
         await baseRewards.stakingToken(),
         await baseRewards.boosterRewardToken(),
         await baseRewards.operator(),
-        await baseRewards.rewardManager(),
+        // await baseRewards.rewardManager(),
         await baseRewards.asset()
     ];
     fs.writeFileSync('busdRewards.js', 'module.exports = ' + JSON.stringify(data, null, " "));
 });
+
+
+task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbtConfig = JSON.parse(fs.readFileSync('./bnbt.json', {encoding: 'utf8'}));
+
+    const voterProxy = VoterProxy__factory.connect(bnbtConfig.voterProxy, hre.ethers.provider);
+    writeArgs('voterProxy', [
+        bnbtConfig.wom,
+        bnbtConfig.veWom,
+        await voterProxy.weth()
+    ]);
+
+    const cvx = Wmx__factory.connect(bnbtConfig.cvx, hre.ethers.provider);
+    writeArgs('cvx', [
+        await cvx.vProxy(),
+        await cvx.name(),
+        await cvx.symbol()
+    ]);
+
+    const booster = Booster__factory.connect(bnbtConfig.booster, hre.ethers.provider);
+    writeArgs('booster', [
+        bnbtConfig.voterProxy,
+        bnbtConfig.cvx,
+        bnbtConfig.wom,
+        await booster.minMintRatio().then(r => r.toString()),
+        await booster.maxMintRatio().then(r => r.toString())
+    ]);
+
+    const boosterPool = await booster.poolInfo('0');
+    const crvRewards = BaseRewardPool4626__factory.connect(boosterPool.crvRewards, hre.ethers.provider);
+    console.log('crvRewards', crvRewards.address);
+    writeArgs('crvRewards', [
+        await crvRewards.pid().then(r => r.toString()),
+        await crvRewards.stakingToken(),
+        await crvRewards.boosterRewardToken(),
+        await crvRewards.operator(),
+        await crvRewards.asset()
+    ]);
+    const depositToken = DepositToken__factory.connect(boosterPool.token, hre.ethers.provider);
+    console.log('depositToken', depositToken.address);
+    writeArgs('depositToken', [
+        await depositToken.operator(),
+        boosterPool.lptoken,
+        " Wombex Deposit Token",
+        'wmx'
+    ]);
+
+    const minter = WmxMinter__factory.connect(bnbtConfig.minter, hre.ethers.provider);
+    writeArgs('minter', [
+        bnbtConfig.cvx,
+        await minter.owner()
+    ]);
+
+    const cvxCrv = CvxCrvToken__factory.connect(bnbtConfig.cvxCrv, hre.ethers.provider);
+    writeArgs('cvxCrv', [
+        await cvxCrv.name(),
+        await cvxCrv.symbol()
+    ]);
+
+    const cvxCrvRewards = BaseRewardPool__factory.connect(bnbtConfig.cvxCrvRewards, hre.ethers.provider);
+    writeArgs('cvxCrvRewards', [
+        await cvxCrvRewards.pid().then(r => r.toString()),
+        await cvxCrvRewards.stakingToken(),
+        await cvxCrvRewards.boosterRewardToken(),
+        await cvxCrvRewards.operator()
+    ]);
+
+    if (bnbtConfig.initialCvxCrvStaking) {
+        const initialCvxCrvStaking = WmxRewardPool__factory.connect(bnbtConfig.initialCvxCrvStaking, hre.ethers.provider);
+        writeArgs('initialCvxCrvStaking', [
+            await initialCvxCrvStaking.stakingToken(),
+            await initialCvxCrvStaking.rewardToken(),
+            await initialCvxCrvStaking.rewardManager(),
+            await initialCvxCrvStaking.wmxLocker(),
+            await initialCvxCrvStaking.penaltyForwarder(),
+            BN.from(60 * 60 * 24 * 7).toString()
+        ]);
+    }
+
+    const crvDepositor = WomDepositor__factory.connect(bnbtConfig.crvDepositor, hre.ethers.provider);
+    writeArgs('crvDepositor', [
+        await crvDepositor.wom(),
+        await crvDepositor.staker(),
+        await crvDepositor.minter(),
+    ]);
+
+    const cvxLocker = WmxLocker__factory.connect(bnbtConfig.cvxLocker, hre.ethers.provider);
+    writeArgs('cvxLocker', [
+        await cvxLocker.name(),
+        await cvxLocker.symbol(),
+        await cvxLocker.stakingToken(),
+        await cvxLocker.wmxWom(),
+        await cvxLocker.wmxWomStaking(),
+    ]);
+
+    const cvxStakingProxy = WomStakingProxy__factory.connect(bnbtConfig.cvxStakingProxy, hre.ethers.provider);
+    writeArgs('cvxStakingProxy', [
+        await cvxStakingProxy.wom(),
+        await cvxStakingProxy.wmx(),
+        await cvxStakingProxy.wmxWom(),
+        await cvxStakingProxy.womDepositor(),
+        await cvxStakingProxy.rewards(),
+    ]);
+
+    const penaltyForwarder = WmxPenaltyForwarder__factory.connect(bnbtConfig.penaltyForwarder, hre.ethers.provider);
+    writeArgs('penaltyForwarder', [
+        await penaltyForwarder.distributor(),
+        await penaltyForwarder.token(),
+        await penaltyForwarder.distributionDelay().then(r => r.toString()),
+        await penaltyForwarder.owner(),
+    ]);
+
+    const extraRewardsDistributor = ExtraRewardsDistributor__factory.connect(bnbtConfig.extraRewardsDistributor, hre.ethers.provider);
+    writeArgs('extraRewardsDistributor', [
+        await extraRewardsDistributor.wmxLocker(),
+    ]);
+
+    const claimZap = WmxClaimZap__factory.connect(bnbtConfig.claimZap, hre.ethers.provider);
+    writeArgs('claimZap', [
+        await claimZap.wom(),
+        await claimZap.wmx(),
+        await claimZap.womWmx(),
+        await claimZap.womDepositor(),
+        await claimZap.wmxWomRewards(),
+        await claimZap.locker(),
+    ]);
+
+    const poolDepositor = PoolDepositor__factory.connect(bnbtConfig.poolDepositor, hre.ethers.provider);
+    writeArgs('poolDepositor', [
+        await poolDepositor.booster(),
+        await poolDepositor.pool(),
+        await poolDepositor.masterWombat(),
+    ]);
+});
+
+function writeArgs (name, args) {
+    if (!fs.existsSync('./args')) {
+        fs.mkdirSync('args');
+    }
+    fs.writeFileSync('./args/' + name + '.js', 'module.exports = ' + JSON.stringify(args, null, " "));
+}

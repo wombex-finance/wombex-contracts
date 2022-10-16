@@ -56,7 +56,8 @@ describe("Booster", () => {
         ({treasuryMultisig: treasuryAddress} = multisigs);
         const distro = getMockDistro();
 
-        contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
+        contracts = await deploy(hre, deployer, daoSigner, mocks, distro, multisigs, mocks.namingConfig, mocks);
+
         await updateDistributionByTokens(daoSigner, contracts);
 
         ({ cvx, booster, booster, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom } = contracts);
@@ -244,8 +245,8 @@ describe("Booster", () => {
             await tx.wait();
 
             await expect(booster.setMintRatio(8000)).to.be.revertedWith("!auth");
-            await expect(booster.connect(daoSigner).setMintRatio(7999)).to.be.revertedWith("!boundaries");
-            await expect(booster.connect(daoSigner).setMintRatio(12001)).to.be.revertedWith("!boundaries");
+            await expect(booster.connect(daoSigner).setMintRatio(4999)).to.be.revertedWith("!boundaries");
+            await expect(booster.connect(daoSigner).setMintRatio(15001)).to.be.revertedWith("!boundaries");
             const mintRatio = 8000;
             tx = await booster.connect(daoSigner).setMintRatio(mintRatio);
             await tx.wait();
@@ -541,8 +542,10 @@ describe("Booster", () => {
             await increaseTime(60 * 60 * 24 * 6);
         });
         it("has the correct initial config", async () => {
-            const callerFee = await booster.earmarkIncentive();
-            expect(callerFee).eq(50);
+            expect(await booster.earmarkIncentive()).eq(10);
+
+            await booster.connect(daoSigner).setEarmarkIncentive(50);
+            expect(await booster.earmarkIncentive()).eq(50);
 
             const feeManager = await booster.feeManager();
             expect(feeManager).eq(await daoSigner.getAddress());

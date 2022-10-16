@@ -46,7 +46,7 @@ describe("BaseRewardPool4626", () => {
         const multisigs = await getMockMultisigs(accounts[4], accounts[5], accounts[6]);
         const distro = getMockDistro();
 
-        contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
+        contracts = await deploy(hre, deployer, accounts[6], mocks, distro, multisigs, mocks.namingConfig, mocks);
 
         ({ booster } = contracts);
 

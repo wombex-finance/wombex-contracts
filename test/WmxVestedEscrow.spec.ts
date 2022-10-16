@@ -62,7 +62,7 @@ describe("WmxVestedEscrow", () => {
         mocks = await deployTestFirstStage(hre, deployer);
         const multisigs = await getMockMultisigs(accounts[0], accounts[0], accounts[0]);
         const distro = getMockDistro();
-        contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
+        contracts = await deploy(hre, deployer, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
         await updateDistributionByTokens(accounts[0], contracts);
 
         await mocks.crv.transfer(aliceAddress, simpleToExactAmount(1));

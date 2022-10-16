@@ -41,7 +41,7 @@ describe("PoolDepositor", () => {
         ({treasuryMultisig: treasuryAddress} = multisigs);
         const distro = getMockDistro();
 
-        contracts = await deploy(hre, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
+        contracts = await deploy(hre, deployer, daoSigner, mocks, distro, multisigs, mocks.namingConfig, mocks);
 
         ({ cvx, booster, booster, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom, poolDepositor } = contracts);
 
