@@ -336,6 +336,7 @@ async function deploy(
     return {
         ...deployment,
         ...firstStage,
+        initialCvxCrvStaking,
         vestedEscrows,
         drops,
     };
