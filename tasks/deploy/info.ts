@@ -64,6 +64,23 @@ task("info:wombat:save").setAction(async function (taskArguments: TaskArguments,
     fs.writeFileSync('bnbt.json', JSON.stringify(bnbtConfig, null, " "));
 });
 
+task("info:wombat:main:save").setAction(async function (taskArguments: TaskArguments, hre) {
+    const masterWombat = new ethers.Contract('0xE2C07d20AF0Fb50CAE6cDD615CA44AbaAA31F9c8', masterWombatAbi, hre.ethers.provider);
+
+    const bnbtConfig = {
+        masterWombat: masterWombat.address,
+        wom: await masterWombat.wom(),
+        veWom: await masterWombat.veWom(),
+        lpTokens: []
+    };
+    const poolLength = parseInt(await masterWombat.poolLength().then(pl => pl.toString()));
+    for (let i = 0; i < poolLength; i++) {
+        const poolInfo = await masterWombat.poolInfo(i);
+        bnbtConfig.lpTokens.push(poolInfo.lpToken);
+    }
+    fs.writeFileSync('bnb.json', JSON.stringify(bnbtConfig, null, " "));
+});
+
 
 task("info:lpRewards")
     .addParam("address", "The reward's address")
@@ -83,7 +100,8 @@ task("info:lpRewards")
 
 
 task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, hre) {
-    const bnbtConfig = JSON.parse(fs.readFileSync('./bnbt.json', {encoding: 'utf8'}));
+    const {network} = hre.hardhatArguments;
+    const bnbtConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
 
     const voterProxy = VoterProxy__factory.connect(bnbtConfig.voterProxy, hre.ethers.provider);
     writeArgs('voterProxy', [
