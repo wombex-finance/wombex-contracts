@@ -9,8 +9,20 @@ import {
     WETH__factory,
     MasterWombatV2__factory,
     IERC20__factory,
-    Pool__factory
+    Pool__factory,
+    WmxClaimZap,
+    WmxClaimZap__factory,
+    IMasterWombatRewarder__factory,
+    WmxRewardPool,
+    WmxRewardPool__factory, WmxMerkleDrop, WmxMerkleDrop__factory
 } from "../../types/generated";
+import {
+    createTreeWithAccounts,
+    getAccountBalanceProof, ONE_DAY,
+    ONE_WEEK,
+    simpleToExactAmount,
+    ZERO_ADDRESS
+} from "../../test-utils";
 
 const fs = require('fs');
 const ethers = require('ethers');
@@ -93,4 +105,120 @@ task("deploy:bnb").setAction(async function (taskArguments: TaskArguments, hre) 
         }
     });
     fs.writeFileSync('./bnb.json', JSON.stringify(bnbtConfig), {encoding: 'utf8'});
+});
+
+task("bnb:all-distro-tokens").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+    const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const masterWombat = MasterWombatV2__factory.connect(bnbtConfig.masterWombat, deployer);
+
+    const wbnb = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+    console.log('wom', bnbtConfig.wom, {cvxCrvRewards: bnbtConfig.cvxCrvRewards, cvxStakingProxy: bnbtConfig.cvxStakingProxy});
+
+    let bonusRewardTokens = [];
+    const poolLength = await masterWombat.poolLength().then(l => parseInt(l.toString()));
+    for (let i = 0; i < poolLength; i++) {
+        const {rewarder} = await masterWombat.poolInfo(i);
+        if (rewarder !== ZERO_ADDRESS) {
+            const rewarderContract = await IMasterWombatRewarder__factory.connect(rewarder, deployer);
+            bonusRewardTokens = bonusRewardTokens.concat(await rewarderContract.rewardTokens())
+        }
+    }
+    let printed = {};
+    bonusRewardTokens.forEach(rt => {
+        if (rt === ZERO_ADDRESS) {
+            rt = wbnb;
+        }
+        if (printed[rt.toLowerCase()]) {
+            return;
+        }
+        console.log('bonus token', rt, {cvxCrvRewards: bnbtConfig.cvxCrvRewards, cvxLocker: bnbtConfig.cvxLocker});
+
+        printed[rt.toLowerCase()] = true;
+    })
+});
+
+task("deploy-bootstrap:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+        bnbConfig.cvxCrv,
+        bnbConfig.cvx,
+        treasuryMultisig,
+        bnbConfig.cvxLocker,
+        bnbConfig.penaltyForwarder,
+        1800
+    ];
+    fs.writeFileSync('./args/bootstrap.js', 'module.exports = ' + JSON.stringify(args));
+
+    const bootstrap = await deployContract<WmxRewardPool>(
+        hre,
+        new WmxRewardPool__factory(deployer),
+        "WmxRewardPool",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bootstrap', bootstrap.address);
+});
+
+task("deploy-airdrop:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const treeList = JSON.parse(fs.readFileSync('./tasks/data/airdrop.js', {encoding: 'utf8'}));
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const treeObj = {};
+    treeList.forEach(i => {
+        treeObj[i.holder_address.toLowerCase()] = simpleToExactAmount(i.wmx_amount).toString();
+    });
+
+    fs.writeFileSync('./args/airdropObj.json', JSON.stringify(treeObj));
+
+    const tree = createTreeWithAccounts(treeObj);
+
+    const treeProof = {};
+    treeList.forEach(i => {
+        treeProof[i.holder_address.toLowerCase()] = getAccountBalanceProof(tree, i.holder_address, simpleToExactAmount(i.wmx_amount)).toString();
+    });
+    fs.writeFileSync('./args/airdropProof.json', JSON.stringify(treeProof));
+
+    const args = [
+        treasuryMultisig,
+        tree.getHexRoot(),
+        bnbConfig.cvx,
+        bnbConfig.cvxLocker,
+        1800,
+        ONE_DAY.mul(15),
+    ];
+    fs.writeFileSync('./args/airdrop.js', 'module.exports = ' + JSON.stringify(args));
+
+    const airdrop = await deployContract<WmxMerkleDrop>(
+        hre,
+        new WmxMerkleDrop__factory(deployer),
+        "WmxMerkleDrop",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('airdrop', airdrop.address);
 });

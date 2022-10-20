@@ -21,8 +21,9 @@ import {
     WETH__factory,
     MasterWombatV2__factory,
     IERC20__factory,
-    Pool__factory
+    Pool__factory, WmxMerkleDrop, WmxMerkleDrop__factory, WmxRewardPool, WmxRewardPool__factory
 } from "../../types/generated";
+import {createTreeWithAccounts, getAccountBalanceProof, ONE_WEEK} from "../../test-utils";
 
 const fs = require('fs');
 const ethers = require('ethers');
@@ -134,4 +135,78 @@ task("bnbt:claimzap").setAction(async function (taskArguments: TaskArguments, hr
     console.log('claimZap', claimZap.address);
     bnbtConfig['claimZap'] = claimZap.address;
     fs.writeFileSync('./bnbt.json', JSON.stringify(bnbtConfig), {encoding: 'utf8'});
+});
+
+task("deploy-bootstrap:bnbt").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+    const deployerAddress = await deployer.getAddress();
+    const treasuryMultisig = deployerAddress;
+    const bnbtConfig = JSON.parse(fs.readFileSync('./bnbt.json', {encoding: 'utf8'}));
+
+    const args = [
+        bnbtConfig.cvxCrv,
+        bnbtConfig.cvx,
+        treasuryMultisig,
+        bnbtConfig.cvxLocker,
+        bnbtConfig.penaltyForwarder,
+        '0'
+    ];
+    fs.writeFileSync('./args/bootstrap.js', 'module.exports = ' + JSON.stringify(args));
+
+    const bootstrap = await deployContract<WmxRewardPool>(
+        hre,
+        new WmxRewardPool__factory(deployer),
+        "WmxRewardPool",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bootstrap', bootstrap.address);
+});
+task("deploy-airdrop:bnbt").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+    const deployerAddress = await deployer.getAddress();
+    const bnbtConfig = JSON.parse(fs.readFileSync('./bnbt.json', {encoding: 'utf8'}));
+    const treeList = JSON.parse(fs.readFileSync('./tasks/data/airdrop.js', {encoding: 'utf8'}));
+
+    treeList.push({holder_address: deployerAddress.toLowerCase(), wmx_amount: treeList[0].wmx_amount});
+    treeList.push({holder_address: '0x3f238FBB7C9e79c31a1c15ecdC2a49d14cdD09D3'.toLowerCase(), wmx_amount: treeList[0].wmx_amount});
+
+    const treasuryMultisig = deployerAddress;
+    const treeObj = {};
+    treeList.forEach(i => {
+        treeObj[i.holder_address.toLowerCase()] = simpleToExactAmount(i.wmx_amount).toString();
+    });
+
+    fs.writeFileSync('./args/airdropObj.json', JSON.stringify(treeObj));
+
+    const tree = createTreeWithAccounts(treeObj);
+
+    const treeProof = {};
+    treeList.forEach(i => {
+        treeProof[i.holder_address.toLowerCase()] = getAccountBalanceProof(tree, i.holder_address, simpleToExactAmount(i.wmx_amount)).toString();
+    });
+    fs.writeFileSync('./args/airdropProof.json', JSON.stringify(treeProof));
+
+    const args = [
+        treasuryMultisig,
+        tree.getHexRoot(),
+        bnbtConfig.cvx,
+        bnbtConfig.cvxLocker,
+        0,
+        ONE_WEEK.mul(16),
+    ];
+    fs.writeFileSync('./args/airdrop.js', 'module.exports = ' + JSON.stringify(args));
+
+    const airdrop = await deployContract<WmxMerkleDrop>(
+        hre,
+        new WmxMerkleDrop__factory(deployer),
+        "WmxMerkleDrop",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('airdrop', airdrop.address);
 });
