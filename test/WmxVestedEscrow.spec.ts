@@ -130,7 +130,7 @@ describe("WmxVestedEscrow", () => {
     });
     it("fails to fund again", async () => {
         expect(await vestedEscrow.initialised()).eq(true);
-        await expect(vestedEscrow.fund([], [])).to.be.revertedWith("initialised already");
+        await expect(vestedEscrow.connect(fundAdmin).fund([], [])).to.be.revertedWith("initialised already");
     });
 
     // fast forward 6 months, available balances should be visible
@@ -279,11 +279,17 @@ describe("WmxVestedEscrow", () => {
             );
         });
 
+        it("fails to fund if it is not the funder", async () => {
+            await expect(vestedEscrowLockOnly.fund([], [])).to.be.revertedWith("!funder");
+            await expect(vestedEscrowLockOnly.connect(alice).fund([], [])).to.be.revertedWith("!funder");
+        });
+
         // Funds Alice = 200 and Bob = 100
         it("funds an array of recipients", async () => {
             const balBefore = await wmx.balanceOf(vestedEscrowLockOnly.address);
-            await wmx.approve(vestedEscrowLockOnly.address, simpleToExactAmount(300));
-            await vestedEscrowLockOnly.fund([aliceAddress, bobAddress], [simpleToExactAmount(200), simpleToExactAmount(100)]);
+            await wmx.transfer(fundAdminAddress, simpleToExactAmount(300));
+            await wmx.connect(fundAdmin).approve(vestedEscrowLockOnly.address, simpleToExactAmount(300));
+            await vestedEscrowLockOnly.connect(fundAdmin).fund([aliceAddress, bobAddress], [simpleToExactAmount(200), simpleToExactAmount(100)]);
 
             const balAfter = await wmx.balanceOf(vestedEscrowLockOnly.address);
             expect(balAfter).eq(balBefore.add(simpleToExactAmount(300)));
@@ -297,7 +303,7 @@ describe("WmxVestedEscrow", () => {
         });
         it("fails to fund again", async () => {
             expect(await vestedEscrowLockOnly.initialised()).eq(true);
-            await expect(vestedEscrowLockOnly.fund([], [])).to.be.revertedWith("initialised already");
+            await expect(vestedEscrowLockOnly.connect(fundAdmin).fund([], [])).to.be.revertedWith("initialised already");
         });
 
         // fast forward 6 months, available balances should be visible
