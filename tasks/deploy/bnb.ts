@@ -14,7 +14,11 @@ import {
     WmxClaimZap__factory,
     IMasterWombatRewarder__factory,
     WmxRewardPool,
-    WmxRewardPool__factory, WmxMerkleDrop, WmxMerkleDrop__factory
+    WmxRewardPool__factory,
+    WmxMerkleDrop,
+    WmxMerkleDrop__factory,
+    WmxVestedEscrowLockOnly,
+    WmxVestedEscrowLockOnly__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -222,3 +226,37 @@ task("deploy-airdrop:bnb").setAction(async function (taskArguments: TaskArgument
     );
     console.log('airdrop', airdrop.address);
 });
+
+task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+        bnbtConfig.cvx,
+        treasuryMultisig,
+        bnbtConfig.cvxLocker,
+        '1666302008',
+        '1729374008'
+    ];
+    fs.writeFileSync('./args/escrow.js', 'module.exports = ' + JSON.stringify(args));
+
+    const escrow = await deployContract<WmxVestedEscrowLockOnly>(
+        hre,
+        new WmxVestedEscrowLockOnly__factory(deployer),
+        "WmxVestedEscrowLockOnly",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('escrow', escrow.address);
+});
+
