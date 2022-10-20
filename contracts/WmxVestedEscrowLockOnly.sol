@@ -99,7 +99,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
     function fund(address[] calldata _recipient, uint256[] calldata _amount) external nonReentrant {
         require(_recipient.length == _amount.length, "!arr");
         require(!initialised, "initialised already");
-        require(msg.sender == funder, "!funder");
+        require(msg.sender == admin, "!admin");
         require(block.timestamp < startTime, "already started");
 
         uint256 totalAmount = 0;
