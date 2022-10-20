@@ -1,6 +1,7 @@
 import { task } from "hardhat/config";
 import { TaskArguments } from "hardhat/types";
 import {
+    Asset__factory,
     BaseRewardPool4626__factory,
     BaseRewardPool__factory,
     Booster__factory,
@@ -239,3 +240,23 @@ function writeArgs (name, args) {
     }
     fs.writeFileSync('./args/' + name + '.js', 'module.exports = ' + JSON.stringify(args, null, " "));
 }
+
+
+task("info:setEqualPrices").setAction(async function (taskArguments: TaskArguments, hre) {
+    const {network} = hre.hardhatArguments;
+    const bnbtConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
+
+    bnbtConfig.equalPrices = {};
+
+    bnbtConfig.equalPrices[bnbtConfig.cvxCrv.toLowerCase()] = bnbtConfig.wom;
+
+    const booster = Booster__factory.connect(bnbtConfig.booster, hre.ethers.provider);
+    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    for(let i = 0; i < poolLength; i++) {
+        const pool = await booster.poolInfo(i);
+        bnbtConfig.equalPrices[pool.token.toLowerCase()] = pool.lptoken;
+    }
+
+
+    fs.writeFileSync('./' + network + '.json', JSON.stringify(bnbtConfig, null, " "), {encoding: 'utf8'})
+});
