@@ -60,7 +60,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
 
         rewardToken = IERC20(rewardToken_);
         admin = admin_;
-        funder = msg.sender;
+        funder = admin_;
         wmxLocker = IWmxLocker(wmxLocker_);
 
         startTime = starttime_;
