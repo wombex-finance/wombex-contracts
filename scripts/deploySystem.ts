@@ -419,7 +419,7 @@ async function deployFirstStage(
         hre,
         new PoolDepositor__factory(deployer),
         "PoolDepositor",
-        [booster.address, pool.address, masterWombat.address],
+        [deployment.weth.address, booster.address, masterWombat.address],
         {},
         debug,
         waitForBlocks,

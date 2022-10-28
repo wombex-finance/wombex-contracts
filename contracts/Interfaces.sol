@@ -7,6 +7,11 @@ interface IWomDepositor {
     function deposit(uint256 _amount, address _stakeAddress) external returns (bool);
 }
 
+interface IWETH {
+    function deposit() external payable;
+    function withdraw(uint wad) external;
+}
+
 interface IAsset is IERC20 {
     function underlyingToken() external view returns (address);
 
@@ -135,6 +140,7 @@ interface IMasterWombatV2 {
 }
 
 interface IBooster {
+    function poolLength() external view returns (uint256);
     function poolInfo(uint256 _pid) external view returns(address lptoken, address token, address gauge, address crvRewards, bool shutdown);
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
 }

@@ -226,12 +226,12 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         await claimZap.locker(),
     ]);
 
-    const poolDepositor = PoolDepositor__factory.connect(bnbtConfig.poolDepositor, hre.ethers.provider);
-    writeArgs('poolDepositor', [
-        await poolDepositor.booster(),
-        await poolDepositor.pool(),
-        await poolDepositor.masterWombat(),
-    ]);
+    // const poolDepositor = PoolDepositor__factory.connect(bnbtConfig.poolDepositor, hre.ethers.provider);
+    // writeArgs('poolDepositor', [
+    //     await poolDepositor.booster(),
+    //     await poolDepositor.pool(),
+    //     await poolDepositor.masterWombat(),
+    // ]);
 });
 
 function writeArgs (name, args) {

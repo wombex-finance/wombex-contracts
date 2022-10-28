@@ -3,14 +3,17 @@ import { expect } from "chai";
 import { deploy, SystemDeployed } from "../scripts/deploySystem";
 import { getMockDistro, getMockMultisigs, deployTestFirstStage } from "../scripts/deployMocks";
 import {
+    Asset, Asset__factory,
     BaseRewardPool4626__factory,
     BaseRewardPool__factory,
-    Booster, MockERC20, MockERC20__factory,
+    Booster, MockERC20, MockERC20__factory, Pool, Pool__factory,
     PoolDepositor,
 } from "../types/generated";
-import { Signer} from "ethers";
+import { Signer, BigNumber} from "ethers";
+import {deployContract, waitForTx} from "../tasks/utils";
+import {ZERO_ADDRESS} from "../test-utils";
 
-type Pool = {
+type PoolInfo = {
     lptoken: string;
     token: string;
     gauge: string;
@@ -23,7 +26,7 @@ describe("PoolDepositor", () => {
     let booster: Booster, poolDepositor: PoolDepositor;
     let cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy;
     let mocks: any;
-    let poolInfo: Pool;
+    let poolInfo: PoolInfo;
     let contracts: SystemDeployed;
     let daoSigner: Signer;
 
@@ -69,6 +72,9 @@ describe("PoolDepositor", () => {
         deployerAddress = await deployer.getAddress();
         daoSigner = accounts[6];
         await setup();
+
+        await poolDepositor.approveSpendingByPool([underlying.address, mocks.weth.address, mocks.lptoken.address], mocks.pool.address);
+        await poolDepositor.approveSpendingByPool([mocks.lptoken.address], booster.address);
     });
 
     describe("deposit", async () => {
@@ -113,11 +119,80 @@ describe("PoolDepositor", () => {
             let tx = await crvRewards.connect(alice).approve(poolDepositor.address, amount);
             await tx.wait();
 
-            tx = await poolDepositor.connect(alice).withdraw(mocks.lptoken.address, amount, 0);
+            tx = await poolDepositor.connect(alice).withdraw(mocks.lptoken.address, amount, 0, aliceAddress);
             await tx.wait();
 
             expect(await crvRewards.balanceOf(aliceAddress)).to.equal(stakedBalanceBefore.sub(amount));
             expect(await underlying.balanceOf(aliceAddress)).to.equal(underlyingBalanceBefore.add(amount));
+        });
+    });
+
+    describe("asset with native tokens", async () => {
+        let nativeLptoken, nativeCrvRewards;
+        before(async () => {
+            const pool = await deployContract<Pool>(
+                hre,
+                new Pool__factory(deployer),
+                "Pool",
+                ['2000000000000000', '400000000000000'],
+                {},
+                true,
+                1,
+            );
+
+            nativeLptoken = await deployContract<Asset>(
+                hre,
+                new Asset__factory(deployer),
+                "Asset",
+                [mocks.weth.address, 'MockLP', 'MockLP', pool.address],
+                {},
+                true,
+                1,
+            );
+            await pool.addAsset(mocks.weth.address, nativeLptoken.address);
+
+            let tx = await mocks.masterWombat.add('1', nativeLptoken.address, ZERO_ADDRESS);
+            await waitForTx(tx, true, 1);
+
+            const poolLen = await booster.poolLength();
+            tx = await booster.connect(daoSigner).addPool(nativeLptoken.address, mocks.masterWombat.address);
+            await waitForTx(tx, true, 1);
+            const nativePoolInfo = await booster.poolInfo(poolLen);
+            nativeCrvRewards = BaseRewardPool4626__factory.connect(nativePoolInfo.crvRewards, alice);
+
+            await contracts.voterProxy.connect(daoSigner).setLpTokensPid(mocks.masterWombat.address);
+
+            await poolDepositor.approveSpendingByPool([mocks.weth.address, nativeLptoken.address], pool.address);
+            await poolDepositor.approveSpendingByPool([nativeLptoken.address], booster.address);
+            await poolDepositor.setBoosterLpTokensPid();
+        });
+
+        it("@method PoolDepositor.depositNative with stake", async () => {
+            let stakedBalanceBefore = await nativeCrvRewards.balanceOf(aliceAddress);
+
+            const stake = true;
+            const amount = ethers.utils.parseEther("1000");
+            let tx = await mocks.weth.connect(alice).approve(poolDepositor.address, amount);
+            await tx.wait();
+
+            tx = await poolDepositor.connect(alice).depositNative(nativeLptoken.address, 0, stake, {
+                value: amount
+            });
+            await tx.wait();
+
+            expect(await nativeCrvRewards.balanceOf(aliceAddress)).to.equal(stakedBalanceBefore.add(amount));
+
+            stakedBalanceBefore = await nativeCrvRewards.balanceOf(aliceAddress);
+
+            tx = await nativeCrvRewards.connect(alice).approve(poolDepositor.address, amount);
+            await tx.wait();
+
+            const underlyingBalanceBefore = await alice.getBalance();
+            tx = await poolDepositor.connect(alice).withdrawNative(nativeLptoken.address, amount, 0, aliceAddress);
+            tx = await tx.wait();
+
+            expect(await nativeCrvRewards.balanceOf(aliceAddress)).to.equal(stakedBalanceBefore.sub(amount));
+            expect(await alice.getBalance()).to.equal(underlyingBalanceBefore.add(amount).sub(tx.cumulativeGasUsed.mul(tx.effectiveGasPrice)));
         });
     });
 });
