@@ -1,6 +1,6 @@
 import hre, { ethers } from "hardhat";
 import { expect } from "chai";
-import { deploy, updateDistributionByTokens, SystemDeployed } from "../scripts/deploySystem";
+import { deploy, SystemDeployed } from "../scripts/deploySystem";
 import { getMockDistro, getMockMultisigs, deployTestFirstStage } from "../scripts/deployMocks";
 import {
     Booster,
@@ -16,7 +16,7 @@ import {
     MockERC20__factory,
     MockBoosterMigrator, MockBoosterMigrator__factory, MockNewBooster__factory, DepositToken__factory,
 } from "../types/generated";
-import { Signer} from "ethers";
+import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
 import {simpleToExactAmount} from "../test-utils/math";
 import {impersonateAccount, ZERO_ADDRESS} from "../test-utils";
@@ -30,7 +30,7 @@ type Pool = {
     shutdown: boolean;
 };
 
-describe("Booster", () => {
+describe.only("Booster", () => {
     let accounts: Signer[];
     let booster: Booster;
     let cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy;
@@ -58,8 +58,6 @@ describe("Booster", () => {
 
         contracts = await deploy(hre, deployer, daoSigner, mocks, distro, multisigs, mocks.namingConfig, mocks);
 
-        await updateDistributionByTokens(daoSigner, contracts);
-
         ({ cvx, booster, booster, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom } = contracts);
 
         pool = await booster.poolInfo(0);
@@ -86,6 +84,28 @@ describe("Booster", () => {
         const logs = tx.events.filter(e => e.address.toLowerCase() === _booster.address.toLowerCase());
         expect(logs.length).eq(logsLength);
         return booster.interface.decodeEventLog('RewardClaimed', logs[0].data, logs[0].topics);
+    }
+
+    function getMasterWombatReward(tx, toAddress) {
+        const logs = tx.events.filter(e => e.address.toLowerCase() === mocks.crv.address.toLowerCase());
+        return logs
+            .map(l => {
+                try { return mocks.crv.interface.decodeEventLog('Transfer', l.data, l.topics); } catch (e) {}
+            })
+            .filter(e => e && e.to.toLowerCase() === toAddress.toLowerCase())[0];
+    }
+
+    function getCrvEarmarkReward(tx, booster) {
+        const logs = tx.events.filter(e => e.address.toLowerCase() === booster.address.toLowerCase());
+        return logs
+            .map(l => {
+                try { return booster.interface.decodeEventLog('EarmarkRewards', l.data, l.topics); } catch (e) {}
+            })
+            .filter(e => e && e.rewardToken.toLowerCase() === mocks.crv.address.toLowerCase())[0];
+    }
+
+    function equalWithSmallDiff(a, b) {
+        a.gt(b) ? expect(a.sub(b)).lte(3) : expect(b.sub(a)).lte(3);
     }
 
     before(async () => {
@@ -616,7 +636,7 @@ describe("Booster", () => {
                 // collect the rewards
                 const tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
 
-                const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.token.toLowerCase() === token.address.toLowerCase())[0].args;
+                const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === token.address.toLowerCase())[0].args;
 
                 // bals after
                 const balsAfter = await Promise.all([
@@ -850,6 +870,7 @@ describe("Booster", () => {
     });
 
     describe("migration to new booster", () => {
+        let newBoosterContract;
         it("should migrate active pools successfully", async () => {
             const lptoken = await deployContract<MockERC20>(
                 hre,
@@ -916,7 +937,7 @@ describe("Booster", () => {
             expect(await contracts.voterProxy.owner()).to.equal(await daoSigner.getAddress());
 
             const {newBooster, poolLength} = migrateTx.events.filter(e => e.event === 'Migrated')[0].args;
-            const newBoosterContract = MockNewBooster__factory.connect(newBooster, bob);
+            newBoosterContract = MockNewBooster__factory.connect(newBooster, bob);
 
             expect(await newBoosterContract.owner()).to.equal(await daoSigner.getAddress());
             expect(await newBoosterContract.poolLength()).to.equal(poolLength);
@@ -985,6 +1006,110 @@ describe("Booster", () => {
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
             expect(boosterReward.lock).eq(false);
+        });
+
+        it("pendingRewards after migration should work properly", async () => {
+            const amount = ethers.utils.parseEther("1000");
+
+            let feesSub = BigNumber.from(10000);
+            feesSub = feesSub.sub(await newBoosterContract.distributionByTokens(mocks.crv.address, 0).then(d => d.share));
+            feesSub = feesSub.sub(await newBoosterContract.distributionByTokens(mocks.crv.address, 1).then(d => d.share));
+            feesSub = feesSub.sub(await newBoosterContract.earmarkIncentive());
+
+            await increaseTime(60 * 60 * 24);
+
+            const lpToken0 = await ERC20__factory.connect(await newBoosterContract.poolInfo('0').then(p => p.lptoken), deployer);
+            await lpToken0.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
+            const crvRewards0 = await BaseRewardPool__factory.connect(await newBoosterContract.poolInfo(0).then(p => p.crvRewards), deployer);
+            await lpToken0.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
+
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(0);
+            let tx = await newBoosterContract.connect(bob).deposit(0, amount, true).then(tx => tx.wait());
+            const reward1 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(reward1.value);
+            expect(reward1.value).gt(0);
+
+            await increaseTime(60 * 60 * 24);
+
+            tx = await newBoosterContract.connect(bob).deposit(0, amount, true).then(tx => tx.wait());
+            const reward2 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(reward1.value.add(reward2.value));
+            expect(reward1.value.add(reward2.value)).gt(reward1.value);
+
+            await increaseTime(60 * 60 * 24);
+
+            const lpToken1 = await ERC20__factory.connect(await newBoosterContract.poolInfo(1).then(p => p.lptoken), deployer);
+            const crvRewards1 = await BaseRewardPool__factory.connect(await newBoosterContract.poolInfo(1).then(p => p.crvRewards), deployer);
+            await lpToken1.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
+
+            expect(await newBoosterContract.pendingRewards(lpToken1.address)).eq(0);
+            tx = await newBoosterContract.connect(bob).deposit(1, amount, true).then(tx => tx.wait());
+            const reward3 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            expect(await newBoosterContract.pendingRewards(lpToken1.address)).eq(reward3.value);
+            expect(reward3.value).gt(0);
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(reward1.value.add(reward2.value));
+
+            await increaseTime(60 * 60 * 24);
+
+            const lpToken2 = await ERC20__factory.connect(await newBoosterContract.poolInfo(2).then(p => p.lptoken), deployer);
+            const crvRewards2 = await BaseRewardPool__factory.connect(await newBoosterContract.poolInfo(2).then(p => p.crvRewards), deployer);
+            await lpToken2.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
+
+            expect(await newBoosterContract.pendingRewards(lpToken2.address)).eq(0);
+            let {historicalRewards, queuedRewards} = await crvRewards2.tokenRewards(mocks.crv.address);
+            let crvRewardsBefore = historicalRewards.add(queuedRewards);
+            tx = await newBoosterContract.connect(bob).earmarkRewards(2).then(tx => tx.wait());
+            const reward4 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            const reward4Distributed = getMasterWombatReward(tx, crvRewards2.address);
+
+            let resultRewards = reward4.value.mul(feesSub).div(10000);
+            equalWithSmallDiff(resultRewards, reward4Distributed.value);
+            equalWithSmallDiff(resultRewards.add(crvRewardsBefore), await crvRewards2.tokenRewards(mocks.crv.address).then(r => r.historicalRewards.add(r.queuedRewards)));
+            expect(await newBoosterContract.pendingRewards(lpToken2.address)).eq(0);
+            expect(await newBoosterContract.pendingRewards(lpToken1.address)).eq(reward3.value);
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(reward1.value.add(reward2.value));
+
+            tx = await newBoosterContract.connect(bob).deposit(2, amount, true).then(tx => tx.wait());
+            const reward5 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            expect(await newBoosterContract.pendingRewards(lpToken2.address)).eq(reward5.value);
+            expect(reward5.value).gt(0);
+
+            ({historicalRewards, queuedRewards} = await crvRewards1.tokenRewards(mocks.crv.address));
+            crvRewardsBefore = historicalRewards.add(queuedRewards);
+
+            const pendingRewards6 = await newBoosterContract.pendingRewards(lpToken1.address);
+            tx = await newBoosterContract.connect(bob).earmarkRewards(1).then(tx => tx.wait());
+            const reward6 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            const reward6Distributed = getMasterWombatReward(tx, crvRewards1.address);
+            resultRewards = reward6.value.add(pendingRewards6).mul(feesSub).div(10000);
+            equalWithSmallDiff(resultRewards, reward6Distributed.value);
+            equalWithSmallDiff(resultRewards.add(crvRewardsBefore), await crvRewards1.tokenRewards(mocks.crv.address).then(r => r.historicalRewards.add(r.queuedRewards)));
+            expect(await newBoosterContract.pendingRewards(lpToken2.address)).eq(reward5.value);
+            expect(await newBoosterContract.pendingRewards(lpToken1.address)).eq(0);
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(reward1.value.add(reward2.value));
+
+            await increaseTime(60 * 60 * 24);
+
+            let crvBalanceBefore = await mocks.crv.balanceOf(bobAddress);
+            tx = await crvRewards2.connect(bob).withdrawAndUnwrap(2, true).then(tx => tx.wait());
+            expect(await mocks.crv.balanceOf(bobAddress)).gt(crvBalanceBefore);
+            const reward7 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            expect(await newBoosterContract.pendingRewards(lpToken2.address)).eq(reward5.value.add(reward7.value));
+            expect(reward5.value.add(reward7.value)).gt(0);
+
+            ({historicalRewards, queuedRewards} = await crvRewards2.tokenRewards(mocks.crv.address));
+            crvRewardsBefore = historicalRewards.add(queuedRewards);
+
+            const pendingRewards8 = await newBoosterContract.pendingRewards(lpToken2.address);
+            tx = await newBoosterContract.connect(bob).earmarkRewards(2).then(tx => tx.wait());
+            const reward8 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            const reward8Distributed = getMasterWombatReward(tx, crvRewards2.address);
+            resultRewards = reward8.value.add(pendingRewards8).mul(feesSub).div(10000);
+            equalWithSmallDiff(resultRewards, reward8Distributed.value);
+            equalWithSmallDiff(resultRewards.add(crvRewardsBefore), await crvRewards2.tokenRewards(mocks.crv.address).then(r => r.historicalRewards.add(r.queuedRewards)));
+            expect(await newBoosterContract.pendingRewards(lpToken2.address)).eq(0);
+            expect(await newBoosterContract.pendingRewards(lpToken1.address)).eq(0);
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(reward1.value.add(reward2.value));
         });
     });
 });
