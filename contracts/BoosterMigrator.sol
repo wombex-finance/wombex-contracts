@@ -11,11 +11,11 @@ contract BoosterMigrator is Ownable {
     event CallContract(address indexed contractAddress, bytes callData, bool success, bytes returnData);
 
     Booster public oldBooster;
-    address public newOwner;
+    address public boosterOwner;
 
-    constructor(Booster _oldBooster, address _newOwner) public {
+    constructor(Booster _oldBooster) public {
         oldBooster = _oldBooster;
-        newOwner = _newOwner;
+        boosterOwner = _oldBooster.owner();
     }
 
     function migrate() external onlyOwner {
@@ -77,16 +77,16 @@ contract BoosterMigrator is Ownable {
 
         require(IMinter(oldBooster.cvx()).operator() == address(newBooster), "!operator");
 
-        oldBooster.setOwner(newOwner);
-        voterProxy.setOwner(newOwner);
+        oldBooster.setOwner(boosterOwner);
+        voterProxy.setOwner(boosterOwner);
 
-        newBooster.setOwner(newOwner);
+        newBooster.setOwner(boosterOwner);
 
         emit Migrated(address(newBooster), newBooster.poolLength());
     }
 
     function callContract(address _contract, bytes calldata _data) external {
-        require(msg.sender == newOwner, "!auth");
+        require(msg.sender == boosterOwner, "!auth");
         (bool success, bytes memory returndata) = _contract.call(_data);
 
         emit CallContract(_contract, _data, success, _data);

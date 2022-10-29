@@ -926,7 +926,7 @@ describe.only("Booster", () => {
             );
 
             expect(await boosterMigrator.oldBooster()).to.equal(booster.address);
-            expect(await boosterMigrator.newOwner()).to.equal(await daoSigner.getAddress());
+            expect(await boosterMigrator.boosterOwner()).to.equal(await daoSigner.getAddress());
 
             await booster.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
             await contracts.voterProxy.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
