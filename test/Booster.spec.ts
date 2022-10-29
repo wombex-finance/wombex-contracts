@@ -14,7 +14,7 @@ import {
     MultiRewarderPerSec__factory,
     MockERC20,
     MockERC20__factory,
-    MockBoosterMigrator, MockBoosterMigrator__factory, MockNewBooster__factory, DepositToken__factory,
+    BoosterMigrator, BoosterMigrator__factory, MockNewBooster__factory, DepositToken__factory, Booster__factory,
 } from "../types/generated";
 import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
@@ -33,7 +33,7 @@ type Pool = {
 describe.only("Booster", () => {
     let accounts: Signer[];
     let booster: Booster;
-    let cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy;
+    let cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, underlying;
     let mocks: any;
     let pool: Pool;
     let contracts: SystemDeployed;
@@ -360,7 +360,7 @@ describe.only("Booster", () => {
     });
 
     describe("performing core functions with deflationary token", async () => {
-        let underlying, lptoken, defPool, multiRewarder, pid;
+        let lptoken, defPool, multiRewarder, pid;
         before(async () => {
             pid = await booster.poolLength();
 
@@ -425,6 +425,9 @@ describe.only("Booster", () => {
             await waitForTx(tx, true, 1);
 
             tx = await cvxLocker.connect(daoSigner).addReward(underlying.address, booster.address);
+            await waitForTx(tx, true, 1);
+
+            tx = await cvxLocker.connect(daoSigner).addReward(mocks.crv.address, booster.address);
             await waitForTx(tx, true, 1);
 
             defPool = await booster.poolInfo(pid);
@@ -578,8 +581,9 @@ describe.only("Booster", () => {
             let tx = await booster.connect(daoSigner).setEarmarkIncentive(25);
             await expect(tx).to.emit(booster, "SetEarmarkIncentive").withArgs(25);
 
-            tx = await booster.connect(daoSigner).updateDistributionByTokens(pool.lptoken, [], [], []);
-            await expect(tx).to.emit(booster, "DistributionUpdate").withArgs(pool.lptoken, 0, 0, 0, 0);
+            await expect(booster.connect(daoSigner).updateDistributionByTokens(pool.lptoken, [], [], [])).to.be.revertedWith("zero");
+            tx = await booster.connect(daoSigner).updateDistributionByTokens(pool.lptoken, [pool.lptoken], [1], [true]);
+            await expect(tx).to.emit(booster, "DistributionUpdate").withArgs(pool.lptoken, 1, 1, 1, 1);
         });
         it("enforces 1% upper bound", async () => {
             console.log('setEarmarkIncentive');
@@ -912,14 +916,17 @@ describe.only("Booster", () => {
             tx = await booster.connect(bob).deposit(poolLen, amount, true);
             await tx.wait();
 
-            const boosterMigrator = await deployContract<MockBoosterMigrator>(
+            const boosterMigrator = await deployContract<BoosterMigrator>(
                 hre,
-                new MockBoosterMigrator__factory(deployer),
-                "MockBoosterMigrator",
-                [],
+                new BoosterMigrator__factory(deployer),
+                "BoosterMigrator",
+                [booster.address, await daoSigner.getAddress()],
                 {},
                 true,
             );
+
+            expect(await boosterMigrator.oldBooster()).to.equal(booster.address);
+            expect(await boosterMigrator.newOwner()).to.equal(await daoSigner.getAddress());
 
             await booster.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
             await contracts.voterProxy.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
@@ -927,7 +934,8 @@ describe.only("Booster", () => {
             expect(await booster.owner()).to.equal(boosterMigrator.address);
             expect(await contracts.voterProxy.owner()).to.equal(boosterMigrator.address);
 
-            let migrateTx = await boosterMigrator.migrate(booster.address, await daoSigner.getAddress()).then(tx => tx.wait(1));
+            let migrateTx = await boosterMigrator.migrate().then(tx => tx.wait(1));
+            console.log('migrateTx.cumulativeGasUsed', migrateTx.cumulativeGasUsed);
 
             await expect(booster.connect(daoSigner).migrateRewards([pool.crvRewards], [], ZERO_ADDRESS)).to.revertedWith("!length");
             await expect(booster.connect(daoSigner).addPool(lptoken.address, mocks.masterWombat.address)).to.revertedWith("!add");
@@ -937,12 +945,16 @@ describe.only("Booster", () => {
             expect(await contracts.voterProxy.owner()).to.equal(await daoSigner.getAddress());
 
             const {newBooster, poolLength} = migrateTx.events.filter(e => e.event === 'Migrated')[0].args;
-            newBoosterContract = MockNewBooster__factory.connect(newBooster, bob);
+            newBoosterContract = Booster__factory.connect(newBooster, bob);
+
+            await cvxLocker.connect(daoSigner).approveRewardDistributor(mocks.crv.address, newBooster, true);
+            await cvxLocker.connect(daoSigner).approveRewardDistributor(underlying.address, newBooster, true);
 
             expect(await newBoosterContract.owner()).to.equal(await daoSigner.getAddress());
             expect(await newBoosterContract.poolLength()).to.equal(poolLength);
             expect(await newBoosterContract.poolLength()).to.lt(await booster.poolLength());
-            expect(await newBoosterContract.newMethod()).to.equal("test");
+            expect(await newBoosterContract.minMintRatio()).to.equal(2000);
+            expect(await newBoosterContract.maxMintRatio()).to.equal(15000);
             expect(await crvRewards.operator()).eq(newBooster);
             expect(await depositToken.operator()).eq(newBooster);
 
@@ -968,29 +980,31 @@ describe.only("Booster", () => {
             await tx.wait();
             expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.sub(amount.div(2)));
 
-            expect(await contracts.cvx.operator()).eq(booster.address);
-            await contracts.cvx.updateOperator();
             expect(await contracts.cvx.operator()).eq(newBooster);
 
             await increaseTime(60 * 60 * 24 * 6);
 
-            const distribution1 = await booster.distributionByTokens(contracts.crv.address, 0);
-            const distribution2 = await booster.distributionByTokens(contracts.crv.address, 1);
-            await (await newBoosterContract.connect(daoSigner).updateDistributionByTokens(
-                contracts.crv.address,
-                [distribution1.distro, distribution2.distro],
-                [distribution1.share, distribution2.share],
-                [distribution1.callQueue, distribution2.callQueue]
-            )).wait(1);
+            const oldDistroTokens = await booster.distributionTokenList();
+            const newDistroTokens = await newBoosterContract.distributionTokenList();
+            console.log('oldDistroTokens', oldDistroTokens);
+            console.log('newDistroTokens', newDistroTokens);
 
-            const distributionWeth1 = await booster.distributionByTokens(mocks.weth.address, 0);
-            const distributionWeth2 = await booster.distributionByTokens(mocks.weth.address, 1);
-            await (await newBoosterContract.connect(daoSigner).updateDistributionByTokens(
-                contracts.weth.address,
-                [distributionWeth1.distro, distributionWeth2.distro],
-                [distributionWeth1.share, distributionWeth2.share],
-                [distributionWeth1.callQueue, distributionWeth2.callQueue]
-            )).wait(1);
+            expect(oldDistroTokens.length).eq(newDistroTokens.length);
+            for (let i = 0; i < oldDistroTokens.length; i++) {
+                expect(oldDistroTokens[i]).eq(newDistroTokens[i]);
+                let tokenDistroLength = await booster.distributionByTokenLength(newDistroTokens[i]);
+
+                expect(tokenDistroLength).eq(await newBoosterContract.distributionByTokenLength(newDistroTokens[i]));
+
+                for (let j = 0; j < parseInt(tokenDistroLength.toString()); j++) {
+                    const oldD = await booster.distributionByTokens(newDistroTokens[i], j);
+                    const d = await newBoosterContract.distributionByTokens(newDistroTokens[i], j);
+                    expect(oldD.share).gt(0);
+                    expect(oldD.distro).eq(d.distro);
+                    expect(oldD.share).eq(d.share);
+                    expect(oldD.callQueue).eq(d.callQueue);
+                }
+            }
 
             console.log('earmarkRewards');
             tx = await newBoosterContract.earmarkRewards(lastPid);
@@ -1014,6 +1028,7 @@ describe.only("Booster", () => {
             let feesSub = BigNumber.from(10000);
             feesSub = feesSub.sub(await newBoosterContract.distributionByTokens(mocks.crv.address, 0).then(d => d.share));
             feesSub = feesSub.sub(await newBoosterContract.distributionByTokens(mocks.crv.address, 1).then(d => d.share));
+            feesSub = feesSub.sub(await newBoosterContract.distributionByTokens(mocks.crv.address, 2).then(d => d.share));
             feesSub = feesSub.sub(await newBoosterContract.earmarkIncentive());
 
             await increaseTime(60 * 60 * 24);
@@ -1110,6 +1125,20 @@ describe.only("Booster", () => {
             expect(await newBoosterContract.pendingRewards(lpToken2.address)).eq(0);
             expect(await newBoosterContract.pendingRewards(lpToken1.address)).eq(0);
             expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(reward1.value.add(reward2.value));
+
+            ({historicalRewards, queuedRewards} = await crvRewards0.tokenRewards(mocks.crv.address));
+            crvRewardsBefore = historicalRewards.add(queuedRewards);
+
+            const pendingRewards9 = await newBoosterContract.pendingRewards(lpToken0.address);
+            tx = await newBoosterContract.connect(bob).earmarkRewards(0).then(tx => tx.wait());
+            const reward9 = getMasterWombatReward(tx, contracts.voterProxy.address);
+            const reward9Distributed = getMasterWombatReward(tx, crvRewards0.address);
+            resultRewards = reward9.value.add(pendingRewards9).mul(feesSub).div(10000);
+            equalWithSmallDiff(resultRewards, reward9Distributed.value);
+            equalWithSmallDiff(resultRewards.add(crvRewardsBefore), await crvRewards0.tokenRewards(mocks.crv.address).then(r => r.historicalRewards.add(r.queuedRewards)));
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(0);
+            expect(await newBoosterContract.pendingRewards(lpToken1.address)).eq(0);
+            expect(await newBoosterContract.pendingRewards(lpToken0.address)).eq(0);
         });
     });
 });

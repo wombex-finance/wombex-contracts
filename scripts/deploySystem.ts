@@ -682,7 +682,7 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
     let tx = await voterProxy.connect(signer).setLpTokensPid(masterWombat.address);
     await waitForTx(tx, true, waitForBlocks);
 
-    console.log('booster.updateDistributionByTokens');
+    console.log('booster.updateDistributionByTokens', poolLength);
     tx = await booster.connect(signer).updateDistributionByTokens(
         crv.address,
         [cvxCrvRewards.address, cvxStakingProxy.address],

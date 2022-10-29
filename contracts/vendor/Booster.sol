@@ -265,6 +265,7 @@ contract Booster{
     function updateDistributionByTokens(address _token, address[] memory _distros, uint256[] memory _shares, bool[] memory _callQueue) external {
         require(msg.sender==owner, "!auth");
         uint256 len = _distros.length;
+        require(len > 0, "zero");
         require(len==_shares.length && len==_callQueue.length, "!length");
 
         if (distributionByTokens[_token].length == 0) {

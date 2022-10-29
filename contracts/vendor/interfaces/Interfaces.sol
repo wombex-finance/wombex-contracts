@@ -28,6 +28,8 @@ interface IVoting{
 
 interface IMinter{
     function mint(address) external;
+    function updateOperator() external;
+    function operator() external returns(address);
 }
 
 interface ICvxLocker {
