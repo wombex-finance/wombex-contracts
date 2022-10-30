@@ -13,16 +13,18 @@ contract BoosterMigrator is Ownable {
 
     Booster public oldBooster;
     address public boosterOwner;
+    address public weth;
 
-    constructor(Booster _oldBooster) public {
+    constructor(Booster _oldBooster, address _weth) public {
         oldBooster = _oldBooster;
         boosterOwner = _oldBooster.owner();
+        weth = _weth;
     }
 
     function migrate() external onlyOwner {
         IStaker voterProxy = IStaker(oldBooster.voterProxy());
 
-        Booster newBooster = new Booster(address(voterProxy), oldBooster.cvx(), oldBooster.crv(), 2000, 15000);
+        Booster newBooster = new Booster(address(voterProxy), oldBooster.cvx(), oldBooster.crv(), weth, 2000, 15000);
 
         voterProxy.setOperator(address(newBooster));
         oldBooster.shutdownSystem();
