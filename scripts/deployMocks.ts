@@ -372,7 +372,7 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
                 lptoken.address,
                 (await getTimestamp()).add(1),
                 zeroAddress,
-                152207000000000 / 2
+                152207000000000 / 10
             ],
             {},
             debug,

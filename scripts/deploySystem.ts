@@ -408,7 +408,7 @@ async function deployFirstStage(
         hre,
         new Booster__factory(deployer),
         "Booster",
-        [voterProxy.address, cvx.address, token, 5000, 15000],
+        [voterProxy.address, cvx.address, token, deployment.weth.address, 5000, 15000],
         {},
         debug,
         waitForBlocks,
