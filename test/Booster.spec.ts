@@ -37,7 +37,7 @@ type Pool = {
     shutdown: boolean;
 };
 
-describe.only("Booster", () => {
+describe("Booster", () => {
     let accounts: Signer[];
     let booster: Booster;
     let crv, cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, underlying;
