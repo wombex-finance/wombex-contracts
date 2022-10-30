@@ -23,3 +23,5 @@ rules:
     - warn
   "prefer-const":
       - warn
+  "no-empty":
+      - warn

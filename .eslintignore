@@ -12,6 +12,7 @@
 **/types
 **/old-test
 **/convex-tests
+**/args
 
 # files
 *.env
