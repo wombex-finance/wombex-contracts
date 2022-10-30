@@ -3,7 +3,6 @@ pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts-0.6/access/Ownable.sol";
 import "./vendor/Booster.sol";
-import "hardhat/console.sol";
 
 contract BoosterMigrator is Ownable {
 
@@ -55,7 +54,6 @@ contract BoosterMigrator is Ownable {
 
         address[] memory distroTokens = oldBooster.distributionTokenList();
         for (uint256 i = 0; i < distroTokens.length; i++) {
-            console.log("distroTokens[i]", distroTokens[i]);
             uint256 tokenDistroLength = oldBooster.distributionByTokenLength(distroTokens[i]);
             address[] memory distros = new address[](tokenDistroLength);
             uint256[] memory shares = new uint256[](tokenDistroLength);
