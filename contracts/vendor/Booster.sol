@@ -683,6 +683,9 @@ contract Booster{
 
             for (uint256 j = 0; j < dLen; j++) {
                 TokenDistro memory tDistro = distributionByTokens[address(token)][j];
+                if (tDistro.share == 0) {
+                   continue;
+                }
                 uint256 amount = balance.mul(tDistro.share).div(DENOMINATOR);
                 if (tDistro.callQueue) {
                     IRewards(tDistro.distro).queueNewRewards(address(token), amount);
