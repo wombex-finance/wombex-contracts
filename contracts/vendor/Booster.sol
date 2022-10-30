@@ -26,6 +26,7 @@ contract Booster{
 
     address public immutable crv;
     address public immutable cvx;
+    address public immutable weth;
     address public immutable voterProxy;
 
     address public owner;
@@ -101,20 +102,25 @@ contract Booster{
     /**
      * @dev Constructor doing what constructors do. It is noteworthy that
      *      a lot of basic config is set to 0 - expecting subsequent calls to setFeeInfo etc.
-     * @param _voterProxy                 VoterProxy (locks the crv and adds to all gauges)
+     * @param _voterProxy             VoterProxy (locks the crv and adds to all gauges)
      * @param _cvx                    CVX/WMX token
      * @param _crv                    CRV/WOM
+     * @param _weth                   WETH
+     * @param _minMintRatio           Min mint ratio
+     * @param _maxMintRatio           Max mint ratio
      */
     constructor(
         address _voterProxy,
         address _cvx,
         address _crv,
+        address _weth,
         uint256 _minMintRatio,
         uint256 _maxMintRatio
     ) public {
         voterProxy = _voterProxy;
         cvx = _cvx;
         crv = _crv;
+        weth = _weth;
         isShutdown = false;
 
         minMintRatio = _minMintRatio;
@@ -596,7 +602,11 @@ contract Booster{
         uint256 len = tokens.length;
         result = new uint256[](len);
         for (uint256 i = 0; i < len; i++) {
-            result[i] = IERC20(tokens[i]).balanceOf(voterProxy);
+            uint256 balance = IERC20(tokens[i]).balanceOf(voterProxy);
+            if (tokens[i] == weth) {
+                balance = balance.add(voterProxy.balance);
+            }
+            result[i] = balance;
         }
     }
 
@@ -605,7 +615,11 @@ contract Booster{
         uint256 len = _rewardsBefore.length;
         for (uint256 i = 0; i < len; i++) {
             address token = tokens[i];
-            lpPendingRewards[_lptoken][token] = lpPendingRewards[_lptoken][token].add(IERC20(token).balanceOf(voterProxy).sub(_rewardsBefore[i]));
+            uint256 balance = IERC20(token).balanceOf(voterProxy);
+            if (token == weth) {
+                balance = balance.add(voterProxy.balance);
+            }
+            lpPendingRewards[_lptoken][token] = lpPendingRewards[_lptoken][token].add(balance.sub(_rewardsBefore[i]));
         }
     }
 
@@ -653,11 +667,6 @@ contract Booster{
             for (uint256 j = 0; j < tLen; j++) {
                 totalPendingRewards[j] = totalPendingRewards[j].add(lpPendingRewards[poolInfo[i].lptoken][tokens[j]]);
             }
-        }
-
-        uint256[] memory balances = new uint256[](tLen);
-        for (uint256 i = 0; i < tLen; i++) {
-            balances[i] = IERC20(tokens[i]).balanceOf(address(this));
         }
 
         IStaker(voterProxy).claimCrv(pool.lptoken, gauge);

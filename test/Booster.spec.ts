@@ -14,13 +14,20 @@ import {
     MultiRewarderPerSec__factory,
     MockERC20,
     MockERC20__factory,
-    BoosterMigrator, BoosterMigrator__factory, MockNewBooster__factory, DepositToken__factory, Booster__factory,
+    BoosterMigrator,
+    BoosterMigrator__factory,
+    MockNewBooster__factory,
+    DepositToken__factory,
+    Booster__factory,
+    Asset,
+    Asset__factory,
 } from "../types/generated";
 import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
 import {simpleToExactAmount} from "../test-utils/math";
 import {impersonateAccount, ZERO_ADDRESS} from "../test-utils";
 import {deployContract, waitForTx} from "../tasks/utils";
+import {BigNumber as BN} from "@ethersproject/bignumber/lib/bignumber";
 
 type Pool = {
     lptoken: string;
@@ -87,8 +94,11 @@ describe.only("Booster", () => {
         return booster.interface.decodeEventLog('RewardClaimed', logs[0].data, logs[0].topics);
     }
 
-    function getMasterWombatReward(tx, toAddress) {
-        const logs = tx.events.filter(e => e.address.toLowerCase() === crv.address.toLowerCase());
+    function getMasterWombatReward(tx, toAddress, token = null) {
+        if (!token) {
+            token = crv;
+        }
+        const logs = tx.events.filter(e => e.address.toLowerCase() === token.address.toLowerCase());
         return logs
             .map(l => {
                 try { return crv.interface.decodeEventLog('Transfer', l.data, l.topics); } catch (e) {}
@@ -106,7 +116,7 @@ describe.only("Booster", () => {
     }
 
     function equalWithSmallDiff(a, b) {
-        a.gt(b) ? expect(a.sub(b)).lte(3) : expect(b.sub(a)).lte(3);
+        a.gt(b) ? expect(a.sub(b)).lte(4) : expect(b.sub(a)).lte(4);
     }
 
     before(async () => {
@@ -397,7 +407,7 @@ describe.only("Booster", () => {
                 {},
                 true,
             );
-            let tx = await underlying.transfer(multiRewarder.address, simpleToExactAmount(100000, 9));
+            let tx = await underlying.transfer(multiRewarder.address, simpleToExactAmount(10000, 9));
             await waitForTx(tx, true, 1);
 
             tx = await mocks.masterWombat.add('1', lptoken.address, multiRewarder.address);
@@ -921,7 +931,7 @@ describe.only("Booster", () => {
                 hre,
                 new BoosterMigrator__factory(deployer),
                 "BoosterMigrator",
-                [booster.address],
+                [booster.address, mocks.weth.address],
                 {},
                 true,
             );
@@ -1024,6 +1034,28 @@ describe.only("Booster", () => {
         });
 
         it("pendingRewards after migration should work properly", async () => {
+            const mwPool = await mocks.masterWombat.poolInfo('0');
+            await newBoosterContract.connect(daoSigner).addPool(mwPool.lpToken, mocks.masterWombat.address).then(tx => tx.wait(1));
+
+            const lptoken = await deployContract<Asset>(hre, new Asset__factory(deployer), "Asset", [underlying.address, 'MockLP', 'MockLP', mocks.pool.address], {}, true, 1);
+            const multiRewarder = await deployContract<MultiRewarderPerSec>(
+                hre,
+                new MultiRewarderPerSec__factory(deployer),
+                "MultiRewarderPerSec",
+                [mocks.masterWombat.address, lptoken.address, (await getTimestamp()).add(1), ZERO_ADDRESS, 152207000000000 / 2],
+                {},
+                true,
+            );
+            await deployer.sendTransaction({ to: multiRewarder.address, value: BN.from(10).pow(20) });
+            await mocks.pool.addAsset(underlying.address, lptoken.address).then(tx => tx.wait(1));
+            await mocks.masterWombat.add('1', lptoken.address, multiRewarder.address).then(tx => tx.wait(1));
+            await underlying.approve(mocks.pool.address, simpleToExactAmount(10000, 9)).then(tx => tx.wait(1));
+            await mocks.pool.deposit(underlying.address, simpleToExactAmount(10000, 9), '0', deployerAddress, new Date().getTime(), false).then(tx => tx.wait(1));
+            await lptoken.transfer(bobAddress, simpleToExactAmount(1000, 9)).then(tx => tx.wait(1));
+            await newBoosterContract.connect(daoSigner).addPool(lptoken.address, mocks.masterWombat.address).then(tx => tx.wait(1));
+
+            await contracts.voterProxy.connect(daoSigner).setLpTokensPid(mocks.masterWombat.address).then(tx => tx.wait(1));
+
             const amount = ethers.utils.parseEther("1000");
 
             let feesSub = BigNumber.from(10000);
@@ -1034,13 +1066,53 @@ describe.only("Booster", () => {
 
             await increaseTime(60 * 60 * 24);
 
-            const lpToken0 = await ERC20__factory.connect(await newBoosterContract.poolInfo('0').then(p => p.lptoken), deployer);
+            const lpToken0 = await ERC20__factory.connect(await newBoosterContract.poolInfo(0).then(p => p.lptoken), deployer);
             await lpToken0.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
             const crvRewards0 = await BaseRewardPool__factory.connect(await newBoosterContract.poolInfo(0).then(p => p.crvRewards), deployer);
-            await lpToken0.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
 
-            expect(await newBoosterContract.lpPendingRewards(lpToken0.address, crv.address)).eq(0);
-            let tx = await newBoosterContract.connect(bob).deposit(0, amount, true).then(tx => tx.wait());
+            await newBoosterContract.connect(daoSigner).updateLpPendingRewardTokensByGauge(0).then(tx => tx.wait(1));
+            const tokens0 = await newBoosterContract.getPendingRewardTokens(lpToken0.address);
+            expect(tokens0.length).eq(2);
+            expect(tokens0[0]).eq(crv.address);
+            expect(tokens0[1]).eq(underlying.address);
+
+            const lpToken3 = await ERC20__factory.connect(await newBoosterContract.poolInfo(3).then(p => p.lptoken), deployer);
+            await lpToken3.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
+            const crvRewards3 = await BaseRewardPool__factory.connect(await newBoosterContract.poolInfo(3).then(p => p.crvRewards), deployer);
+
+            await newBoosterContract.connect(daoSigner).updateLpPendingRewardTokensByGauge(3).then(tx => tx.wait(1));
+            const tokens3 = await newBoosterContract.getPendingRewardTokens(lpToken3.address);
+            expect(tokens3.length).eq(2);
+            expect(tokens3[0]).eq(crv.address);
+            expect(tokens3[1]).eq(mocks.weth.address);
+
+            const amount9 = simpleToExactAmount(100, 9)
+
+            const lpToken4 = await ERC20__factory.connect(await newBoosterContract.poolInfo(4).then(p => p.lptoken), deployer);
+            await lpToken4.connect(bob).approve(newBoosterContract.address, amount9.mul(10)).then(tx => tx.wait());
+            const crvRewards4 = await BaseRewardPool__factory.connect(await newBoosterContract.poolInfo(4).then(p => p.crvRewards), deployer);
+
+            await newBoosterContract.connect(daoSigner).updateLpPendingRewardTokensByGauge(4).then(tx => tx.wait(1));
+            const tokens4 = await newBoosterContract.getPendingRewardTokens(lpToken4.address);
+            expect(tokens4.length).eq(2);
+            expect(tokens4[0]).eq(crv.address);
+            expect(tokens4[1]).eq(mocks.weth.address);
+
+            expect(await newBoosterContract.lpPendingRewards(lpToken4.address, crv.address)).eq(0);
+            await newBoosterContract.connect(bob).deposit(4, amount9, true).then(tx => tx.wait());
+
+            await increaseTime(60 * 60 * 24);
+
+            const ethBalanceBefore = await hre.ethers.provider.getBalance(contracts.voterProxy.address);
+            let tx = await newBoosterContract.connect(bob).deposit(4, amount9, true).then(tx => tx.wait());
+            const reward01 = getMasterWombatReward(tx, contracts.voterProxy.address, crv);
+            expect(await newBoosterContract.lpPendingRewards(lpToken4.address, crv.address)).eq(reward01.value);
+            expect(reward01.value).gt(0);
+            const ethBalanceAfter = await hre.ethers.provider.getBalance(contracts.voterProxy.address);
+            expect(await newBoosterContract.lpPendingRewards(lpToken4.address, mocks.weth.address)).eq(ethBalanceAfter.sub(ethBalanceBefore));
+            expect(ethBalanceAfter.sub(ethBalanceBefore)).gt(0);
+
+            tx = await newBoosterContract.connect(bob).deposit(0, amount, true).then(tx => tx.wait());
             const reward1 = getMasterWombatReward(tx, contracts.voterProxy.address);
             expect(await newBoosterContract.lpPendingRewards(lpToken0.address, crv.address)).eq(reward1.value);
             expect(reward1.value).gt(0);
@@ -1058,6 +1130,11 @@ describe.only("Booster", () => {
             const crvRewards1 = await BaseRewardPool__factory.connect(await newBoosterContract.poolInfo(1).then(p => p.crvRewards), deployer);
             await lpToken1.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
 
+            await newBoosterContract.connect(daoSigner).updateLpPendingRewardTokensByGauge(1).then(tx => tx.wait(1));
+            const tokens1 = await newBoosterContract.getPendingRewardTokens(lpToken1.address);
+            expect(tokens1.length).eq(1);
+            expect(tokens1[0]).eq(crv.address);
+
             expect(await newBoosterContract.lpPendingRewards(lpToken1.address, crv.address)).eq(0);
             tx = await newBoosterContract.connect(bob).deposit(1, amount, true).then(tx => tx.wait());
             const reward3 = getMasterWombatReward(tx, contracts.voterProxy.address);
@@ -1070,6 +1147,11 @@ describe.only("Booster", () => {
             const lpToken2 = await ERC20__factory.connect(await newBoosterContract.poolInfo(2).then(p => p.lptoken), deployer);
             const crvRewards2 = await BaseRewardPool__factory.connect(await newBoosterContract.poolInfo(2).then(p => p.crvRewards), deployer);
             await lpToken2.connect(bob).approve(newBoosterContract.address, amount.mul(10)).then(tx => tx.wait());
+
+            await newBoosterContract.connect(daoSigner).updateLpPendingRewardTokensByGauge(2).then(tx => tx.wait(1));
+            const tokens2 = await newBoosterContract.getPendingRewardTokens(lpToken2.address);
+            expect(tokens2.length).eq(1);
+            expect(tokens2[0]).eq(crv.address);
 
             expect(await newBoosterContract.lpPendingRewards(lpToken2.address, crv.address)).eq(0);
             let {historicalRewards, queuedRewards} = await crvRewards2.tokenRewards(crv.address);
