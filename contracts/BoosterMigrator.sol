@@ -3,6 +3,8 @@ pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts-0.6/access/Ownable.sol";
 import "./vendor/Booster.sol";
+import "./vendor/TokenFactory.sol";
+import "./vendor/RewardFactory.sol";
 
 contract BoosterMigrator is Ownable {
 
@@ -64,7 +66,14 @@ contract BoosterMigrator is Ownable {
             newBooster.updateDistributionByTokens(distroTokens[i], distros, shares, callQueues);
         }
 
-        newBooster.setFactories(oldBooster.rewardFactory(), oldBooster.tokenFactory());
+        RewardFactory rf = new RewardFactory(address(newBooster), oldBooster.crv());
+        TokenFactory tf = new TokenFactory(
+            address(newBooster),
+            TokenFactory(oldBooster.tokenFactory()).namePostfix(),
+            TokenFactory(oldBooster.tokenFactory()).symbolPrefix()
+        );
+
+        newBooster.setFactories(address(rf), address(tf));
         newBooster.setExtraRewardsDistributor(address(oldBooster.extraRewardsDist()));
         newBooster.setLockRewardContracts(oldBooster.crvLockRewards(), oldBooster.cvxLocker());
         newBooster.setVoteDelegate(oldBooster.voteDelegate());
@@ -78,6 +87,7 @@ contract BoosterMigrator is Ownable {
         oldBooster.setOwner(boosterOwner);
         voterProxy.setOwner(boosterOwner);
 
+        newBooster.setPoolManager(boosterOwner);
         newBooster.setOwner(boosterOwner);
 
         emit Migrated(address(newBooster), newBooster.poolLength());
