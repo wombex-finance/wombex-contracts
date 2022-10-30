@@ -25,7 +25,7 @@ import {
 import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
 import {simpleToExactAmount} from "../test-utils/math";
-import {impersonateAccount, ZERO_ADDRESS} from "../test-utils";
+import {DEAD_ADDRESS, impersonateAccount, ZERO_ADDRESS} from "../test-utils";
 import {deployContract, waitForTx} from "../tasks/utils";
 import {BigNumber as BN} from "@ethersproject/bignumber/lib/bignumber";
 
@@ -623,6 +623,21 @@ describe("Booster", () => {
 
             await booster.connect(daoSigner).updateDistributionByTokens(
                 crv.address,
+                [DEAD_ADDRESS],
+                [0],
+                [false]
+            );
+            const p = await booster.poolInfo(0);
+            let tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
+
+            const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === crv.address.toLowerCase())[0].args;
+            const {value} = getMasterWombatReward(tx, p.crvRewards);
+            expect(amount.sub(amount.mul(await booster.earmarkIncentive()).div(10000))).eq(value);
+
+            await increaseTime(60 * 60 * 24);
+
+            await booster.connect(daoSigner).updateDistributionByTokens(
+                crv.address,
                 [cvxCrvRewards.address, cvxStakingProxy.address, treasuryAddress],
                 [2000, 400, 100],
                 [true, true, false]
@@ -649,7 +664,7 @@ describe("Booster", () => {
                 ]);
 
                 // collect the rewards
-                const tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
+                tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
 
                 const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === token.address.toLowerCase())[0].args;
 
