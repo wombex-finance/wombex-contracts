@@ -6,7 +6,7 @@ import {
     getMockDistro,
     getMockMultisigs
 } from "../scripts/deployMocks";
-import {SystemDeployed, deploy, updateDistributionByTokens} from "../scripts/deploySystem";
+import {SystemDeployed, deploy} from "../scripts/deploySystem";
 import { increaseTime } from "../test-utils/time";
 import { ONE_WEEK, ZERO_ADDRESS, DEAD_ADDRESS, MAX_UINT256 } from "../test-utils/constants";
 import { simpleToExactAmount } from "../test-utils/math";
@@ -88,6 +88,8 @@ describe("WmxClaimZap", () => {
         const rewardBalance = await contracts.cvxCrvRewards.balanceOf(aliceAddress);
         expect(rewardBalance).gt(balanceBeforeReward);
 
+        const cvxCrvBalance = await contracts.cvxCrv.balanceOf(aliceAddress);
+
         await increaseTime(ONE_WEEK.mul("4"));
 
         await contracts.booster.earmarkRewards(0);
@@ -98,13 +100,27 @@ describe("WmxClaimZap", () => {
         console.log('expectedRewards', expectedRewards);
 
         await mocks.crv.connect(alice).approve(contracts.claimZap.address, ethers.constants.MaxUint256);
-        const option = 1 + 16 + 8;
+
+        let option = 1 + 16 + 8;
         await contracts.claimZap
             .connect(alice)
             .claimRewards([], [], [], [], expectedRewards, 0, 0, option);
 
-        const newRewardBalance = await contracts.cvxCrvRewards.balanceOf(aliceAddress);
-        expect(newRewardBalance).gt(rewardBalance);
+        const newCvxCrvBalance = await contracts.cvxCrv.balanceOf(aliceAddress);
+        expect(newCvxCrvBalance).gt(cvxCrvBalance);
+
+        expect(rewardBalance).eq(await contracts.cvxCrvRewards.balanceOf(aliceAddress));
+
+        await increaseTime(ONE_WEEK.mul("4"));
+
+        await contracts.booster.earmarkRewards(0);
+        option = 1 + 16 + 8 + 128;
+        await contracts.claimZap
+            .connect(alice)
+            .claimRewards([], [], [], [], expectedRewards, 0, 0, option);
+
+        expect(newCvxCrvBalance).eq(await contracts.cvxCrv.balanceOf(aliceAddress));
+        expect(await contracts.cvxCrvRewards.balanceOf(aliceAddress)).gt(rewardBalance);
     });
 
     it("claim from lp staking pool", async () => {

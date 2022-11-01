@@ -50,8 +50,9 @@ contract WmxClaimZap {
         LockWomDeposit, //8
         UseAllWalletFunds, //16
         LockWmx, //32
-        LockWmxRewards //64
-    }
+        LockWmxRewards, //64
+        StakeWmxWom //128
+}
 
     /**
      * @param _wom                WOM token
@@ -205,8 +206,12 @@ contract WmxClaimZap {
                 );
 
                 uint256 wmxWomBalance = IERC20(womWmx).balanceOf(address(this));
-                //stake for msg.sender
-                IBasicRewards(wmxWomRewards).stakeFor(msg.sender, wmxWomBalance);
+                if (_checkOption(options, Options.StakeWmxWom)) {
+                    //stake for msg.sender
+                    IBasicRewards(wmxWomRewards).stakeFor(msg.sender, wmxWomBalance);
+                } else {
+                    IERC20(womWmx).safeTransfer(msg.sender, wmxWomBalance);
+                }
             }
         }
 
