@@ -26,6 +26,8 @@ contract ExtraRewardsDistributorProxy {
     }
 
     function queueNewRewards(address _token, uint256 _amount) external {
+        require(msg.sender == address(booster), "!booster");
+
         IERC20(_token).transferFrom(msg.sender, address(this), _amount);
         IERC20(_token).approve(extraRewardsDistributor, _amount);
         IExtraRewardsDistributor(extraRewardsDistributor).addReward(_token, _amount);
