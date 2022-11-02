@@ -1,7 +1,7 @@
 import hre, { ethers } from "hardhat";
 import { Signer } from "ethers";
 import { expect } from "chai";
-import {deploy, Phase2Deployed, updateDistributionByTokens} from "../scripts/deploySystem";
+import {deploy, Phase2Deployed} from "../scripts/deploySystem";
 import {deployTestFirstStage, getMockDistro, getMockMultisigs} from "../scripts/deployMocks";
 import {
     ERC20,
@@ -40,6 +40,9 @@ describe("WmxVestedEscrow", () => {
     let dan: Signer;
     let danAddress: string;
 
+    let eve: Signer;
+    let eveAddress: string;
+
     before(async () => {
         await hre.network.provider.send("hardhat_reset");
 
@@ -57,13 +60,14 @@ describe("WmxVestedEscrow", () => {
         bobAddress = await bob.getAddress();
         dan = accounts[4];
         danAddress = await dan.getAddress();
+        eve = accounts[5];
+        eveAddress = await eve.getAddress();
 
         deployer = accounts[0];
         mocks = await deployTestFirstStage(hre, deployer);
         const multisigs = await getMockMultisigs(accounts[0], accounts[0], accounts[0]);
         const distro = getMockDistro();
         contracts = await deploy(hre, deployer, deployer, mocks, distro, multisigs, mocks.namingConfig, mocks);
-        await updateDistributionByTokens(accounts[0], contracts);
 
         await mocks.crv.transfer(aliceAddress, simpleToExactAmount(1));
         // await mocks.crv.transfer(mocks.balancerVault.address, simpleToExactAmount(10));
@@ -340,7 +344,6 @@ describe("WmxVestedEscrow", () => {
             expect(lastUserLock.amount.sub(newUserLock.amount)).lt(simpleToExactAmount(0.01));
         });
 
-        // fast forward 6 months, available balances should be visible
         it("transferVestedTokens", async () => {
             let tx = await vestedEscrowLockOnly.connect(bob).claim();
             await tx.wait(1);
@@ -397,6 +400,160 @@ describe("WmxVestedEscrow", () => {
 
             expect(await vestedEscrowLockOnly.available(danAddress)).eq(0);
             expect(await vestedEscrowLockOnly.available(bobAddress)).eq(0);
+        });
+    });
+
+    describe("WmxVestedEscrowLockOnly", async () => {
+        let vestedEscrowLockOnly: WmxVestedEscrowLockOnly;
+
+        before(async () => {
+            deployTime = await getTimestamp();
+            vestedEscrowLockOnly = await new WmxVestedEscrowLockOnly__factory(deployer).deploy(
+                wmx.address,
+                fundAdminAddress,
+                wmxLocker.address,
+                deployTime.add(ONE_WEEK),
+                deployTime.add(ONE_WEEK.mul(53)),
+            );
+
+            await wmx.transfer(fundAdminAddress, simpleToExactAmount(300));
+            await wmx.connect(fundAdmin).approve(vestedEscrowLockOnly.address, simpleToExactAmount(300));
+            await vestedEscrowLockOnly.connect(fundAdmin).fund([aliceAddress, bobAddress], [simpleToExactAmount(200), simpleToExactAmount(100)]);
+        });
+
+        it("transferVestedTokensShare", async () => {
+            const aliceWmxBefore = await wmxLocker.lockedBalances(aliceAddress).then(lb => lb.locked.add(lb.unlockable));
+            const bobWmxBefore = await wmxLocker.lockedBalances(bobAddress).then(lb => lb.locked.add(lb.unlockable));
+            const danWmxBefore = await wmxLocker.lockedBalances(danAddress).then(lb => lb.locked.add(lb.unlockable));
+            const eveWmxBefore = await wmxLocker.lockedBalances(eveAddress).then(lb => lb.locked.add(lb.unlockable));
+            await increaseTime(ONE_WEEK.mul(1));
+
+            let bobLockedBefore = await vestedEscrowLockOnly.totalLocked(bobAddress);
+            let aliceLockedBefore = await vestedEscrowLockOnly.totalLocked(aliceAddress);
+
+            let tx = await vestedEscrowLockOnly.connect(bob).transferVestedTokensShare(aliceAddress, simpleToExactAmount(0.1)).then(tx => tx.wait(1));
+            await increaseTime(1);
+            let aliceClaimed = tx.events.filter(e => e.event === 'Claim' && e.args && e.args.user.toLowerCase() === aliceAddress.toLowerCase())[0];
+            let amountToTransfer = bobLockedBefore.mul(simpleToExactAmount(0.1)).div(simpleToExactAmount(1));
+            const bobToAliceTransferPending = bobLockedBefore.sub(aliceClaimed.args.amount).mul(simpleToExactAmount(0.1)).div(simpleToExactAmount(1));
+            let bobClaimed = tx.events.filter(e => e.event === 'Claim' && e.args && e.args.user.toLowerCase() === bobAddress.toLowerCase())[0];
+            expect(await vestedEscrowLockOnly.available(bobAddress)).gte('2861721611720');
+            expect(await vestedEscrowLockOnly.available(bobAddress)).lte('5723443223444');
+            expect(await vestedEscrowLockOnly.available(aliceAddress)).gte('6677350427350');
+            expect(await vestedEscrowLockOnly.available(aliceAddress)).lte('13354700854702');
+
+            let bobLockedAfter = await vestedEscrowLockOnly.totalLocked(bobAddress);
+            let bobClaimedAfter = await vestedEscrowLockOnly.totalClaimed(bobAddress);
+            let aliceLockedAfter = await vestedEscrowLockOnly.totalLocked(aliceAddress);
+            let aliceClaimedAfter = await vestedEscrowLockOnly.totalClaimed(aliceAddress);
+
+            expect(bobLockedBefore.add(aliceLockedBefore)).eq(bobLockedAfter.add(aliceLockedAfter));
+            expect(aliceClaimed.args.amount.add(bobClaimed.args.amount)).eq(bobClaimedAfter.add(aliceClaimedAfter));
+
+            expect(await vestedEscrowLockOnly.totalLocked(bobAddress)).eq(bobLockedBefore.sub(amountToTransfer));
+            expect(await vestedEscrowLockOnly.totalLocked(aliceAddress)).eq(aliceLockedBefore.add(amountToTransfer));
+
+            await increaseTime(ONE_WEEK.mul(1));
+
+            let danLockedBefore = await vestedEscrowLockOnly.totalLocked(danAddress);
+            aliceLockedBefore = await vestedEscrowLockOnly.totalLocked(aliceAddress);
+            let aliceClaimedBefore = await vestedEscrowLockOnly.totalClaimed(aliceAddress);
+
+            tx = await vestedEscrowLockOnly.connect(alice).transferVestedTokensShare(danAddress, simpleToExactAmount(0.05)).then(tx => tx.wait(1));
+            await increaseTime(1);
+            amountToTransfer = aliceLockedBefore.mul(simpleToExactAmount(0.05)).div(simpleToExactAmount(1));
+            aliceClaimed = tx.events.filter(e => e.event === 'Claim' && e.args && e.args.user.toLowerCase() === aliceAddress.toLowerCase())[0];
+            const aliceToDanTransferPending = aliceLockedBefore.sub(aliceClaimed.args.amount).mul(simpleToExactAmount(0.05)).div(simpleToExactAmount(1));
+            let danClaimed = tx.events.filter(e => e.event === 'Claim' && e.args && e.args.user.toLowerCase() === danAddress.toLowerCase())[0];
+            expect(danClaimed).eq(undefined);
+            expect(await vestedEscrowLockOnly.available(bobAddress)).gt('1730770000000000000');
+            expect(await vestedEscrowLockOnly.available(bobAddress)).lt('1730790000000000000');
+            expect(await vestedEscrowLockOnly.available(aliceAddress)).gte('6343482905981');
+            expect(await vestedEscrowLockOnly.available(aliceAddress)).lte('12686965811966');
+            expect(await vestedEscrowLockOnly.available(danAddress)).gte('333867521367');
+            expect(await vestedEscrowLockOnly.available(danAddress)).lte('667735042736');
+
+            let danLockedAfter = await vestedEscrowLockOnly.totalLocked(danAddress);
+            let danClaimedAfter = await vestedEscrowLockOnly.totalClaimed(danAddress);
+            aliceLockedAfter = await vestedEscrowLockOnly.totalLocked(aliceAddress);
+            aliceClaimedAfter = await vestedEscrowLockOnly.totalClaimed(aliceAddress);
+
+            expect(danLockedBefore.add(aliceLockedBefore)).eq(danLockedAfter.add(aliceLockedAfter));
+            expect(aliceClaimed.args.amount.add(aliceClaimedBefore)).eq(danClaimedAfter.add(aliceClaimedAfter));
+
+            expect(await vestedEscrowLockOnly.totalLocked(danAddress)).eq(danLockedBefore.add(amountToTransfer));
+            expect(await vestedEscrowLockOnly.totalLocked(aliceAddress)).eq(aliceLockedBefore.sub(amountToTransfer));
+
+            await increaseTime(ONE_WEEK.mul(1));
+
+            tx = await vestedEscrowLockOnly.connect(dan).claim().then(tx => tx.wait(1));
+            await increaseTime(1);
+            danClaimed = tx.events.filter(e => e.event === 'Claim' && e.args && e.args.user.toLowerCase() === danAddress.toLowerCase())[0];
+            expect(danClaimed.args.amount).gte('201923744658119657');
+            expect(danClaimed.args.amount).lte('201924078525641027');
+
+            bobLockedBefore = await vestedEscrowLockOnly.totalLocked(bobAddress);
+            let bobPendingBefore = await vestedEscrowLockOnly.totalPending(bobAddress);
+
+            tx = await vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(eveAddress, simpleToExactAmount(50)).then(tx => tx.wait(1));
+            await increaseTime(1);
+            const transferVestedTokenShare = tx.events.filter(e => e.event === 'TransferVestedTokenShare')[0];
+            const eveClaimed = tx.events.filter(e => e.event === 'Claim' && e.args && e.args.user.toLowerCase() === aliceAddress.toLowerCase())[0];
+            expect(eveClaimed).eq(undefined);
+            amountToTransfer = bobLockedBefore.mul(transferVestedTokenShare.args.share).div(simpleToExactAmount(1));
+            bobClaimed = tx.events.filter(e => e.event === 'Claim' && e.args && e.args.user.toLowerCase() === bobAddress.toLowerCase())[0];
+            const bobToEveTransferPending = bobPendingBefore.sub(bobClaimed.args.amount).mul(transferVestedTokenShare.args.share).div(simpleToExactAmount(1));
+            expect(bobToEveTransferPending.sub(100)).lte(simpleToExactAmount(50));
+            expect(bobToEveTransferPending.add(100)).gte(simpleToExactAmount(50));
+            expect(await vestedEscrowLockOnly.available(bobAddress)).gte('1190022400312');
+            expect(await vestedEscrowLockOnly.available(bobAddress)).lte('2380044911189');
+            expect(await vestedEscrowLockOnly.available(eveAddress)).gte('1653439754888');
+            expect(await vestedEscrowLockOnly.available(eveAddress)).lte('1653439809567');
+
+            expect(
+                (await vestedEscrowLockOnly.totalLocked(bobAddress)).add(await vestedEscrowLockOnly.totalLocked(eveAddress))
+            ).eq(bobLockedBefore);
+            expect(await vestedEscrowLockOnly.totalLocked(bobAddress)).eq(bobLockedBefore.sub(amountToTransfer));
+            expect(await vestedEscrowLockOnly.totalLocked(eveAddress)).eq(amountToTransfer);
+
+            await increaseTime(ONE_WEEK.mul(80));
+
+            await vestedEscrowLockOnly.connect(dan).claim().then(tx => tx.wait(1));
+            await vestedEscrowLockOnly.connect(bob).claim().then(tx => tx.wait(1));
+            await vestedEscrowLockOnly.connect(alice).claim().then(tx => tx.wait(1));
+            await vestedEscrowLockOnly.connect(eve).claim().then(tx => tx.wait(1));
+
+            const diff = BN.from('10000000000000');
+
+            const resultAliceWmxBalance = (await wmxLocker.lockedBalances(aliceAddress).then(lb => lb.locked.add(lb.unlockable))).sub(aliceWmxBefore);
+            const resultBobWmxBalance = (await wmxLocker.lockedBalances(bobAddress).then(lb => lb.locked.add(lb.unlockable))).sub(bobWmxBefore);
+            const resultDanWmxBalance = (await wmxLocker.lockedBalances(danAddress).then(lb => lb.locked.add(lb.unlockable))).sub(danWmxBefore);
+            const resultEveWmxBalance = (await wmxLocker.lockedBalances(eveAddress).then(lb => lb.locked.add(lb.unlockable))).sub(eveWmxBefore);
+
+            expect(resultAliceWmxBalance.add(diff)).gte(
+                simpleToExactAmount(200).add(bobToAliceTransferPending).sub(aliceToDanTransferPending)
+            );
+            expect(resultAliceWmxBalance.sub(diff)).lte(
+                simpleToExactAmount(200).add(bobToAliceTransferPending).sub(aliceToDanTransferPending)
+            );
+            expect(
+                resultBobWmxBalance.add(diff)
+            ).gte(
+                simpleToExactAmount(100).sub(bobToAliceTransferPending).sub(bobToEveTransferPending)
+            );
+            expect(
+                resultBobWmxBalance.sub(diff)
+            ).lte(
+                simpleToExactAmount(100).sub(bobToAliceTransferPending).sub(bobToEveTransferPending)
+            );
+            expect(resultDanWmxBalance.add(diff)).gte(aliceToDanTransferPending);
+            expect(resultDanWmxBalance.sub(diff)).lte(aliceToDanTransferPending);
+
+            expect(
+                resultAliceWmxBalance.add(resultBobWmxBalance).add(resultDanWmxBalance).add(resultEveWmxBalance)
+            ).eq(
+                simpleToExactAmount(200).add(simpleToExactAmount(100))
+            );
         });
     });
 });
