@@ -22,6 +22,18 @@ contract BoosterMigrator is Ownable {
     }
 
     function migrate() external onlyOwner {
+        uint256 poolLen = oldBooster.poolLength();
+
+        uint256[] memory lpBalances = new uint256[](poolLen);
+        for (uint256 i = 0; i < poolLen; i++) {
+            (address lptoken, , , , bool shutdown) = oldBooster.poolInfo(i);
+            if (shutdown) {
+                continue;
+            }
+            oldBooster.earmarkRewards(i);
+            lpBalances[i] = IERC20(lptoken).balanceOf(address(oldBooster));
+        }
+
         IStaker voterProxy = IStaker(oldBooster.voterProxy());
 
         Booster newBooster = new Booster(address(voterProxy), oldBooster.cvx(), oldBooster.crv(), weth, 2000, 15000);
@@ -29,17 +41,17 @@ contract BoosterMigrator is Ownable {
         voterProxy.setOperator(address(newBooster));
         oldBooster.shutdownSystem();
 
-        uint256 poolLen = oldBooster.poolLength();
         address[] memory crvRewards = new address[](poolLen + 1);
         uint256[] memory pids = new uint256[](poolLen + 1);
 
         for (uint256 i = 0; i < poolLen; i++) {
-            (, , , address rewards, bool shutdown) = oldBooster.poolInfo(i);
+            (address lptoken, , , address rewards, bool shutdown) = oldBooster.poolInfo(i);
             if (shutdown) {
                 continue;
             }
             pids[i] = i;
             crvRewards[i] = rewards;
+            require(lpBalances[i] == IERC20(lptoken).balanceOf(address(oldBooster)), "lp_balance");
         }
 
         crvRewards[poolLen] = oldBooster.crvLockRewards();

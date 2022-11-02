@@ -21,6 +21,8 @@ contract WomDepositor is Ownable {
     address public wom;
     address public staker;
     address public minter;
+    address public booster;
+    uint256 public earmarkPid;
 
     uint256 public lockDays;
     uint256 public smartLockPeriod;
@@ -28,6 +30,7 @@ contract WomDepositor is Ownable {
     uint256 public checkOldSlot;
     uint256 public currentSlot;
     uint256 public lastLockAt;
+    bool public executing;
 
     mapping(uint256 => uint256) public slotEnds;
     mapping(address => uint256) public customLockDays;
@@ -43,6 +46,7 @@ contract WomDepositor is Ownable {
 
     event UpdateOperator(address operator);
     event SetLockConfig(uint256 lockDays, uint256 smartLockPeriod);
+    event SetBooster(address booster);
     event SetCustomLockDays(address indexed account, uint256 lockDays, uint256 minAmount);
     event Deposit(address indexed account, address stakeAddress, uint256 amount);
     event SmartLockReleased(address indexed sender, uint256 indexed slot);
@@ -58,11 +62,13 @@ contract WomDepositor is Ownable {
     constructor(
         address _wom,
         address _staker,
-        address _minter
+        address _minter,
+        address _booster
     ) public {
         wom = _wom;
         staker = _staker;
         minter = _minter;
+        booster = _booster;
     }
 
     function setLockConfig(uint256 _lockDays, uint256 _smartLockPeriod) external onlyOwner {
@@ -70,6 +76,13 @@ contract WomDepositor is Ownable {
         smartLockPeriod = _smartLockPeriod;
 
         emit SetLockConfig(_lockDays, _smartLockPeriod);
+    }
+
+    function setBooster(address _booster, uint256 _earmarkPid) external onlyOwner {
+        booster = _booster;
+        earmarkPid = _earmarkPid;
+
+        emit SetBooster(_booster);
     }
 
     function updateMinterOperator() external onlyOwner {
@@ -156,9 +169,10 @@ contract WomDepositor is Ownable {
             emit SmartLockCheck(msg.sender, checkOldSlot, lockedCustomSlots[checkOldSlot]);
         }
 
-        if (lastLockAt + smartLockPeriod > block.timestamp && customLockDays[msg.sender] == 0) {
+        if (executing || (lastLockAt + smartLockPeriod > block.timestamp && customLockDays[msg.sender] == 0)) {
             return;
         }
+        executing = true;
 
         uint256 slot = currentSlot;
         currentSlot = currentSlot.add(1);
@@ -173,6 +187,10 @@ contract WomDepositor is Ownable {
             amountToLock = IERC20(wom).balanceOf(address(this));
         }
 
+        if (IERC20(wom).balanceOf(staker) > 0) {
+            IBooster(booster).earmarkRewards(earmarkPid);
+        }
+
         IERC20(wom).safeTransfer(staker, amountToLock);
         IStaker(staker).lock(senderLockDays);
 
@@ -180,6 +198,7 @@ contract WomDepositor is Ownable {
 
         lastLockAt = block.timestamp;
 
+        executing = false;
         emit SmartLock(msg.sender, customLockDays[msg.sender] > 0, slot, amountToLock, senderLockDays, currentSlot, checkOldSlot);
     }
 

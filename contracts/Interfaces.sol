@@ -143,4 +143,5 @@ interface IBooster {
     function poolLength() external view returns (uint256);
     function poolInfo(uint256 _pid) external view returns(address lptoken, address token, address gauge, address crvRewards, bool shutdown);
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
+    function earmarkRewards(uint256 _pid) external returns(bool);
 }

@@ -798,6 +798,8 @@ describe("Booster", () => {
             tx = await booster.connect(daoSigner).shutdownPool(0);
             await tx.wait();
 
+            await contracts.crvDepositor.connect(daoSigner).setBooster(booster.address, 1);
+
             pool = await booster.poolInfo(0);
 
             expect(pool.shutdown).to.equal(true);

@@ -389,7 +389,7 @@ describe("WomDepositor", () => {
             hre,
             new WomDepositor__factory(deployer),
             "WomDepositor",
-            [mocks.crv.address, voterProxy.address, contracts.cvxCrv.address],
+            [mocks.crv.address, voterProxy.address, contracts.cvxCrv.address, contracts.booster.address],
             {},
             true,
             1,

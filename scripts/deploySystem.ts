@@ -461,7 +461,7 @@ async function deployFirstStage(
         hre,
         new WomDepositor__factory(deployer),
         "WomDepositor",
-        [token, voterProxy.address, cvxCrv.address],
+        [token, voterProxy.address, cvxCrv.address, booster.address],
         {},
         debug,
         waitForBlocks,
