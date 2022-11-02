@@ -459,6 +459,8 @@ describe("WmxVestedEscrow", () => {
             aliceLockedBefore = await vestedEscrowLockOnly.totalLocked(aliceAddress);
             let aliceClaimedBefore = await vestedEscrowLockOnly.totalClaimed(aliceAddress);
 
+            await expect(vestedEscrowLockOnly.connect(alice).transferVestedTokensShare(danAddress, simpleToExactAmount(1.05))).to.be.revertedWith(">pending");
+
             tx = await vestedEscrowLockOnly.connect(alice).transferVestedTokensShare(danAddress, simpleToExactAmount(0.05)).then(tx => tx.wait(1));
             await increaseTime(1);
             amountToTransfer = aliceLockedBefore.mul(simpleToExactAmount(0.05)).div(simpleToExactAmount(1));
@@ -495,6 +497,12 @@ describe("WmxVestedEscrow", () => {
             bobLockedBefore = await vestedEscrowLockOnly.totalLocked(bobAddress);
             let bobPendingBefore = await vestedEscrowLockOnly.totalPending(bobAddress);
 
+            await expect(vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(eveAddress, simpleToExactAmount(110))).to.be.revertedWith(">pending");
+            await expect(vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(eveAddress, simpleToExactAmount(100))).to.be.revertedWith(">pending");
+            await expect(vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(eveAddress, simpleToExactAmount(90))).to.be.revertedWith(">pending");
+            await expect(vestedEscrowLockOnly.connect(eve).transferVestedTokensAmount(bobAddress, simpleToExactAmount(50))).to.be.revertedWith("panic code 0x12");
+            await expect(vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(bobAddress, simpleToExactAmount(50))).to.be.revertedWith("Cannot stake 0");
+
             tx = await vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(eveAddress, simpleToExactAmount(50)).then(tx => tx.wait(1));
             await increaseTime(1);
             const transferVestedTokenShare = tx.events.filter(e => e.event === 'TransferVestedTokenShare')[0];
@@ -508,7 +516,7 @@ describe("WmxVestedEscrow", () => {
             expect(await vestedEscrowLockOnly.available(bobAddress)).gte('1190022400312');
             expect(await vestedEscrowLockOnly.available(bobAddress)).lte('2380044911189');
             expect(await vestedEscrowLockOnly.available(eveAddress)).gte('1653439754888');
-            expect(await vestedEscrowLockOnly.available(eveAddress)).lte('1653439809567');
+            expect(await vestedEscrowLockOnly.available(eveAddress)).lte('3306879728491');
 
             expect(
                 (await vestedEscrowLockOnly.totalLocked(bobAddress)).add(await vestedEscrowLockOnly.totalLocked(eveAddress))
