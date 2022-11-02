@@ -6,7 +6,7 @@ import {
     getMockDistro,
     getMockMultisigs
 } from "../scripts/deployMocks";
-import {SystemDeployed, deploy, updateDistributionByTokens} from "../scripts/deploySystem";
+import {SystemDeployed, deploy} from "../scripts/deploySystem";
 import { increaseTime } from "../test-utils/time";
 import { ONE_HOUR, ONE_WEEK, ZERO_ADDRESS, DEAD_ADDRESS, MAX_UINT256 } from "../test-utils/constants";
 import { simpleToExactAmount } from "../test-utils/math";
