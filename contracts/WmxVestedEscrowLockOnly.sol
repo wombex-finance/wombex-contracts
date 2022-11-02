@@ -250,9 +250,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
         uint256 senderPending = totalLocked[msg.sender].sub(totalClaimed[msg.sender]);
         require(senderPending >= amount, ">pending");
 
-        uint256 pendingShare = amount.mul(1 ether).div(totalLocked[msg.sender]);
-
-        uint256 claimedAmountToTransfer = totalClaimed[msg.sender].mul(pendingShare).div(1 ether);
+        uint256 claimedAmountToTransfer = totalClaimed[msg.sender].mul(_share).div(1 ether);
 
         totalLocked[msg.sender] = totalLocked[msg.sender].sub(amount);
         totalClaimed[msg.sender] = totalClaimed[msg.sender].sub(claimedAmountToTransfer);
