@@ -42,6 +42,7 @@ contract Booster{
 
     uint256 public penaltyShare = 0;
     uint256 public earmarkIncentive;
+    bool public earmarkOnDeposit;
 
     uint256 public minMintRatio;
     uint256 public maxMintRatio;
@@ -91,6 +92,7 @@ contract Booster{
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
     event MintRatioUpdated(uint256 mintRatio);
     event SetEarmarkIncentive(uint256 earmarkIncentive);
+    event SetEarmarkOnDeposit(bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
     event FeeInfoChanged(address feeToken, bool active);
     event TokenDistributionUpdate(address indexed token, address indexed distro, uint256 share, bool callQueue);
@@ -342,6 +344,16 @@ contract Booster{
         emit SetEarmarkIncentive(_earmarkIncentive);
     }
 
+    /**
+     * @notice Fee manager can set earmarkOnDeposit flag
+     * @param _earmarkOnDeposit   boolean that defines _earmarkRewards calling on pool deposit or withdraw
+     */
+    function setEarmarkOnDeposit(bool _earmarkOnDeposit) external{
+        require(msg.sender==feeManager, "!auth");
+        earmarkOnDeposit = _earmarkOnDeposit;
+        emit SetEarmarkOnDeposit(_earmarkOnDeposit);
+    }
+
     /// END SETTER SECTION ///
 
     /**
@@ -504,6 +516,10 @@ contract Booster{
         IStaker(voterProxy).deposit(lptoken, gauge);
         _writePendingRewards(lptoken, rewardBalancesBefore);
 
+        if (earmarkOnDeposit) {
+            _earmarkRewards(_pid);
+        }
+
         address token = pool.token;
         if(_stake){
             //mint here and send to rewards on user behalf
@@ -550,6 +566,10 @@ contract Booster{
             uint256[] memory rewardBalancesBefore = getPendingRewards(lptoken);
             IStaker(voterProxy).withdrawLp(lptoken, gauge, _amount);
             _writePendingRewards(lptoken, rewardBalancesBefore);
+
+            if (earmarkOnDeposit) {
+                _earmarkRewards(_pid);
+            }
         }
 
         //return lp tokens

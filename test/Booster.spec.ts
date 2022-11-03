@@ -16,11 +16,10 @@ import {
     MockERC20__factory,
     BoosterMigrator,
     BoosterMigrator__factory,
-    MockNewBooster__factory,
     DepositToken__factory,
     Booster__factory,
     Asset,
-    Asset__factory,
+    Asset__factory, DepositorMigrator, DepositorMigrator__factory, WomDepositor__factory,
 } from "../types/generated";
 import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
@@ -789,14 +788,11 @@ describe("Booster", () => {
             let balanceBefore = await crvRewards.balanceOf(bobAddress);
 
             const amount = ethers.utils.parseEther("1000");
-            let tx = await mocks.lptoken.connect(bob).approve(booster.address, amount);
-            await tx.wait();
-            tx = await booster.connect(bob).deposit(0, amount, true);
-            await tx.wait();
+            await mocks.lptoken.connect(bob).approve(booster.address, amount.mul(3)).then(tx => tx.wait());
+            await booster.connect(bob).deposit(0, amount, true).then(tx => tx.wait());
             expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.add(amount));
 
-            tx = await booster.connect(daoSigner).shutdownPool(0);
-            await tx.wait();
+            await booster.connect(daoSigner).shutdownPool(0).then(tx => tx.wait());
 
             await contracts.crvDepositor.connect(daoSigner).setBooster(booster.address, 1);
 
@@ -805,14 +801,12 @@ describe("Booster", () => {
             expect(pool.shutdown).to.equal(true);
 
             balanceBefore = await crvRewards.balanceOf(bobAddress);
-            tx = await crvRewards.connect(bob).withdrawAndUnwrap(amount.div(2), true);
-            await tx.wait();
+            await crvRewards.connect(bob).withdrawAndUnwrap(amount.div(2), true).then(tx => tx.wait());
             expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.sub(amount.div(2)));
 
             const poolLength = await booster.poolLength();
 
-            tx = await booster.connect(daoSigner).addCreatedPool(pool.lptoken, pool.gauge, pool.token, pool.crvRewards);
-            await waitForTx(tx, true, 1);
+            await booster.connect(daoSigner).addCreatedPool(pool.lptoken, pool.gauge, pool.token, pool.crvRewards).then(tx => tx.wait());
 
             expect(poolLength.add(1)).to.equal(await booster.poolLength());
 
@@ -829,15 +823,29 @@ describe("Booster", () => {
 
             await expect(booster.connect(bob).deposit(0, amount, true)).to.revertedWith("pool is closed");
 
-            tx = await mocks.lptoken.connect(bob).approve(booster.address, amount);
-            await tx.wait();
-            tx = await booster.connect(bob).deposit(poolLength, amount, true);
-            await tx.wait();
+            let tx = await booster.connect(bob).deposit(poolLength, amount, true).then(tx => tx.wait());
+            let earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards')[0];
+            expect(earmarkRewards).eq(undefined);
+
+            await booster.connect(daoSigner).setEarmarkOnDeposit(true).then(tx => tx.wait());
+
+            await increaseTime(60 * 60 * 24);
+
+            tx = await booster.connect(bob).deposit(poolLength, amount, true).then(tx => tx.wait());
+            earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards')[0];
+            expect(earmarkRewards.args.amount).gt(0);
+
+            await increaseTime(60 * 60 * 24);
+
+            tx = await crvRewards.withdrawAndUnwrap(amount, true).then(tx => tx.wait());
+            earmarkRewards = getCrvEarmarkReward(tx, booster);
+            expect(earmarkRewards['amount']).gt(0);
+
+            await booster.connect(daoSigner).setEarmarkOnDeposit(false).then(tx => tx.wait());
 
             expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.add(amount));
 
-            tx = await booster.connect(daoSigner).shutdownPool(poolLength);
-            await tx.wait();
+            await booster.connect(daoSigner).shutdownPool(poolLength).then(tx => tx.wait());
         });
 
         it("force shutdown", async () => {
@@ -1035,7 +1043,29 @@ describe("Booster", () => {
                 }
             }
 
+            const depositorMigrator = await deployContract<DepositorMigrator>(
+                hre,
+                new DepositorMigrator__factory(deployer),
+                "DepositorMigrator",
+                [contracts.crvDepositor.address],
+                {},
+                true,
+                1,
+            );
+
+            await contracts.crvDepositor.connect(daoSigner).transferOwnership(depositorMigrator.address).then(tx => tx.wait(1));
+            await contracts.voterProxy.connect(daoSigner).setOwner(depositorMigrator.address).then(tx => tx.wait(1));
+
+            migrateTx = await depositorMigrator.migrate().then(tx => tx.wait(1));
+            const migrated = migrateTx.events.filter(e => e.event === 'Migrated')[0];
+            contracts.crvDepositor = WomDepositor__factory.connect(migrated.args.newDepositor, deployer);
+
             console.log('earmarkRewards');
+            await expect(newBoosterContract.earmarkRewards(lastPid)).to.be.revertedWith("!auth");
+
+            await contracts.cvxStakingProxy.connect(daoSigner).setConfig(contracts.crvDepositor.address, contracts.cvxLocker.address).then(tx => tx.wait(1));
+            await contracts.cvxStakingProxy.setApprovals().then(tx => tx.wait(1));
+
             tx = await newBoosterContract.earmarkRewards(lastPid);
             await tx.wait();
 

@@ -114,6 +114,8 @@ interface IStaker{
     function depositor() external view returns (address);
     function execute(address _to, uint256 _value, bytes calldata _data) external returns (bool, bytes memory);
     function setVote(bytes32 hash, bool valid) external;
+    function setDepositor(address _depositor) external;
+    function setOwner(address _owner) external;
 }
 
 interface IPool {
@@ -140,8 +142,10 @@ interface IMasterWombatV2 {
 }
 
 interface IBooster {
+    function owner() external view returns (address);
     function poolLength() external view returns (uint256);
     function poolInfo(uint256 _pid) external view returns(address lptoken, address token, address gauge, address crvRewards, bool shutdown);
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
     function earmarkRewards(uint256 _pid) external returns(bool);
+    function setOwner(address _owner) external;
 }

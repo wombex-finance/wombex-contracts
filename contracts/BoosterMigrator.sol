@@ -23,6 +23,7 @@ contract BoosterMigrator is Ownable {
 
     function migrate() external onlyOwner {
         uint256 poolLen = oldBooster.poolLength();
+        uint256 activePoolLen = 0;
 
         uint256[] memory lpBalances = new uint256[](poolLen);
         for (uint256 i = 0; i < poolLen; i++) {
@@ -32,6 +33,7 @@ contract BoosterMigrator is Ownable {
             }
             oldBooster.earmarkRewards(i);
             lpBalances[i] = IERC20(lptoken).balanceOf(address(oldBooster));
+            activePoolLen++;
         }
 
         IStaker voterProxy = IStaker(oldBooster.voterProxy());
@@ -67,6 +69,8 @@ contract BoosterMigrator is Ownable {
 
             newBooster.addCreatedPool(lptoken, gauge, token, rewards);
         }
+
+        require(newBooster.poolLength() == activePoolLen, "active_pool_len");
 
         address[] memory distroTokens = oldBooster.distributionTokenList();
         for (uint256 i = 0; i < distroTokens.length; i++) {

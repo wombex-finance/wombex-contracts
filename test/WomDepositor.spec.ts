@@ -6,12 +6,12 @@ import {
     getMockDistro,
     getMockMultisigs
 } from "../scripts/deployMocks";
-import {SystemDeployed, deploy, updateDistributionByTokens} from "../scripts/deploySystem";
+import {SystemDeployed, deploy} from "../scripts/deploySystem";
 import { increaseTime } from "../test-utils/time";
-import { ONE_HOUR, ONE_WEEK, ZERO_ADDRESS, DEAD_ADDRESS, MAX_UINT256 } from "../test-utils/constants";
+import { ONE_HOUR, ONE_WEEK } from "../test-utils/constants";
 import { simpleToExactAmount } from "../test-utils/math";
 import {
-    BaseRewardPool,
+    BaseRewardPool, DepositorMigrator, DepositorMigrator__factory,
     VeWom, VoterProxy,
     WomDepositor, WomDepositor__factory
 } from "../types/generated";
@@ -381,28 +381,36 @@ describe("WomDepositor", () => {
         expect(await womDepositor.slotEnds(2)).gt(await womDepositor.slotEnds(3));
     });
 
-    it("womDepositor", async () => {
+    it("migrate womDepositor", async () => {
         expect(await voterProxy.depositor()).to.be.eq(womDepositor.address);
         expect(await contracts.cvxCrv.operator()).to.be.eq(womDepositor.address);
 
-        const newWomDepositor = await deployContract<WomDepositor>(
+        const depositorMigrator = await deployContract<DepositorMigrator>(
             hre,
-            new WomDepositor__factory(deployer),
-            "WomDepositor",
-            [mocks.crv.address, voterProxy.address, contracts.cvxCrv.address, contracts.booster.address],
+            new DepositorMigrator__factory(deployer),
+            "DepositorMigrator",
+            [womDepositor.address],
             {},
             true,
             1,
         );
-        await newWomDepositor.setLockConfig(1461, 24 * 60 * 60).then(tx => tx.wait(1));
-        await voterProxy.connect(daoSigner).setDepositor(newWomDepositor.address).then(tx => tx.wait(1));
+
+        await womDepositor.connect(daoSigner).transferOwnership(depositorMigrator.address).then(tx => tx.wait(1));
+        await voterProxy.connect(daoSigner).setOwner(depositorMigrator.address).then(tx => tx.wait(1));
+
+        const tx = await depositorMigrator.migrate().then(tx => tx.wait(1));
+        const migrated = tx.events.filter(e => e.event === 'Migrated')[0];
+        const newWomDepositor = WomDepositor__factory.connect(migrated.args.newDepositor, deployer);
+
+        expect(await newWomDepositor.lockDays()).to.be.eq(await womDepositor.lockDays());
+        expect(await newWomDepositor.smartLockPeriod()).to.be.eq(await womDepositor.smartLockPeriod());
+
+        expect(await voterProxy.owner()).to.be.eq(await daoSigner.getAddress());
+        expect(await womDepositor.owner()).to.be.eq(await daoSigner.getAddress());
+        expect(await newWomDepositor.owner()).to.be.eq(await daoSigner.getAddress());
 
         expect(await voterProxy.depositor()).to.be.eq(newWomDepositor.address);
-        expect(await contracts.cvxCrv.operator()).to.be.eq(womDepositor.address);
         expect(await womDepositor.minter()).to.be.eq(contracts.cvxCrv.address);
-
-        await womDepositor.connect(daoSigner).updateMinterOperator().then(tx => tx.wait(1));
-
         expect(await contracts.cvxCrv.operator()).to.be.eq(newWomDepositor.address);
 
         const amountToDeposit = simpleToExactAmount(10);
