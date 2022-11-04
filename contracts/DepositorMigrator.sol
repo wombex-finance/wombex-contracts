@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
 
-import "./WomDepositor.sol";
+import "./WomDepositorV2.sol";
 
 contract DepositorMigrator is Ownable {
 
@@ -9,11 +9,13 @@ contract DepositorMigrator is Ownable {
     event CallContract(address indexed contractAddress, bytes callData, bool success, bytes returnData);
 
     WomDepositor public oldWomDepositor;
+    address[] public oldCustomLockAccounts;
     IStaker public voterProxy;
     address public depositorOwner;
 
-    constructor(WomDepositor _oldWomDepositor) public {
+    constructor(WomDepositor _oldWomDepositor, address[] memory _oldCustomLockAccounts) public {
         oldWomDepositor = _oldWomDepositor;
+        oldCustomLockAccounts = _oldCustomLockAccounts;
         depositorOwner = _oldWomDepositor.owner();
         voterProxy = IStaker(_oldWomDepositor.staker());
     }
@@ -21,11 +23,13 @@ contract DepositorMigrator is Ownable {
     function migrate() external onlyOwner {
         address booster = voterProxy.operator();
 
-        WomDepositor newDepositor = new WomDepositor(
+        WomDepositorV2 newDepositor = new WomDepositorV2(
             oldWomDepositor.wom(),
             address(voterProxy),
             oldWomDepositor.minter(),
-            booster
+            booster,
+            address(oldWomDepositor),
+            oldCustomLockAccounts
         );
         newDepositor.setLockConfig(oldWomDepositor.lockDays(), oldWomDepositor.smartLockPeriod());
 

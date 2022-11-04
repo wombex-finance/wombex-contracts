@@ -151,7 +151,7 @@ contract WomDepositor is Ownable {
      * @notice  Trying to releaseLock every time on deposit and lock cumulative balance once in smartLockPeriod.
      * @param _amount  Amount WOM to deposit
      */
-    function _smartLock(uint256 _amount) internal {
+    function _smartLock(uint256 _amount) internal virtual {
         IERC20(wom).transferFrom(msg.sender, address(this), _amount);
 
         if (currentSlot > 1 && checkOldSlot >= currentSlot - 1) {

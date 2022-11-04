@@ -13,7 +13,7 @@ import { simpleToExactAmount } from "../test-utils/math";
 import {
     BaseRewardPool, DepositorMigrator, DepositorMigrator__factory,
     VeWom, VoterProxy,
-    WomDepositor, WomDepositor__factory
+    WomDepositor, WomDepositor__factory, WomDepositorV2__factory
 } from "../types/generated";
 import {deployContract} from "../tasks/utils";
 
@@ -382,6 +382,14 @@ describe("WomDepositor", () => {
     });
 
     it("migrate womDepositor", async () => {
+        const stakeAddress = contracts.cvxCrvRewards.address;
+        await womDepositor.connect(daoSigner).setLockConfig(14, 60);
+
+        for(let i = 0; i < 13; i++) {
+            await increaseTime(60);
+            await womDepositor.connect(alice)["deposit(uint256,address)"](simpleToExactAmount(1), stakeAddress).then(r => r.wait(1));
+        }
+
         expect(await voterProxy.depositor()).to.be.eq(womDepositor.address);
         expect(await contracts.cvxCrv.operator()).to.be.eq(womDepositor.address);
 
@@ -389,7 +397,7 @@ describe("WomDepositor", () => {
             hre,
             new DepositorMigrator__factory(deployer),
             "DepositorMigrator",
-            [womDepositor.address],
+            [womDepositor.address, [bobAddress]],
             {},
             true,
             1,
@@ -398,10 +406,12 @@ describe("WomDepositor", () => {
         await womDepositor.connect(daoSigner).transferOwnership(depositorMigrator.address).then(tx => tx.wait(1));
         await voterProxy.connect(daoSigner).setOwner(depositorMigrator.address).then(tx => tx.wait(1));
 
-        const tx = await depositorMigrator.migrate().then(tx => tx.wait(1));
+        let tx = await depositorMigrator.migrate().then(tx => tx.wait(1));
         const migrated = tx.events.filter(e => e.event === 'Migrated')[0];
-        const newWomDepositor = WomDepositor__factory.connect(migrated.args.newDepositor, deployer);
+        const newWomDepositor = WomDepositorV2__factory.connect(migrated.args.newDepositor, deployer);
 
+        expect(await newWomDepositor.getOldCustomLockAccounts().then(arr => arr.length)).to.be.eq(1);
+        expect(await newWomDepositor.getOldCustomLockAccounts().then(arr => arr[0])).to.be.eq(bobAddress);
         expect(await newWomDepositor.lockDays()).to.be.eq(await womDepositor.lockDays());
         expect(await newWomDepositor.smartLockPeriod()).to.be.eq(await womDepositor.smartLockPeriod());
 
@@ -415,15 +425,48 @@ describe("WomDepositor", () => {
 
         const amountToDeposit = simpleToExactAmount(10);
         let cvxCrvBalanceBefore = await cvxCrvRewards.balanceOf(aliceAddress);
-        const stakeAddress = contracts.cvxCrvRewards.address;
+
+        expect(await womDepositor.currentSlot()).eq(15);
+        expect(await newWomDepositor.currentSlot()).eq(0);
+
+        await newWomDepositor.migrate().then(tx => tx.wait(1));
+
+        expect(await newWomDepositor.currentSlot()).eq(15);
+        expect(await newWomDepositor.checkOldSlot()).eq(await womDepositor.checkOldSlot());
+        expect(await newWomDepositor.lastLockAt()).eq(await womDepositor.lastLockAt());
+        for(let i = 0; i < 15; i++) {
+            expect(await newWomDepositor.slotEnds(i)).eq(await womDepositor.slotEnds(i));
+            expect(await newWomDepositor.lockedCustomSlots(i)).eq(await womDepositor.lockedCustomSlots(i));
+            expect(await newWomDepositor.releasedCustomSlots(i)).eq(await womDepositor.releasedCustomSlots(i));
+        }
+        expect(await newWomDepositor.customLockDays(bobAddress)).eq(await womDepositor.customLockDays(bobAddress));
+        expect(await newWomDepositor.customLockMinAmount(bobAddress)).eq(await womDepositor.customLockMinAmount(bobAddress));
+        let customLockLength = await newWomDepositor.getCustomLockSlotsLength(bobAddress);
+        expect(customLockLength).eq(await womDepositor.getCustomLockSlotsLength(bobAddress));
+        for (let i = 0; i < parseInt(customLockLength.toString()); i++) {
+            const oldCustomLock = await womDepositor.customLockSlots(bobAddress, i);
+            const newCustomLock = await newWomDepositor.customLockSlots(bobAddress, i);
+            expect(oldCustomLock.amount).eq(newCustomLock.amount);
+            expect(oldCustomLock.number).eq(newCustomLock.number);
+        }
 
         await mocks.crv.connect(alice).approve(womDepositor.address, await mocks.crv.balanceOf(aliceAddress));
         await expect(womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress)).to.be.revertedWith("!auth");
 
+        await increaseTime(60);
+
         await mocks.crv.connect(alice).approve(newWomDepositor.address, await mocks.crv.balanceOf(aliceAddress));
         await newWomDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
 
+        expect(await newWomDepositor.currentSlot()).eq(16);
+
         expect(await cvxCrvRewards.balanceOf(aliceAddress)).eq(cvxCrvBalanceBefore.add(amountToDeposit));
+
+        await increaseTime(ONE_WEEK.mul(2));
+
+        await newWomDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
+
+        expect(await newWomDepositor.currentSlot()).eq(16);
     });
 
     async function getTxTimestamp(tx) {
