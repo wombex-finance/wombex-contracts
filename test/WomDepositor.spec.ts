@@ -188,8 +188,15 @@ describe("WomDepositor", () => {
 
         expect(await womDepositor.customLockDays(bobAddress)).eq(0);
         await expect(womDepositor.setCustomLock(bobAddress, 7, simpleToExactAmount(100))).to.be.revertedWith("Ownable: caller is not the owner");
+        await womDepositor.connect(daoSigner).setCustomLock(bobAddress, 5, simpleToExactAmount(100));
+        expect(await womDepositor.customLockDays(bobAddress)).eq(5);
+        expect(await womDepositor.getCustomLockAccounts().then(arr => arr.length)).eq(1);
+        expect(await womDepositor.getCustomLockAccounts().then(arr => arr[0])).eq(bobAddress);
+
         await womDepositor.connect(daoSigner).setCustomLock(bobAddress, 7, simpleToExactAmount(100));
         expect(await womDepositor.customLockDays(bobAddress)).eq(7);
+        expect(await womDepositor.getCustomLockAccounts().then(arr => arr.length)).eq(1);
+        expect(await womDepositor.getCustomLockAccounts().then(arr => arr[0])).eq(bobAddress);
 
         await expect(womDepositor.connect(bob)["depositCustomLock(uint256)"](simpleToExactAmount(10)), "<customLockMinAmount").to.be.revertedWith("<customLockMinAmount");
         await expect(womDepositor.connect(alice)["depositCustomLock(uint256)"](simpleToExactAmount(100)), "!custom").to.be.revertedWith("!custom");

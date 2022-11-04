@@ -38,6 +38,8 @@ contract WomDepositor is Ownable {
     mapping(uint256 => bool) public lockedCustomSlots;
     mapping(uint256 => bool) public releasedCustomSlots;
 
+    address[] public customLockAccounts;
+
     struct SlotInfo {
         uint256 number;
         uint256 amount;
@@ -98,6 +100,9 @@ contract WomDepositor is Ownable {
      * @param _minAmount    Minimum amount to lock by spender
      */
     function setCustomLock(address _account, uint256 _lockDays, uint256 _minAmount) external onlyOwner {
+        if (customLockMinAmount[_account] == 0) {
+            customLockAccounts.push(_account);
+        }
         customLockDays[_account] = _lockDays;
         customLockMinAmount[_account] = _minAmount;
 
@@ -238,6 +243,10 @@ contract WomDepositor is Ownable {
         currentSlot = currentSlot.sub(1);
 
         emit ReleaseCustomLock(msg.sender, _index, slot.number, slot.amount);
+    }
+
+    function getCustomLockAccounts() public view returns (address[] memory) {
+        return customLockAccounts;
     }
 
     function getCustomLockSlotsLength(address _account) public view returns (uint256) {
