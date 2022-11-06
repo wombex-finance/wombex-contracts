@@ -1047,12 +1047,13 @@ describe("Booster", () => {
                 hre,
                 new DepositorMigrator__factory(deployer),
                 "DepositorMigrator",
-                [contracts.crvDepositor.address],
+                [contracts.crvDepositor.address, []],
                 {},
                 true,
                 1,
             );
 
+            await contracts.crvDepositor.connect(daoSigner).setBooster(newBoosterContract.address, 1).then(tx => tx.wait(1));
             await contracts.crvDepositor.connect(daoSigner).transferOwnership(depositorMigrator.address).then(tx => tx.wait(1));
             await contracts.voterProxy.connect(daoSigner).setOwner(depositorMigrator.address).then(tx => tx.wait(1));
 
