@@ -4,7 +4,6 @@ pragma solidity 0.8.11;
 import {IWmxLocker} from "./Interfaces.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-import { SafeMath } from "@openzeppelin/contracts-0.8/utils/math/SafeMath.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts-0.8/security/ReentrancyGuard.sol";
 import {WmxMath} from "./WmxMath.sol";
 
@@ -21,7 +20,6 @@ import {WmxMath} from "./WmxMath.sol";
  */
 contract WmxVestedEscrowLockOnly is ReentrancyGuard {
     using SafeERC20 for IERC20;
-    using SafeMath for uint256;
 
     IERC20 public immutable rewardToken;
 
@@ -201,6 +199,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
      * @param _recipient  Address to receive locked rewards.
      */
     function transferVestedTokens(address _recipient) external nonReentrant {
+        require(totalLocked[_recipient] == 0, "!zero_recipient");
         totalLocked[_recipient] = totalLocked[msg.sender];
         totalClaimed[_recipient] = totalClaimed[msg.sender];
 
@@ -215,7 +214,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
      * @param _recipient Recipient to lookup
      */
     function totalPending(address _recipient) public view returns (uint256) {
-        return totalLocked[_recipient].sub(totalClaimed[_recipient]);
+        return totalLocked[_recipient] - totalClaimed[_recipient];
     }
 
     /**
@@ -231,8 +230,8 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
      * @param _recipient  Address to receive locked rewards.
      */
     function transferVestedTokensAmount(address _recipient, uint256 _amount) external nonReentrant {
-        uint256 timeDiff = endTime.sub(block.timestamp);
-        uint256 share = _amount.mul(totalTime).div(timeDiff).mul(1 ether).div(totalLocked[msg.sender]);
+        uint256 timeDiff = endTime - block.timestamp;
+        uint256 share = (((_amount * totalTime) / timeDiff) * 1 ether) / totalLocked[msg.sender];
 
         _transferVestedTokensShare(_recipient, share);
     }
@@ -240,23 +239,24 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
     function _transferVestedTokensShare(address _recipient, uint256 _share) internal {
         require(block.timestamp < endTime, "end");
         require(_share > 0, "zero");
+        require(msg.sender != _recipient, "sender_recipient");
 
         _claim(msg.sender);
         if (totalLocked[_recipient] > 0) {
             _claim(_recipient);
         }
 
-        uint256 amount = totalLocked[msg.sender].mul(_share).div(1 ether);
-        uint256 senderPending = totalLocked[msg.sender].sub(totalClaimed[msg.sender]);
+        uint256 amount = (totalLocked[msg.sender] * _share) / 1 ether;
+        uint256 senderPending = totalLocked[msg.sender] - totalClaimed[msg.sender];
         require(senderPending >= amount, ">pending");
 
-        uint256 claimedAmountToTransfer = totalClaimed[msg.sender].mul(_share).div(1 ether);
+        uint256 claimedAmountToTransfer = (totalClaimed[msg.sender] * _share) / 1 ether;
 
-        totalLocked[msg.sender] = totalLocked[msg.sender].sub(amount);
-        totalClaimed[msg.sender] = totalClaimed[msg.sender].sub(claimedAmountToTransfer);
+        totalLocked[msg.sender] = totalLocked[msg.sender] - amount;
+        totalClaimed[msg.sender] = totalClaimed[msg.sender] - claimedAmountToTransfer;
 
-        totalLocked[_recipient] = totalLocked[_recipient].add(amount);
-        totalClaimed[_recipient] = totalClaimed[_recipient].add(claimedAmountToTransfer);
+        totalLocked[_recipient] = totalLocked[_recipient] + amount;
+        totalClaimed[_recipient] = totalClaimed[_recipient] + claimedAmountToTransfer;
 
         emit TransferVestedTokenShare(msg.sender, _recipient, amount, _share, totalLocked[msg.sender], totalLocked[_recipient]);
     }

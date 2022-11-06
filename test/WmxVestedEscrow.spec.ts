@@ -355,6 +355,7 @@ describe("WmxVestedEscrow", () => {
 
             const available = await vestedEscrowLockOnly.available(bobAddress);
 
+            await expect(vestedEscrowLockOnly.connect(dan).transferVestedTokens(bobAddress)).to.be.revertedWith("!zero_recipient");
             tx = await vestedEscrowLockOnly.connect(bob).transferVestedTokens(danAddress);
 
             await expect(tx).to.emit(vestedEscrowLockOnly, "TransferVestedToken").withArgs(bobAddress, danAddress, locked, claimed);
@@ -501,7 +502,7 @@ describe("WmxVestedEscrow", () => {
             await expect(vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(eveAddress, simpleToExactAmount(100))).to.be.revertedWith(">pending");
             await expect(vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(eveAddress, simpleToExactAmount(90))).to.be.revertedWith(">pending");
             await expect(vestedEscrowLockOnly.connect(eve).transferVestedTokensAmount(bobAddress, simpleToExactAmount(50))).to.be.revertedWith("panic code 0x12");
-            await expect(vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(bobAddress, simpleToExactAmount(50))).to.be.revertedWith("Cannot stake 0");
+            await expect(vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(bobAddress, simpleToExactAmount(50))).to.be.revertedWith("sender_recipient");
 
             tx = await vestedEscrowLockOnly.connect(bob).transferVestedTokensAmount(eveAddress, simpleToExactAmount(50)).then(tx => tx.wait(1));
             await increaseTime(1);
