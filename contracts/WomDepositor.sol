@@ -48,7 +48,7 @@ contract WomDepositor is Ownable {
 
     event UpdateOperator(address operator);
     event SetLockConfig(uint256 lockDays, uint256 smartLockPeriod);
-    event SetBooster(address booster);
+    event SetBooster(address booster, uint256 pid);
     event SetCustomLockDays(address indexed account, uint256 lockDays, uint256 minAmount);
     event Deposit(address indexed account, address stakeAddress, uint256 amount);
     event SmartLockReleased(address indexed sender, uint256 indexed slot);
@@ -84,7 +84,7 @@ contract WomDepositor is Ownable {
         booster = _booster;
         earmarkPid = _earmarkPid;
 
-        emit SetBooster(_booster);
+        emit SetBooster(_booster, _earmarkPid);
     }
 
     function updateMinterOperator() external onlyOwner {
@@ -251,5 +251,17 @@ contract WomDepositor is Ownable {
 
     function getCustomLockSlotsLength(address _account) public view returns (uint256) {
         return customLockSlots[msg.sender].length;
+    }
+
+    /**
+     * @notice  Rescue all tokens but wom from contract
+     * @param _tokens       Tokens addresses
+     * @param _recipient    Recipient address
+     */
+    function rescueTokens(address[] memory _tokens, address _recipient) public onlyOwner {
+        for (uint256 i; i < _tokens.length; i++) {
+            require(_tokens[i] != wom, "!wom");
+            IERC20(_tokens[i]).transfer(_recipient, IERC20(_tokens[i]).balanceOf(address(this)));
+        }
     }
 }

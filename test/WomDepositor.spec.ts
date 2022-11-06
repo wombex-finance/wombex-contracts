@@ -11,7 +11,7 @@ import { increaseTime } from "../test-utils/time";
 import { ONE_HOUR, ONE_WEEK } from "../test-utils/constants";
 import { simpleToExactAmount } from "../test-utils/math";
 import {
-    BaseRewardPool, DepositorMigrator, DepositorMigrator__factory,
+    BaseRewardPool, DepositorMigrator, DepositorMigrator__factory, MultiRewarderPerSec__factory,
     VeWom, VoterProxy,
     WomDepositor, WomDepositor__factory, WomDepositorV2__factory
 } from "../types/generated";
@@ -50,6 +50,9 @@ describe("WomDepositor", () => {
 
         await mocks.crv.transfer(aliceAddress, simpleToExactAmount(2000));
         await mocks.crv.transfer(bobAddress, simpleToExactAmount(2000));
+
+        await mocks.lptoken.approve(contracts.booster.address, simpleToExactAmount(2000)).then(tx => tx.wait());
+        await contracts.booster.deposit(0, simpleToExactAmount(2000), true).then(tx => tx.wait());
     });
 
     it("setLockConfig can be configured", async () => {
@@ -430,6 +433,10 @@ describe("WomDepositor", () => {
 
         const newWomDepositor = WomDepositorV2__factory.connect(migrated.args.newDepositor, deployer);
 
+        await newWomDepositor.connect(daoSigner).setBooster(contracts.booster.address, '0').then(tx => tx.wait(1));
+        await contracts.cvxStakingProxy.connect(daoSigner).setConfig(newWomDepositor.address, contracts.cvxLocker.address).then(tx => tx.wait(1));
+        await contracts.cvxStakingProxy.connect(daoSigner).setApprovals().then(tx => tx.wait(1));
+
         expect(await womDepositor.currentSlot()).eq(15);
         expect(await newWomDepositor.currentSlot()).eq(15);
 
@@ -441,6 +448,7 @@ describe("WomDepositor", () => {
         expect(await newWomDepositor.smartLockPeriod()).to.be.eq(await womDepositor.smartLockPeriod());
 
         expect(await voterProxy.owner()).to.be.eq(await daoSigner.getAddress());
+        expect(await voterProxy.depositor()).to.be.eq(newWomDepositor.address);
         expect(await womDepositor.owner()).to.be.eq(await daoSigner.getAddress());
         expect(await newWomDepositor.owner()).to.be.eq(await daoSigner.getAddress());
 
@@ -470,6 +478,8 @@ describe("WomDepositor", () => {
             expect(oldCustomLock.number).eq(newCustomLock.number);
         }
 
+        await contracts.cvx.connect(daoSigner).approve(contracts.cvxLocker.address, await contracts.cvx.balanceOf(await daoSigner.getAddress()));
+        await contracts.cvxLocker.connect(daoSigner)["lock(address,uint256)"](aliceAddress, amountToDeposit.mul(100)).then(r => r.wait(1));
 
         await mocks.crv.connect(alice).approve(womDepositor.address, await mocks.crv.balanceOf(aliceAddress));
         await expect(womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress)).to.be.revertedWith("!auth");
@@ -477,7 +487,8 @@ describe("WomDepositor", () => {
         await increaseTime(60);
 
         expect(await newWomDepositor.currentSlot()).eq(15);
-        await mocks.crv.connect(alice).approve(newWomDepositor.address, await mocks.crv.balanceOf(aliceAddress));
+        await mocks.crv.transfer(contracts.voterProxy.address, amountToDeposit).then(r => r.wait(1));
+        await mocks.crv.connect(alice).approve(newWomDepositor.address, await mocks.crv.balanceOf(aliceAddress)).then(r => r.wait(1));
         await newWomDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
 
         expect(await newWomDepositor.currentSlot()).eq(16);
@@ -489,6 +500,18 @@ describe("WomDepositor", () => {
         await newWomDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
 
         expect(await newWomDepositor.currentSlot()).eq(16);
+        const depositorWethBalance = await mocks.weth.balanceOf(newWomDepositor.address);
+        expect(depositorWethBalance).gt(0);
+
+        const daoWethBalanceBefore = await mocks.weth.balanceOf(await daoSigner.getAddress());
+
+        await expect(newWomDepositor.rescueTokens([mocks.crv.address, mocks.weth.address], await daoSigner.getAddress())).to.be.revertedWith("Ownable: caller is not the owner");
+        await expect(newWomDepositor.connect(daoSigner).rescueTokens([mocks.crv.address, mocks.weth.address], await daoSigner.getAddress())).to.be.revertedWith("!wom");
+
+        await newWomDepositor.connect(daoSigner).rescueTokens([mocks.weth.address], await daoSigner.getAddress());
+
+        expect((await mocks.weth.balanceOf(await daoSigner.getAddress())).sub(daoWethBalanceBefore)).eq(depositorWethBalance);
+        expect(await mocks.weth.balanceOf(newWomDepositor.address)).eq(0);
     });
 
     async function getTxTimestamp(tx) {
