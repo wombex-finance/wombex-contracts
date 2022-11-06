@@ -392,10 +392,12 @@ describe("WomDepositor", () => {
         const stakeAddress = contracts.cvxCrvRewards.address;
         await womDepositor.connect(daoSigner).setLockConfig(14, 60);
 
-        for(let i = 0; i < 13; i++) {
+        for(let i = 0; i < 12; i++) {
             await increaseTime(60);
             await womDepositor.connect(alice)["deposit(uint256,address)"](simpleToExactAmount(1), stakeAddress).then(r => r.wait(1));
         }
+
+        await womDepositor.connect(alice)["deposit(uint256,address)"](simpleToExactAmount(1), stakeAddress).then(r => r.wait(1));
 
         expect(await voterProxy.depositor()).to.be.eq(womDepositor.address);
         expect(await contracts.cvxCrv.operator()).to.be.eq(womDepositor.address);
@@ -413,12 +415,28 @@ describe("WomDepositor", () => {
         await womDepositor.connect(daoSigner).transferOwnership(depositorMigrator.address).then(tx => tx.wait(1));
         await voterProxy.connect(daoSigner).setOwner(depositorMigrator.address).then(tx => tx.wait(1));
 
+        const balanceBefore = await mocks.crv.balanceOf(womDepositor.address);
+        expect(balanceBefore).to.be.gt(0);
+
+        expect(await womDepositor.currentSlot()).eq(14);
+
         let tx = await depositorMigrator.migrate().then(tx => tx.wait(1));
         const migrated = tx.events.filter(e => e.event === 'Migrated')[0];
+        const logs = tx.events.filter(e => e.address.toLowerCase() === womDepositor.address.toLowerCase());
+        const earmark = logs
+            .map(l => {try { return womDepositor.interface.decodeEventLog('SmartLock', l.data, l.topics); } catch (e) {}})
+            .filter(e => e)[0];
+        expect(earmark.amountToLock, balanceBefore);
+
         const newWomDepositor = WomDepositorV2__factory.connect(migrated.args.newDepositor, deployer);
 
-        expect(await newWomDepositor.getOldCustomLockAccounts().then(arr => arr.length)).to.be.eq(1);
-        expect(await newWomDepositor.getOldCustomLockAccounts().then(arr => arr[0])).to.be.eq(bobAddress);
+        expect(await womDepositor.currentSlot()).eq(15);
+        expect(await newWomDepositor.currentSlot()).eq(15);
+
+        expect(await mocks.crv.balanceOf(womDepositor.address)).to.be.eq(0);
+
+        expect(await newWomDepositor.getCustomLockAccounts().then(arr => arr.length)).to.be.eq(1);
+        expect(await newWomDepositor.getCustomLockAccounts().then(arr => arr[0])).to.be.eq(bobAddress);
         expect(await newWomDepositor.lockDays()).to.be.eq(await womDepositor.lockDays());
         expect(await newWomDepositor.smartLockPeriod()).to.be.eq(await womDepositor.smartLockPeriod());
 
@@ -433,12 +451,7 @@ describe("WomDepositor", () => {
         const amountToDeposit = simpleToExactAmount(10);
         let cvxCrvBalanceBefore = await cvxCrvRewards.balanceOf(aliceAddress);
 
-        expect(await womDepositor.currentSlot()).eq(15);
-        expect(await newWomDepositor.currentSlot()).eq(0);
-
-        await newWomDepositor.migrate().then(tx => tx.wait(1));
-
-        expect(await newWomDepositor.currentSlot()).eq(15);
+        expect(await newWomDepositor.currentSlot()).eq(await womDepositor.currentSlot());
         expect(await newWomDepositor.checkOldSlot()).eq(await womDepositor.checkOldSlot());
         expect(await newWomDepositor.lastLockAt()).eq(await womDepositor.lastLockAt());
         for(let i = 0; i < 15; i++) {
@@ -457,11 +470,13 @@ describe("WomDepositor", () => {
             expect(oldCustomLock.number).eq(newCustomLock.number);
         }
 
+
         await mocks.crv.connect(alice).approve(womDepositor.address, await mocks.crv.balanceOf(aliceAddress));
         await expect(womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress)).to.be.revertedWith("!auth");
 
         await increaseTime(60);
 
+        expect(await newWomDepositor.currentSlot()).eq(15);
         await mocks.crv.connect(alice).approve(newWomDepositor.address, await mocks.crv.balanceOf(aliceAddress));
         await newWomDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
 

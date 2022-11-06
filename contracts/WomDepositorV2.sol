@@ -6,8 +6,9 @@ import "./WomDepositor.sol";
 contract WomDepositorV2 is WomDepositor {
     using SafeMath for uint256;
 
+    event Migrated(uint256 currentSlot, uint256 checkOldSlot, uint256 customLockAccountsLen, uint256 lockDays, uint256 smartLockPeriod, uint256 lastLockAt);
+
     WomDepositor public oldDepositor;
-    address[] public oldCustomLockAccounts;
     bool public migrated;
 
     constructor(
@@ -15,11 +16,9 @@ contract WomDepositorV2 is WomDepositor {
         address _staker,
         address _minter,
         address _booster,
-        address _oldDepositor,
-        address[] memory _oldCustomLockAccounts
+        address _oldDepositor
     ) public WomDepositor(_wom, _staker, _minter, _booster) {
         oldDepositor = WomDepositor(_oldDepositor);
-        oldCustomLockAccounts = _oldCustomLockAccounts;
     }
 
     function _smartLock(uint256 _amount) internal override {
@@ -28,7 +27,7 @@ contract WomDepositorV2 is WomDepositor {
         super._smartLock(_amount);
     }
 
-    function migrate() public {
+    function migrate() public onlyOwner {
         require(!migrated, "migrated");
 
         uint256 oldCurrentSlot = oldDepositor.currentSlot();
@@ -38,11 +37,10 @@ contract WomDepositorV2 is WomDepositor {
             currentSlot++;
         }
 
-        for (uint256 i = 0; i < oldCustomLockAccounts.length; i++) {
-            address account = oldCustomLockAccounts[i];
-            customLockDays[account] = oldDepositor.customLockDays(account);
-            customLockMinAmount[account] = oldDepositor.customLockMinAmount(account);
+        require(oldCurrentSlot == currentSlot, "!current_slot");
 
+        for (uint256 i = 0; i < customLockAccounts.length; i++) {
+            address account = customLockAccounts[i];
             uint256 length = oldDepositor.getCustomLockSlotsLength(account);
             for (uint256 j = 0; j < length; j++) {
                 (uint256 number, uint256 amount) = oldDepositor.customLockSlots(account, j);
@@ -58,9 +56,7 @@ contract WomDepositorV2 is WomDepositor {
         checkOldSlot = oldDepositor.checkOldSlot();
         lastLockAt = oldDepositor.lastLockAt();
         migrated = true;
-    }
 
-    function getOldCustomLockAccounts() external view returns (address[] memory) {
-        return oldCustomLockAccounts;
+        emit Migrated(currentSlot, checkOldSlot, customLockAccounts.length, lockDays, smartLockPeriod, lastLockAt);
     }
 }

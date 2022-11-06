@@ -23,19 +23,31 @@ contract DepositorMigrator is Ownable {
     function migrate() external onlyOwner {
         address booster = voterProxy.operator();
 
+        address wom = oldWomDepositor.wom();
+        if (IERC20(wom).balanceOf(address(oldWomDepositor)) > 0) {
+            uint256 lockPeriod = oldWomDepositor.smartLockPeriod();
+            oldWomDepositor.setLockConfig(oldWomDepositor.lockDays(), 0);
+            oldWomDepositor.deposit(0, address(0));
+            oldWomDepositor.setLockConfig(oldWomDepositor.lockDays(), lockPeriod);
+        }
+
         WomDepositorV2 newDepositor = new WomDepositorV2(
-            oldWomDepositor.wom(),
+            wom,
             address(voterProxy),
             oldWomDepositor.minter(),
             booster,
-            address(oldWomDepositor),
-            oldCustomLockAccounts
+            address(oldWomDepositor)
         );
-        newDepositor.setLockConfig(oldWomDepositor.lockDays(), oldWomDepositor.smartLockPeriod());
 
         voterProxy.setDepositor(address(newDepositor));
-
         oldWomDepositor.updateMinterOperator();
+
+        for (uint256 i; i < oldCustomLockAccounts.length; i++) {
+            address account = oldCustomLockAccounts[i];
+            newDepositor.setCustomLock(account, oldWomDepositor.customLockDays(account), oldWomDepositor.customLockMinAmount(account));
+        }
+
+        newDepositor.migrate();
 
         oldWomDepositor.transferOwnership(depositorOwner);
         newDepositor.transferOwnership(depositorOwner);
