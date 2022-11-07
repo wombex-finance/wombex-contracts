@@ -98,7 +98,8 @@ contract Booster{
     event TokenDistributionUpdate(address indexed token, address indexed distro, uint256 share, bool callQueue);
     event DistributionUpdate(address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
 
-    event EarmarkRewards(address indexed lpToken, address indexed rewardToken, uint256 amount);
+    event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
+    event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
     event RewardClaimed(uint256 indexed pid, address indexed user, uint256 amount, bool indexed lock, uint256 mintAmount, uint256 penalty);
 
     /**
@@ -673,14 +674,11 @@ contract Booster{
         PoolInfo storage pool = poolInfo[_pid];
         require(pool.shutdown == false, "pool is closed");
 
-        uint256 poolLen = poolInfo.length;
-
-        address gauge = pool.gauge;
         //claim crv/wom and bonus tokens
-        address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, gauge);
+        address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, pool.gauge);
         uint256 tLen = tokens.length;
         uint256[] memory totalPendingRewards = new uint256[](tLen);
-        for (uint256 i = 0; i < poolLen; i++) {
+        for (uint256 i = 0; i < poolInfo.length; i++) {
             if (poolInfo[i].shutdown) {
                 continue;
             }
@@ -689,7 +687,7 @@ contract Booster{
             }
         }
 
-        IStaker(voterProxy).claimCrv(pool.lptoken, gauge);
+        IStaker(voterProxy).claimCrv(pool.lptoken, pool.gauge);
 
         for (uint256 i = 0; i < tLen; i++) {
             IERC20 token = IERC20(tokens[i]);
@@ -699,7 +697,7 @@ contract Booster{
                 lpPendingRewards[pool.lptoken][tokens[i]] = 0;
             }
 
-            emit EarmarkRewards(pool.lptoken, address(token), balance);
+            emit EarmarkRewards(_pid, pool.lptoken, address(token), balance);
 
             if (balance == 0) {
                 continue;
@@ -721,13 +719,16 @@ contract Booster{
                 } else {
                     token.safeTransfer(tDistro.distro, amount);
                 }
+                emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), amount, tDistro.distro, tDistro.callQueue);
                 sentSum = sentSum.add(amount);
             }
             if (earmarkIncentiveAmount > 0) {
                 token.safeTransfer(msg.sender, earmarkIncentiveAmount);
+                emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), earmarkIncentiveAmount, msg.sender, false);
             }
             //send crv to lp provider reward contract
             IRewards(pool.crvRewards).queueNewRewards(address(token), balance.sub(sentSum));
+            emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), balance.sub(sentSum), pool.crvRewards, true);
         }
     }
 
