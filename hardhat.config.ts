@@ -70,7 +70,8 @@ const config: HardhatUserConfig = {
             accounts,
         },
         forking: {
-            url: process.env.NODE_URL || "",
+            url: process.env.NODE_URL || "http://127.0.0.1:8545/",
+            blockGasLimit: 100e6
         },
         rinkeby: { url: process.env.NODE_URL || "", gasPrice: 3000000000, accounts },
         bnb: {
