@@ -21,6 +21,8 @@ rules:
       varsIgnorePattern: "_"
   "@typescript-eslint/no-var-requires":
     - warn
+  "@typescript-eslint/no-empty-function":
+    - warn
   "prefer-const":
       - warn
   "no-empty":
