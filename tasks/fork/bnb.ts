@@ -25,7 +25,7 @@ const {approvePoolDepositor} = require('../helpers');
 
 const waitForBlocks = undefined;
 
-task("test-fork:boster-migrate").setAction(async function (taskArguments: TaskArguments, hre) {
+task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
     const deployerAddress = await deployer.getAddress();
 
@@ -127,6 +127,7 @@ task("test-fork:boster-migrate").setAction(async function (taskArguments: TaskAr
     const newDepositor = await WomDepositor__factory.connect(newDepositorAddress, deployer);
 
     console.log('newDepositor', newDepositorAddress);
+    console.log('newDepositor owner', await newDepositor.owner());
 
     await cvxStakingProxy.connect(daoSigner).setConfig(newDepositorAddress, bnbConfig.cvxLocker).then(tx => tx.wait(1));
     await cvxStakingProxy.setApprovals().then(tx => tx.wait(1));
@@ -155,6 +156,9 @@ task("test-fork:boster-migrate").setAction(async function (taskArguments: TaskAr
     console.log('poolDepositor.deposit');
     await poolDepositor.connect(busdHolder).deposit(busdLpAddress, simpleToExactAmount(1), 0, true).then(tx => tx.wait(1));
 
+    const cvxCrvRewards = BaseRewardPool__factory.connect(bnbConfig.cvxCrvRewards, deployer);
+    console.log('cvxCrvRewards balance', await cvxCrvRewards.balanceOf(womHolderAddress));
+
     const busdPool = await newBooster.poolInfo(0);
     const crvRewards = BaseRewardPool__factory.connect(busdPool.crvRewards, deployer);
     console.log('crvRewards operator', await crvRewards.operator());
@@ -162,11 +166,17 @@ task("test-fork:boster-migrate").setAction(async function (taskArguments: TaskAr
 
     await newBooster.earmarkRewards(0).then(tx => tx.wait(1));
 
-    console.log('wom before', await wom.balanceOf(busdHolderAddress));
-    console.log('wmx before', await wmx.balanceOf(busdHolderAddress));
+    console.log('1 wom before', await wom.balanceOf(womHolderAddress));
+    console.log('1 wmx before', await wmx.balanceOf(womHolderAddress));
+    await cvxCrvRewards.connect(womHolder).withdraw(simpleToExactAmount(0.5), true);
+    console.log('1 wom after ', await wom.balanceOf(womHolderAddress));
+    console.log('1 wmx after ', await wmx.balanceOf(womHolderAddress));
+
+    console.log('2 wom before', await wom.balanceOf(busdHolderAddress));
+    console.log('2 wmx before', await wmx.balanceOf(busdHolderAddress));
     await crvRewards.connect(busdHolder).withdrawAndUnwrap(simpleToExactAmount(0.5), true);
-    console.log('wom after ', await wom.balanceOf(busdHolderAddress));
-    console.log('wmx after ', await wmx.balanceOf(busdHolderAddress));
+    console.log('2 wom after ', await wom.balanceOf(busdHolderAddress));
+    console.log('2 wmx after ', await wmx.balanceOf(busdHolderAddress));
 });
 
 
