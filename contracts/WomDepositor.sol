@@ -100,6 +100,10 @@ contract WomDepositor is Ownable {
      * @param _minAmount    Minimum amount to lock by spender
      */
     function setCustomLock(address _account, uint256 _lockDays, uint256 _minAmount) external onlyOwner {
+        _setCustomLock(_account, _lockDays, _minAmount);
+    }
+
+    function _setCustomLock(address _account, uint256 _lockDays, uint256 _minAmount) internal {
         if (customLockMinAmount[_account] == 0) {
             customLockAccounts.push(_account);
         }
@@ -250,7 +254,7 @@ contract WomDepositor is Ownable {
     }
 
     function getCustomLockSlotsLength(address _account) public view returns (uint256) {
-        return customLockSlots[msg.sender].length;
+        return customLockSlots[_account].length;
     }
 
     /**

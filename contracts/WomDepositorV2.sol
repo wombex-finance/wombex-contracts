@@ -27,8 +27,9 @@ contract WomDepositorV2 is WomDepositor {
         super._smartLock(_amount);
     }
 
-    function migrate() public onlyOwner {
+    function migrate(address[] memory _oldCustomLockAccounts, uint256[] memory _oldCustomLockSlotLengths) public onlyOwner {
         require(!migrated, "migrated");
+        require(_oldCustomLockAccounts.length == _oldCustomLockSlotLengths.length, "length_mismatch");
 
         uint256 oldCurrentSlot = oldDepositor.currentSlot();
 
@@ -39,13 +40,14 @@ contract WomDepositorV2 is WomDepositor {
 
         require(oldCurrentSlot == currentSlot, "!current_slot");
 
-        for (uint256 i = 0; i < customLockAccounts.length; i++) {
-            address account = customLockAccounts[i];
-            uint256 length = oldDepositor.getCustomLockSlotsLength(account);
+        for (uint256 i = 0; i < _oldCustomLockAccounts.length; i++) {
+            address account = _oldCustomLockAccounts[i];
+            _setCustomLock(account, oldDepositor.customLockDays(account), oldDepositor.customLockMinAmount(account));
+
+            uint256 length = _oldCustomLockSlotLengths[i];
             for (uint256 j = 0; j < length; j++) {
                 (uint256 number, uint256 amount) = oldDepositor.customLockSlots(account, j);
                 customLockSlots[account].push(SlotInfo(number, amount));
-
                 lockedCustomSlots[number] = oldDepositor.lockedCustomSlots(number);
                 releasedCustomSlots[number] = oldDepositor.releasedCustomSlots(number);
             }

@@ -10,12 +10,14 @@ contract DepositorMigrator is Ownable {
 
     WomDepositor public oldWomDepositor;
     address[] public oldCustomLockAccounts;
+    uint256[] public oldCustomLockSlotLengths;
     IStaker public voterProxy;
     address public depositorOwner;
 
-    constructor(WomDepositor _oldWomDepositor, address[] memory _oldCustomLockAccounts) public {
+    constructor(WomDepositor _oldWomDepositor, address[] memory _oldCustomLockAccounts, uint256[] memory _oldCustomLockSlotLengths) public {
         oldWomDepositor = _oldWomDepositor;
         oldCustomLockAccounts = _oldCustomLockAccounts;
+        oldCustomLockSlotLengths = _oldCustomLockSlotLengths;
         depositorOwner = _oldWomDepositor.owner();
         voterProxy = IStaker(_oldWomDepositor.staker());
     }
@@ -42,12 +44,7 @@ contract DepositorMigrator is Ownable {
         voterProxy.setDepositor(address(newDepositor));
         oldWomDepositor.updateMinterOperator();
 
-        for (uint256 i; i < oldCustomLockAccounts.length; i++) {
-            address account = oldCustomLockAccounts[i];
-            newDepositor.setCustomLock(account, oldWomDepositor.customLockDays(account), oldWomDepositor.customLockMinAmount(account));
-        }
-
-        newDepositor.migrate();
+        newDepositor.migrate(oldCustomLockAccounts, oldCustomLockSlotLengths);
 
         oldWomDepositor.transferOwnership(depositorOwner);
         newDepositor.transferOwnership(depositorOwner);

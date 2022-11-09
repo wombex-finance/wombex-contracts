@@ -18,6 +18,7 @@ import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
 import {BoosterMigrator__factory} from "../../types/generated/factories/BoosterMigrator__factory";
 import {DepositorMigrator} from "../../types/generated/DepositorMigrator";
 import {DepositorMigrator__factory} from "../../types/generated/factories/DepositorMigrator__factory";
+import assert from "assert";
 
 const fs = require('fs');
 const ethers = require('ethers');
@@ -35,16 +36,8 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         gasPrice: ethers.BigNumber.from(5000000000),
     })) as any;
 
-    // const providerEstimate = deployer.provider.estimateGas.bind(deployer.provider);
-    //
-    // deployer.provider.estimateGas = (tx) => {
-    //     console.log('deployer.provider.estimateGas');
-    //     return providerEstimate(tx).catch(e => {
-    //         return new Promise(resolve => {
-    //             setTimeout(() => providerEstimate(tx).then(resolve), 60e3)
-    //         }) as any;
-    //     })
-    // };
+    const customSlotAccount = '0xD684e0090bD4E11246c0F4d0aeFFEbd2aE252828';
+    const customSlotSigner = await impersonate(customSlotAccount, true);
 
     console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
     const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
@@ -54,18 +47,42 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     const cvxStakingProxy = WomStakingProxy__factory.connect(bnbConfig.cvxStakingProxy, deployer);
     const cvxLocker = WmxLocker__factory.connect(bnbConfig.cvxLocker, deployer);
     const womDepositor = WomDepositor__factory.connect(bnbConfig.crvDepositor, deployer);
+    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
 
-    const boosterOwner = await booster.owner();
-    console.log('boosterOwner', boosterOwner);
+    const mwPoolLength = await masterWombat.poolLength().then(pl => parseInt(pl.toString()));
+    const userInfoList = [];
+    for (let i = 0; i < mwPoolLength; i++) {
+        userInfoList[i] = await masterWombat.userInfo(i, voterProxy.address);
+        console.log('mw userInfo', i, userInfoList[i].amount.toString());
+    }
+
+    const oldBoosterOwner = await booster.owner();
+    console.log('boosterOwner', oldBoosterOwner);
+    const oldDepositorOwner = await womDepositor.owner();
+    console.log('depositorOwner', oldDepositorOwner);
+    const oldVoterPoxyOwner = await voterProxy.owner();
+    console.log('oldVoterPoxyOwner', oldVoterPoxyOwner);
+
+    const oldDepositorConfig = {
+        lockDays: await womDepositor.lockDays(),
+        smartLockPeriod: await womDepositor.smartLockPeriod(),
+        checkOldSlot: await womDepositor.checkOldSlot(),
+        currentSlot: await womDepositor.currentSlot(),
+        customLockSlotsLen: await womDepositor.connect(customSlotSigner).getCustomLockSlotsLength(customSlotAccount),
+        minter: await womDepositor.minter()
+    };
+
+    const customLockSlots = {};
+    const oldCustomLockSlotsLen = await womDepositor.connect(customSlotSigner).getCustomLockSlotsLength(customSlotAccount).then(cs => parseInt(cs.toString()));
+    console.log("oldCustomLockSlotsLen", oldCustomLockSlotsLen);
+    for (let i = 0; i < oldCustomLockSlotsLen; i++) {
+        customLockSlots[i] = await womDepositor.customLockSlots(customSlotAccount, i);
+        console.log('customLockSlot', i, customLockSlots[i].amount.toString());
+    }
 
     await getBoosterValues(booster);
 
-    // const testSigner = await impersonate(await booster.owner(), true);
-    //
-    // await booster.connect(testSigner).setOwner(deployerAddress).then(tx => tx.wait(1));
-    // await voterProxy.connect(testSigner).setOwner(deployerAddress).then(tx => tx.wait(1));
-
-    console.log('deployContract');
+    console.log('deployContract BoosterMigrator');
     const boosterMigrator = await deployContract<BoosterMigrator>(
         hre,
         new BoosterMigrator__factory(deployer),
@@ -77,11 +94,12 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     );
     console.log('boosterMigrator', boosterMigrator.address);
 
+    console.log('deployContract DepositorMigrator');
     const depositorMigrator = await deployContract<DepositorMigrator>(
         hre,
         new DepositorMigrator__factory(deployer),
         "DepositorMigrator",
-        [bnbConfig.crvDepositor, ['0xD684e0090bD4E11246c0F4d0aeFFEbd2aE252828']],
+        [bnbConfig.crvDepositor, ['0xD684e0090bD4E11246c0F4d0aeFFEbd2aE252828'], [oldCustomLockSlotsLen]],
         {},
         true,
         waitForBlocks,
@@ -114,7 +132,6 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     );
     console.log('poolDepositor', poolDepositor.address);
 
-    const masterWombat = await MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 
     await womDepositor.connect(daoSigner).transferOwnership(depositorMigrator.address).then(tx => tx.wait(1));
@@ -129,6 +146,16 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     console.log('newDepositor', newDepositorAddress);
     console.log('newDepositor owner', await newDepositor.owner());
 
+    const slotEnds = {};
+    const lockedCustomSlots = {};
+    const releasedCustomSlots = {};
+    const oldCurrentSlot = await womDepositor.currentSlot().then(cs => parseInt(cs.toString()));
+    for (let i = 0; i <= oldCurrentSlot; i++) {
+        slotEnds[i] = await womDepositor.slotEnds(i);
+        lockedCustomSlots[i] = await womDepositor.lockedCustomSlots(i);
+        releasedCustomSlots[i] = await womDepositor.releasedCustomSlots(i);
+    }
+
     await cvxStakingProxy.connect(daoSigner).setConfig(newDepositorAddress, bnbConfig.cvxLocker).then(tx => tx.wait(1));
     await cvxStakingProxy.setApprovals().then(tx => tx.wait(1));
 
@@ -136,6 +163,58 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     for (let i = 0; i < distributionTokenList.length; i++) {
         await cvxLocker.connect(daoSigner).approveRewardDistributor(distributionTokenList[i], newBoosterAddress, true).then(tx => tx.wait(1)).catch(e => {});
     }
+
+    assert(oldBoosterOwner === (await booster.owner()));
+    assert(oldBoosterOwner === (await newBooster.owner()));
+    assert(oldDepositorOwner === (await womDepositor.owner()));
+    assert(oldDepositorOwner === (await newDepositor.owner()));
+    assert(oldVoterPoxyOwner === (await voterProxy.owner()));
+
+    for (let i = 0; i < mwPoolLength; i++) {
+        process.stdout.write('Check masterWombat userInfo: ' + i + '\r');
+        const newUserInfo = await masterWombat.userInfo(i, voterProxy.address);
+        assert(newUserInfo.amount.toString() === userInfoList[i].amount.toString());
+    }
+
+    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    const newPoolLength = await newBooster.poolLength().then(l => parseInt(l.toString()));
+    assert(poolLength === newPoolLength);
+    for (let i = 0; i < poolLength; i++) {
+        process.stdout.write('Check booster pool: ' + i + '\r');
+        const oldPool = await booster.poolInfo(i);
+        const newPool = await newBooster.poolInfo(i);
+        assert(oldPool.crvRewards === newPool.crvRewards);
+        assert(oldPool.lptoken === newPool.lptoken);
+        assert(oldPool.token === newPool.token);
+        assert(oldPool.gauge === newPool.gauge);
+        assert(!oldPool.shutdown);
+        assert(!newPool.shutdown);
+    }
+
+    const newCurrentSlot = await newDepositor.currentSlot().then(cs => parseInt(cs.toString()));
+    for (let i = 0; i <= newCurrentSlot; i++) {
+        process.stdout.write('Check newDepositor slot: ' + i + '\r');
+        console.log(i, 'slotEnds[i]', slotEnds[i].toString(), 'newDepositor.slotEnds(i)', await newDepositor.slotEnds(i).then(se => se.toString()));
+        assert(slotEnds[i].toString() === await newDepositor.slotEnds(i).then(se => se.toString()));
+        console.log(i, 'lockedCustomSlots', lockedCustomSlots[i], 'newDepositor.lockedCustomSlots(i)', await newDepositor.lockedCustomSlots(i));
+        assert(lockedCustomSlots[i] === await newDepositor.lockedCustomSlots(i));
+        assert(releasedCustomSlots[i] === await newDepositor.releasedCustomSlots(i));
+    }
+
+    const newCustomLockSlotsLen = await newDepositor.getCustomLockSlotsLength(customSlotAccount).then(cs => parseInt(cs.toString()));
+    for (let i = 0; i < newCustomLockSlotsLen; i++) {
+        process.stdout.write('Check newDepositor customLockSlot: ' + i + '\r');
+        const newCustomSlot = await newDepositor.customLockSlots(customSlotAccount, i);
+        assert(customLockSlots[i].amount.toString() === newCustomSlot.amount.toString());
+        assert(customLockSlots[i].number.toString() === newCustomSlot.number.toString());
+    }
+
+    assert(oldDepositorConfig.lockDays.toString() === await newDepositor.lockDays().then(cs => cs.toString()));
+    assert(oldDepositorConfig.smartLockPeriod.toString() === await newDepositor.smartLockPeriod().then(cs => cs.toString()));
+    assert(await womDepositor.checkOldSlot().then(cs => cs.toString()) === await newDepositor.checkOldSlot().then(cs => cs.toString()));
+    assert(await womDepositor.currentSlot().then(cs => cs.toString()) === await newDepositor.currentSlot().then(cs => cs.toString()));
+    assert(oldDepositorConfig.customLockSlotsLen.toString() === await newDepositor.getCustomLockSlotsLength(customSlotAccount).then(cs => cs.toString()));
+    assert(oldDepositorConfig.minter === await newDepositor.minter());
 
     const womHolderAddress = '0xc37a89cdb064ac2921fcc8b3538ac0d6a3aadf48';
     const busdHolderAddress = '0xf977814e90da44bfa03b6295a0616a897441acec';
