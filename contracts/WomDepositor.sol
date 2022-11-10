@@ -265,7 +265,7 @@ contract WomDepositor is Ownable {
     function rescueTokens(address[] memory _tokens, address _recipient) public onlyOwner {
         for (uint256 i; i < _tokens.length; i++) {
             require(_tokens[i] != wom, "!wom");
-            IERC20(_tokens[i]).transfer(_recipient, IERC20(_tokens[i]).balanceOf(address(this)));
+            IERC20(_tokens[i]).safeTransfer(_recipient, IERC20(_tokens[i]).balanceOf(address(this)));
         }
     }
 }
