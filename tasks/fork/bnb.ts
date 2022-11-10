@@ -215,6 +215,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         const newUserInfo = await masterWombat.userInfo(i, voterProxy.address);
         assert(newUserInfo.amount.toString() === userInfoList[i].amount.toString());
     }
+    console.log("userInfo check finish            ");
 
     const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
     const newPoolLength = await newBooster.poolLength().then(l => parseInt(l.toString()));
@@ -230,24 +231,26 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         assert(!oldPool.shutdown);
         assert(!newPool.shutdown);
     }
+    console.log("newPoolLength check finish              ");
 
     const newCurrentSlot = await newDepositor.currentSlot().then(cs => parseInt(cs.toString()));
     for (let i = 0; i <= newCurrentSlot; i++) {
         process.stdout.write('Check newDepositor slot: ' + i + '\r');
-        console.log(i, 'slotEnds[i]', slotEnds[i].toString(), 'newDepositor.slotEnds(i)', await newDepositor.slotEnds(i).then(se => se.toString()));
         assert(slotEnds[i].toString() === await newDepositor.slotEnds(i).then(se => se.toString()));
-        console.log(i, 'lockedCustomSlots', lockedCustomSlots[i], 'newDepositor.lockedCustomSlots(i)', await newDepositor.lockedCustomSlots(i));
         assert(lockedCustomSlots[i] === await newDepositor.lockedCustomSlots(i));
         assert(releasedCustomSlots[i] === await newDepositor.releasedCustomSlots(i));
     }
+    console.log("newCurrentSlot check finish              ");
 
     const newCustomLockSlotsLen = await newDepositor.getCustomLockSlotsLength(customSlotAccount).then(cs => parseInt(cs.toString()));
+    console.log("newCustomLockSlotsLen", newCustomLockSlotsLen);
     for (let i = 0; i < newCustomLockSlotsLen; i++) {
         process.stdout.write('Check newDepositor customLockSlot: ' + i + '\r');
         const newCustomSlot = await newDepositor.customLockSlots(customSlotAccount, i);
         assert(customLockSlots[i].amount.toString() === newCustomSlot.amount.toString());
         assert(customLockSlots[i].number.toString() === newCustomSlot.number.toString());
     }
+    console.log("newCustomLockSlotsLen check finish                  ");
 
     assert(oldDepositorConfig.lockDays.toString() === await newDepositor.lockDays().then(cs => cs.toString()));
     assert(oldDepositorConfig.smartLockPeriod.toString() === await newDepositor.smartLockPeriod().then(cs => cs.toString()));
