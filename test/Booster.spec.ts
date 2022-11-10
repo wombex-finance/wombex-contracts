@@ -19,7 +19,12 @@ import {
     DepositToken__factory,
     Booster__factory,
     Asset,
-    Asset__factory, DepositorMigrator, DepositorMigrator__factory, WomDepositor__factory,
+    Asset__factory,
+    DepositorMigrator,
+    DepositorMigrator__factory,
+    WomDepositor__factory,
+    RewardFactory,
+    RewardFactory__factory, TokenFactory, TokenFactory__factory,
 } from "../types/generated";
 import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
@@ -952,14 +957,44 @@ describe("Booster", () => {
             tx = await booster.connect(bob).deposit(poolLen, amount, true);
             await tx.wait();
 
+            newBoosterContract = await deployContract<Booster>(
+                hre,
+                new Booster__factory(deployer),
+                "Booster",
+                [contracts.voterProxy.address, contracts.cvx.address, mocks.crv.address, mocks.weth.address, 2000, 15000],
+                {},
+                true,
+            );
+
+            const rewardFactory = await deployContract<RewardFactory>(
+                hre,
+                new RewardFactory__factory(deployer),
+                "RewardFactory",
+                [newBoosterContract.address, mocks.crv.address],
+                {},
+                true,
+            );
+
+            const tokenFactory = await deployContract<TokenFactory>(
+                hre,
+                new TokenFactory__factory(deployer),
+                "TokenFactory",
+                [newBoosterContract.address, mocks.namingConfig.tokenFactoryNamePostfix, mocks.namingConfig.cvxSymbol.toLowerCase()],
+                {},
+                true,
+            );
+
             const boosterMigrator = await deployContract<BoosterMigrator>(
                 hre,
                 new BoosterMigrator__factory(deployer),
                 "BoosterMigrator",
-                [booster.address, mocks.weth.address],
+                [booster.address, newBoosterContract.address, rewardFactory.address, tokenFactory.address, mocks.weth.address],
                 {},
                 true,
             );
+
+            await newBoosterContract.setOwner(boosterMigrator.address).then(tx => tx.wait(1));
+            await newBoosterContract.setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
 
             expect(await boosterMigrator.oldBooster()).to.equal(booster.address);
             expect(await boosterMigrator.boosterOwner()).to.equal(await daoSigner.getAddress());
@@ -981,7 +1016,6 @@ describe("Booster", () => {
             expect(await contracts.voterProxy.owner()).to.equal(await daoSigner.getAddress());
 
             const {newBooster, poolLength} = migrateTx.events.filter(e => e.event === 'Migrated')[0].args;
-            newBoosterContract = Booster__factory.connect(newBooster, bob);
 
             await cvxLocker.connect(daoSigner).approveRewardDistributor(crv.address, newBooster, true);
             await cvxLocker.connect(daoSigner).approveRewardDistributor(underlying.address, newBooster, true);
@@ -1047,7 +1081,7 @@ describe("Booster", () => {
                 hre,
                 new DepositorMigrator__factory(deployer),
                 "DepositorMigrator",
-                [contracts.crvDepositor.address, []],
+                [contracts.crvDepositor.address, [], []],
                 {},
                 true,
                 1,

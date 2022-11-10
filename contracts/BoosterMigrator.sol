@@ -12,11 +12,17 @@ contract BoosterMigrator is Ownable {
     event CallContract(address indexed contractAddress, bytes callData, bool success, bytes returnData);
 
     Booster public oldBooster;
+    Booster public newBooster;
+    RewardFactory public rewardFactory;
+    TokenFactory public tokenFactory;
     address public boosterOwner;
     address public weth;
 
-    constructor(Booster _oldBooster, address _weth) public {
+    constructor(Booster _oldBooster, Booster _newBooster, RewardFactory _rewardFactory, TokenFactory _tokenFactory, address _weth) public {
         oldBooster = _oldBooster;
+        newBooster = _newBooster;
+        rewardFactory = _rewardFactory;
+        tokenFactory = _tokenFactory;
         boosterOwner = _oldBooster.owner();
         weth = _weth;
     }
@@ -36,9 +42,11 @@ contract BoosterMigrator is Ownable {
             activePoolLen++;
         }
 
-        IStaker voterProxy = IStaker(oldBooster.voterProxy());
+        require(oldBooster.voterProxy() == newBooster.voterProxy(), "!voterProxy");
+        require(oldBooster.cvx() == newBooster.cvx(), "!cvx");
+        require(oldBooster.crv() == newBooster.crv(), "!crv");
 
-        Booster newBooster = new Booster(address(voterProxy), oldBooster.cvx(), oldBooster.crv(), weth, 2000, 15000);
+        IStaker voterProxy = IStaker(oldBooster.voterProxy());
 
         voterProxy.setOperator(address(newBooster));
         oldBooster.shutdownSystem();
@@ -60,6 +68,8 @@ contract BoosterMigrator is Ownable {
         pids[poolLen] = 0;
 
         oldBooster.migrateRewards(crvRewards, pids, address(newBooster));
+
+        newBooster.setFeeManager(address(this));
 
         for (uint256 i = 0; i < poolLen; i++) {
             (address lptoken, address token, address gauge, address rewards, bool shutdown) = oldBooster.poolInfo(i);
@@ -84,14 +94,13 @@ contract BoosterMigrator is Ownable {
             newBooster.updateDistributionByTokens(distroTokens[i], distros, shares, callQueues);
         }
 
-        RewardFactory rf = new RewardFactory(address(newBooster), oldBooster.crv());
-        TokenFactory tf = new TokenFactory(
-            address(newBooster),
-            TokenFactory(oldBooster.tokenFactory()).namePostfix(),
-            TokenFactory(oldBooster.tokenFactory()).symbolPrefix()
-        );
+        require(address(newBooster) == tokenFactory.operator(), "!tokenFactory.operator");
+        checkStrings(TokenFactory(oldBooster.tokenFactory()).namePostfix(), tokenFactory.namePostfix(), "!namePostfix");
+        checkStrings(TokenFactory(oldBooster.tokenFactory()).symbolPrefix(), tokenFactory.symbolPrefix(), "!symbolPrefix");
+        require(address(newBooster) == rewardFactory.operator(), "!rewardFactory.operator");
+        require(RewardFactory(oldBooster.rewardFactory()).crv() == rewardFactory.crv(), "!tokenFactory.crv");
 
-        newBooster.setFactories(address(rf), address(tf));
+        newBooster.setFactories(address(rewardFactory), address(tokenFactory));
         newBooster.setExtraRewardsDistributor(address(oldBooster.extraRewardsDist()));
         newBooster.setLockRewardContracts(oldBooster.crvLockRewards(), oldBooster.cvxLocker());
         newBooster.setVoteDelegate(oldBooster.voteDelegate());
@@ -109,6 +118,10 @@ contract BoosterMigrator is Ownable {
         newBooster.setOwner(boosterOwner);
 
         emit Migrated(address(newBooster), newBooster.poolLength());
+    }
+
+    function checkStrings(string memory arg1, string memory arg2, string memory errorMessage) internal {
+        require(keccak256(abi.encodePacked(arg1)) == keccak256(abi.encodePacked(arg2)), errorMessage);
     }
 
     function callContract(address _contract, bytes calldata _data) external {

@@ -11,7 +11,13 @@ import {
     WomStakingProxy__factory,
     WmxLocker__factory,
     ERC20__factory,
-    WomDepositor__factory, Booster, IERC20__factory, BaseRewardPool__factory
+    WomDepositor__factory,
+    Booster,
+    IERC20__factory,
+    BaseRewardPool__factory,
+    RewardFactory,
+    RewardFactory__factory,
+    TokenFactory, TokenFactory__factory
 } from "../../types/generated";
 import {impersonate, simpleToExactAmount } from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
@@ -19,6 +25,7 @@ import {BoosterMigrator__factory} from "../../types/generated/factories/BoosterM
 import {DepositorMigrator} from "../../types/generated/DepositorMigrator";
 import {DepositorMigrator__factory} from "../../types/generated/factories/DepositorMigrator__factory";
 import assert from "assert";
+import hre from "hardhat";
 
 const fs = require('fs');
 const ethers = require('ethers');
@@ -65,11 +72,13 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     const oldDepositorConfig = {
         lockDays: await womDepositor.lockDays(),
+        lastLockAt: await womDepositor.lastLockAt(),
         smartLockPeriod: await womDepositor.smartLockPeriod(),
         checkOldSlot: await womDepositor.checkOldSlot(),
         currentSlot: await womDepositor.currentSlot(),
         customLockSlotsLen: await womDepositor.connect(customSlotSigner).getCustomLockSlotsLength(customSlotAccount),
-        minter: await womDepositor.minter()
+        minter: await womDepositor.minter(),
+        staker: await womDepositor.staker()
     };
 
     const customLockSlots = {};
@@ -82,17 +91,49 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     await getBoosterValues(booster);
 
+    const newBooster = await deployContract<Booster>(
+        hre,
+        new Booster__factory(deployer),
+        "Booster",
+        [bnbConfig.voterProxy, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 2000, 15000],
+        {},
+        true,
+    );
+
+    const rewardFactory = await deployContract<RewardFactory>(
+        hre,
+        new RewardFactory__factory(deployer),
+        "RewardFactory",
+        [newBooster.address, bnbConfig.wom],
+        {},
+        true,
+    );
+    const tokenFactoryNamePostfix = ' Wombex Deposit Token';
+    const cvxSymbol = 'WMX';
+
+    const tokenFactory = await deployContract<TokenFactory>(
+        hre,
+        new TokenFactory__factory(deployer),
+        "TokenFactory",
+        [newBooster.address, tokenFactoryNamePostfix, cvxSymbol.toLowerCase()],
+        {},
+        true,
+    );
+
     console.log('deployContract BoosterMigrator');
     const boosterMigrator = await deployContract<BoosterMigrator>(
         hre,
         new BoosterMigrator__factory(deployer),
         "BoosterMigrator",
-        [booster.address, bnbConfig.weth],
+        [booster.address, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth],
         {},
         true,
         waitForBlocks,
     );
     console.log('boosterMigrator', boosterMigrator.address);
+
+    await newBooster.setOwner(boosterMigrator.address).then(tx => tx.wait(1));
+    await newBooster.setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
 
     console.log('deployContract DepositorMigrator');
     const depositorMigrator = await deployContract<DepositorMigrator>(
@@ -115,7 +156,6 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     let tx = await boosterMigrator.migrate().then(tx => tx.wait(1));
     const newBoosterAddress = tx.events.filter(e => e.event === 'Migrated')[0].args.newBooster;
-    const newBooster = await Booster__factory.connect(newBoosterAddress, deployer);
 
     console.log('newBooster', newBoosterAddress);
     console.log('newBooster owner', await newBooster.owner());
@@ -211,10 +251,12 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     assert(oldDepositorConfig.lockDays.toString() === await newDepositor.lockDays().then(cs => cs.toString()));
     assert(oldDepositorConfig.smartLockPeriod.toString() === await newDepositor.smartLockPeriod().then(cs => cs.toString()));
+    assert(await womDepositor.lastLockAt().then(cs => cs.toString()) === await newDepositor.lastLockAt().then(cs => cs.toString()));
     assert(await womDepositor.checkOldSlot().then(cs => cs.toString()) === await newDepositor.checkOldSlot().then(cs => cs.toString()));
     assert(await womDepositor.currentSlot().then(cs => cs.toString()) === await newDepositor.currentSlot().then(cs => cs.toString()));
     assert(oldDepositorConfig.customLockSlotsLen.toString() === await newDepositor.getCustomLockSlotsLength(customSlotAccount).then(cs => cs.toString()));
     assert(oldDepositorConfig.minter === await newDepositor.minter());
+    assert(oldDepositorConfig.staker === await newDepositor.staker());
 
     const womHolderAddress = '0xc37a89cdb064ac2921fcc8b3538ac0d6a3aadf48';
     const busdHolderAddress = '0xf977814e90da44bfa03b6295a0616a897441acec';
