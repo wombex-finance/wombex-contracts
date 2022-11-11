@@ -1029,6 +1029,12 @@ describe("Booster", () => {
             expect(await crvRewards.operator()).eq(newBooster);
             expect(await depositToken.operator()).eq(newBooster);
 
+            await newBoosterContract.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
+            expect(await newBoosterContract.owner()).to.equal(boosterMigrator.address);
+            await expect(boosterMigrator.callContract(newBoosterContract.address, newBoosterContract.interface.encodeFunctionData('setOwner', [await daoSigner.getAddress()])).then(tx => tx.wait(1))).to.be.revertedWith("!auth");
+            await boosterMigrator.connect(daoSigner).callContract(newBoosterContract.address, newBoosterContract.interface.encodeFunctionData('setOwner', [await daoSigner.getAddress()])).then(tx => tx.wait(1));
+            expect(await newBoosterContract.owner()).to.equal(await daoSigner.getAddress());
+
             const lastPid = poolLength.sub(1);
 
             const migratedPool = await newBoosterContract.poolInfo(lastPid)

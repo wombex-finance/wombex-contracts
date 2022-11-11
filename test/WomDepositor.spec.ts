@@ -471,6 +471,12 @@ describe("WomDepositor", () => {
         expect(await womDepositor.owner()).to.be.eq(await daoSigner.getAddress());
         expect(await newWomDepositor.owner()).to.be.eq(await daoSigner.getAddress());
 
+        await newWomDepositor.connect(daoSigner).transferOwnership(depositorMigrator.address).then(tx => tx.wait(1));
+        expect(await newWomDepositor.owner()).to.equal(depositorMigrator.address);
+        await expect(depositorMigrator.callContract(newWomDepositor.address, newWomDepositor.interface.encodeFunctionData('transferOwnership', [await daoSigner.getAddress()])).then(tx => tx.wait(1))).to.be.revertedWith("!auth");
+        await depositorMigrator.connect(daoSigner).callContract(newWomDepositor.address, newWomDepositor.interface.encodeFunctionData('transferOwnership', [await daoSigner.getAddress()])).then(tx => tx.wait(1));
+        expect(await newWomDepositor.owner()).to.equal(await daoSigner.getAddress());
+
         expect(await voterProxy.depositor()).to.be.eq(newWomDepositor.address);
         expect(await womDepositor.minter()).to.be.eq(contracts.cvxCrv.address);
         expect(await contracts.cvxCrv.operator()).to.be.eq(newWomDepositor.address);
