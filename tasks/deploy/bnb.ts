@@ -29,9 +29,6 @@ import {
     BoosterMigrator__factory,
     DepositorMigrator,
     DepositorMigrator__factory,
-    PoolDepositor, PoolDepositor__factory, WomDepositor__factory, WomStakingProxy__factory, WmxLocker__factory,
-    ExtraRewardsDistributor__factory,
-    ExtraRewardsDistributor,
     ExtraRewardsDistributorProxy,
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
@@ -296,7 +293,7 @@ task("deploy-zap:bnb").setAction(async function (taskArguments: TaskArguments, h
         bnbtConfig.cvx,
         bnbtConfig.cvxCrv,
         bnbtConfig.crvDepositor,
-        bnbtConfig.initialCvxCrvStaking,
+        bnbtConfig.cvxCrvRewards,
         bnbtConfig.cvxLocker,
     ];
     console.log('args', args);
