@@ -29,15 +29,16 @@ import {
     BoosterMigrator__factory,
     DepositorMigrator,
     DepositorMigrator__factory,
-    PoolDepositor, PoolDepositor__factory
+    PoolDepositor, PoolDepositor__factory, WomDepositor__factory, WomStakingProxy__factory, WmxLocker__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
-    getAccountBalanceProof, ONE_DAY,
+    getAccountBalanceProof, impersonate, ONE_DAY,
     ONE_WEEK,
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
+const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
 const fs = require('fs');
 const ethers = require('ethers');
@@ -273,6 +274,8 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
 
 
 task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
@@ -282,9 +285,8 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     })) as any;
 
     // const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
-    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
 
-    const newBoosterArgs = [bnbConfig.voterProxy, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 2000, 15000];
+    const newBoosterArgs = [bnbConfig.voterProxy, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 1500, 15000];
     fs.writeFileSync('./args/booster.js', 'module.exports = ' + JSON.stringify(newBoosterArgs));
 
     const newBooster = await deployContract<Booster>(
@@ -363,5 +365,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         waitForBlocks,
     );
     console.log('poolDepositor', poolDepositor.address);
-});
 
+    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
+    await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
