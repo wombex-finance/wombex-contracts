@@ -28,6 +28,8 @@ interface IVoting{
 
 interface IMinter{
     function mint(address) external;
+    function updateOperator() external;
+    function operator() external returns(address);
 }
 
 interface ICvxLocker {
@@ -49,6 +51,7 @@ interface IStaker{
     function setVote(bytes32 hash, bool valid) external;
     function setOperator(address _operator) external;
     function setOwner(address _owner) external;
+    function setDepositor(address _depositor) external;
 }
 
 interface IRewards{

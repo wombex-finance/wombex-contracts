@@ -8,9 +8,10 @@ contract MockNewBooster is Booster {
         address _voterProxy,
         address _cvx,
         address _crv,
+        address _weth,
         uint256 _minMintRatio,
         uint256 _maxMintRatio
-    ) public Booster(_voterProxy, _cvx, _crv, _minMintRatio, _maxMintRatio) {
+    ) public Booster(_voterProxy, _cvx, _crv, _weth, _minMintRatio, _maxMintRatio) {
     }
 
     function newMethod() public view returns (string memory) {
