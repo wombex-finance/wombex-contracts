@@ -408,7 +408,7 @@ async function deployFirstStage(
         hre,
         new Booster__factory(deployer),
         "Booster",
-        [voterProxy.address, cvx.address, token, 5000, 15000],
+        [voterProxy.address, cvx.address, token, deployment.weth.address, 5000, 15000],
         {},
         debug,
         waitForBlocks,
@@ -461,7 +461,7 @@ async function deployFirstStage(
         hre,
         new WomDepositor__factory(deployer),
         "WomDepositor",
-        [token, voterProxy.address, cvxCrv.address],
+        [token, voterProxy.address, cvxCrv.address, booster.address],
         {},
         debug,
         waitForBlocks,
@@ -682,7 +682,7 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
     let tx = await voterProxy.connect(signer).setLpTokensPid(masterWombat.address);
     await waitForTx(tx, true, waitForBlocks);
 
-    console.log('booster.updateDistributionByTokens');
+    console.log('booster.updateDistributionByTokens', poolLength);
     tx = await booster.connect(signer).updateDistributionByTokens(
         crv.address,
         [cvxCrvRewards.address, cvxStakingProxy.address],

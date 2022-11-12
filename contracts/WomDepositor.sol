@@ -21,6 +21,8 @@ contract WomDepositor is Ownable {
     address public wom;
     address public staker;
     address public minter;
+    address public booster;
+    uint256 public earmarkPid;
 
     uint256 public lockDays;
     uint256 public smartLockPeriod;
@@ -28,12 +30,15 @@ contract WomDepositor is Ownable {
     uint256 public checkOldSlot;
     uint256 public currentSlot;
     uint256 public lastLockAt;
+    bool public executing;
 
     mapping(uint256 => uint256) public slotEnds;
     mapping(address => uint256) public customLockDays;
     mapping(address => uint256) public customLockMinAmount;
     mapping(uint256 => bool) public lockedCustomSlots;
     mapping(uint256 => bool) public releasedCustomSlots;
+
+    address[] public customLockAccounts;
 
     struct SlotInfo {
         uint256 number;
@@ -43,6 +48,7 @@ contract WomDepositor is Ownable {
 
     event UpdateOperator(address operator);
     event SetLockConfig(uint256 lockDays, uint256 smartLockPeriod);
+    event SetBooster(address booster, uint256 pid);
     event SetCustomLockDays(address indexed account, uint256 lockDays, uint256 minAmount);
     event Deposit(address indexed account, address stakeAddress, uint256 amount);
     event SmartLockReleased(address indexed sender, uint256 indexed slot);
@@ -58,11 +64,13 @@ contract WomDepositor is Ownable {
     constructor(
         address _wom,
         address _staker,
-        address _minter
+        address _minter,
+        address _booster
     ) public {
         wom = _wom;
         staker = _staker;
         minter = _minter;
+        booster = _booster;
     }
 
     function setLockConfig(uint256 _lockDays, uint256 _smartLockPeriod) external onlyOwner {
@@ -70,6 +78,13 @@ contract WomDepositor is Ownable {
         smartLockPeriod = _smartLockPeriod;
 
         emit SetLockConfig(_lockDays, _smartLockPeriod);
+    }
+
+    function setBooster(address _booster, uint256 _earmarkPid) external onlyOwner {
+        booster = _booster;
+        earmarkPid = _earmarkPid;
+
+        emit SetBooster(_booster, _earmarkPid);
     }
 
     function updateMinterOperator() external onlyOwner {
@@ -85,6 +100,13 @@ contract WomDepositor is Ownable {
      * @param _minAmount    Minimum amount to lock by spender
      */
     function setCustomLock(address _account, uint256 _lockDays, uint256 _minAmount) external onlyOwner {
+        _setCustomLock(_account, _lockDays, _minAmount);
+    }
+
+    function _setCustomLock(address _account, uint256 _lockDays, uint256 _minAmount) internal {
+        if (customLockMinAmount[_account] == 0) {
+            customLockAccounts.push(_account);
+        }
         customLockDays[_account] = _lockDays;
         customLockMinAmount[_account] = _minAmount;
 
@@ -138,7 +160,7 @@ contract WomDepositor is Ownable {
      * @notice  Trying to releaseLock every time on deposit and lock cumulative balance once in smartLockPeriod.
      * @param _amount  Amount WOM to deposit
      */
-    function _smartLock(uint256 _amount) internal {
+    function _smartLock(uint256 _amount) internal virtual {
         IERC20(wom).transferFrom(msg.sender, address(this), _amount);
 
         if (currentSlot > 1 && checkOldSlot >= currentSlot - 1) {
@@ -156,9 +178,10 @@ contract WomDepositor is Ownable {
             emit SmartLockCheck(msg.sender, checkOldSlot, lockedCustomSlots[checkOldSlot]);
         }
 
-        if (lastLockAt + smartLockPeriod > block.timestamp && customLockDays[msg.sender] == 0) {
+        if (executing || (lastLockAt + smartLockPeriod > block.timestamp && customLockDays[msg.sender] == 0)) {
             return;
         }
+        executing = true;
 
         uint256 slot = currentSlot;
         currentSlot = currentSlot.add(1);
@@ -173,6 +196,10 @@ contract WomDepositor is Ownable {
             amountToLock = IERC20(wom).balanceOf(address(this));
         }
 
+        if (IERC20(wom).balanceOf(staker) > 0) {
+            IBooster(booster).earmarkRewards(earmarkPid);
+        }
+
         IERC20(wom).safeTransfer(staker, amountToLock);
         IStaker(staker).lock(senderLockDays);
 
@@ -180,6 +207,7 @@ contract WomDepositor is Ownable {
 
         lastLockAt = block.timestamp;
 
+        executing = false;
         emit SmartLock(msg.sender, customLockDays[msg.sender] > 0, slot, amountToLock, senderLockDays, currentSlot, checkOldSlot);
     }
 
@@ -221,7 +249,23 @@ contract WomDepositor is Ownable {
         emit ReleaseCustomLock(msg.sender, _index, slot.number, slot.amount);
     }
 
+    function getCustomLockAccounts() public view returns (address[] memory) {
+        return customLockAccounts;
+    }
+
     function getCustomLockSlotsLength(address _account) public view returns (uint256) {
-        return customLockSlots[msg.sender].length;
+        return customLockSlots[_account].length;
+    }
+
+    /**
+     * @notice  Rescue all tokens but wom from contract
+     * @param _tokens       Tokens addresses
+     * @param _recipient    Recipient address
+     */
+    function rescueTokens(address[] memory _tokens, address _recipient) public onlyOwner {
+        for (uint256 i; i < _tokens.length; i++) {
+            require(_tokens[i] != wom, "!wom");
+            IERC20(_tokens[i]).safeTransfer(_recipient, IERC20(_tokens[i]).balanceOf(address(this)));
+        }
     }
 }

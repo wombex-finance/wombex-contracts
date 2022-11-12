@@ -26,6 +26,7 @@ contract Booster{
 
     address public immutable crv;
     address public immutable cvx;
+    address public immutable weth;
     address public immutable voterProxy;
 
     address public owner;
@@ -41,6 +42,7 @@ contract Booster{
 
     uint256 public penaltyShare = 0;
     uint256 public earmarkIncentive;
+    bool public earmarkOnDeposit;
 
     uint256 public minMintRatio;
     uint256 public maxMintRatio;
@@ -68,6 +70,9 @@ contract Booster{
     PoolInfo[] public poolInfo;
     mapping(address => bool) public votingMap;
 
+    mapping(address => address[]) public lpPendingRewardTokens;
+    mapping(address => mapping(address => uint256)) public lpPendingRewards;
+
     event Deposited(address indexed user, uint256 indexed poolid, uint256 amount);
     event Withdrawn(address indexed user, uint256 indexed poolid, uint256 amount);
 
@@ -80,37 +85,45 @@ contract Booster{
     event PoolManagerUpdated(address newPoolManager);
     event FactoriesUpdated(address rewardFactory, address tokenFactory);
     event ExtraRewardsDistributorUpdated(address newDist);
+    event LpPendingRewardTokensUpdated(address indexed lpToken, address[] pendingRewardTokens);
     event PenaltyShareUpdated(uint256 newPenalty);
     event VoteDelegateUpdated(address newVoteDelegate);
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
     event MintRatioUpdated(uint256 mintRatio);
     event SetEarmarkIncentive(uint256 earmarkIncentive);
+    event SetEarmarkOnDeposit(bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
     event FeeInfoChanged(address feeToken, bool active);
     event TokenDistributionUpdate(address indexed token, address indexed distro, uint256 share, bool callQueue);
     event DistributionUpdate(address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
 
-    event EarmarkRewards(address indexed token, uint256 amount);
+    event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
+    event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
     event RewardClaimed(uint256 indexed pid, address indexed user, uint256 amount, bool indexed lock, uint256 mintAmount, uint256 penalty);
 
     /**
      * @dev Constructor doing what constructors do. It is noteworthy that
      *      a lot of basic config is set to 0 - expecting subsequent calls to setFeeInfo etc.
-     * @param _voterProxy                 VoterProxy (locks the crv and adds to all gauges)
+     * @param _voterProxy             VoterProxy (locks the crv and adds to all gauges)
      * @param _cvx                    CVX/WMX token
      * @param _crv                    CRV/WOM
+     * @param _weth                   WETH
+     * @param _minMintRatio           Min mint ratio
+     * @param _maxMintRatio           Max mint ratio
      */
     constructor(
         address _voterProxy,
         address _cvx,
         address _crv,
+        address _weth,
         uint256 _minMintRatio,
         uint256 _maxMintRatio
     ) public {
         voterProxy = _voterProxy;
         cvx = _cvx;
         crv = _crv;
+        weth = _weth;
         isShutdown = false;
 
         minMintRatio = _minMintRatio;
@@ -229,6 +242,27 @@ contract Booster{
     }
 
     /**
+     * @notice Set tokens to cache pending rewards
+     */
+    function setLpPendingRewardTokens(address _lpToken, address[] memory _addresses) external {
+        require(msg.sender==owner, "!auth");
+        lpPendingRewardTokens[_lpToken] = _addresses;
+
+        emit LpPendingRewardTokensUpdated(_lpToken, _addresses);
+    }
+
+    /**
+     * @notice Set tokens to cache pending rewards
+     */
+    function updateLpPendingRewardTokensByGauge(uint256 _pid) external {
+        require(msg.sender==owner, "!auth");
+        PoolInfo storage p = poolInfo[_pid];
+        lpPendingRewardTokens[p.lptoken] = IStaker(voterProxy).getGaugeRewardTokens(p.lptoken, p.gauge);
+
+        emit LpPendingRewardTokensUpdated(p.lptoken, lpPendingRewardTokens[p.lptoken]);
+    }
+
+    /**
      * @notice Only called once, to set the address of cvxCrv/wmxWOM (lockRewards)
      */
     function setLockRewardContracts(address _crvLockRewards, address _cvxLocker) external {
@@ -263,6 +297,7 @@ contract Booster{
     function updateDistributionByTokens(address _token, address[] memory _distros, uint256[] memory _shares, bool[] memory _callQueue) external {
         require(msg.sender==owner, "!auth");
         uint256 len = _distros.length;
+        require(len > 0, "zero");
         require(len==_shares.length && len==_callQueue.length, "!length");
 
         if (distributionByTokens[_token].length == 0) {
@@ -308,6 +343,16 @@ contract Booster{
         require(_earmarkIncentive <= MAX_EARMARK_INCENTIVE, ">max");
         earmarkIncentive = _earmarkIncentive;
         emit SetEarmarkIncentive(_earmarkIncentive);
+    }
+
+    /**
+     * @notice Fee manager can set earmarkOnDeposit flag
+     * @param _earmarkOnDeposit   boolean that defines _earmarkRewards calling on pool deposit or withdraw
+     */
+    function setEarmarkOnDeposit(bool _earmarkOnDeposit) external{
+        require(msg.sender==feeManager, "!auth");
+        earmarkOnDeposit = _earmarkOnDeposit;
+        emit SetEarmarkOnDeposit(_earmarkOnDeposit);
     }
 
     /// END SETTER SECTION ///
@@ -467,7 +512,14 @@ contract Booster{
         //stake
         address gauge = pool.gauge;
         require(gauge != address(0),"!gauge setting");
+
+        uint256[] memory rewardBalancesBefore = getPendingRewards(lptoken);
         IStaker(voterProxy).deposit(lptoken, gauge);
+        _writePendingRewards(lptoken, rewardBalancesBefore);
+
+        if (earmarkOnDeposit) {
+            _earmarkRewards(_pid);
+        }
 
         address token = pool.token;
         if(_stake){
@@ -512,7 +564,13 @@ contract Booster{
         //pull from gauge if not shutdown
         // if shutdown tokens will be in this contract
         if (!pool.shutdown) {
+            uint256[] memory rewardBalancesBefore = getPendingRewards(lptoken);
             IStaker(voterProxy).withdrawLp(lptoken, gauge, _amount);
+            _writePendingRewards(lptoken, rewardBalancesBefore);
+
+            if (earmarkOnDeposit) {
+                _earmarkRewards(_pid);
+            }
         }
 
         //return lp tokens
@@ -551,6 +609,41 @@ contract Booster{
         return true;
     }
 
+    function getPendingRewardTokens(address _lptoken) public view returns (address[] memory tokens) {
+        if (lpPendingRewardTokens[_lptoken].length > 0) {
+            return lpPendingRewardTokens[_lptoken];
+        } else {
+            tokens = new address[](1);
+            tokens[0] = crv;
+        }
+    }
+
+    function getPendingRewards(address _lptoken) public view returns (uint256[] memory result) {
+        address[] memory tokens = getPendingRewardTokens(_lptoken);
+        uint256 len = tokens.length;
+        result = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            uint256 balance = IERC20(tokens[i]).balanceOf(voterProxy);
+            if (tokens[i] == weth) {
+                balance = balance.add(voterProxy.balance);
+            }
+            result[i] = balance;
+        }
+    }
+
+    function _writePendingRewards(address _lptoken, uint256[] memory _rewardsBefore) internal {
+        address[] memory tokens = getPendingRewardTokens(_lptoken);
+        uint256 len = _rewardsBefore.length;
+        for (uint256 i = 0; i < len; i++) {
+            address token = tokens[i];
+            uint256 balance = IERC20(token).balanceOf(voterProxy);
+            if (token == weth) {
+                balance = balance.add(voterProxy.balance);
+            }
+            lpPendingRewards[_lptoken][token] = lpPendingRewards[_lptoken][token].add(balance.sub(_rewardsBefore[i]));
+        }
+    }
+
     /**
      * @notice set valid vote hash on VoterProxy
      */
@@ -581,23 +674,30 @@ contract Booster{
         PoolInfo storage pool = poolInfo[_pid];
         require(pool.shutdown == false, "pool is closed");
 
-        address gauge = pool.gauge;
         //claim crv/wom and bonus tokens
-        address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, gauge);
+        address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, pool.gauge);
         uint256 tLen = tokens.length;
-        uint256[] memory balances = new uint256[](tLen);
-
-        for (uint256 i = 0; i < tLen; i++) {
-            balances[i] = IERC20(tokens[i]).balanceOf(address(this));
+        uint256[] memory totalPendingRewards = new uint256[](tLen);
+        for (uint256 i = 0; i < poolInfo.length; i++) {
+            if (poolInfo[i].shutdown) {
+                continue;
+            }
+            for (uint256 j = 0; j < tLen; j++) {
+                totalPendingRewards[j] = totalPendingRewards[j].add(lpPendingRewards[poolInfo[i].lptoken][tokens[j]]);
+            }
         }
 
-        IStaker(voterProxy).claimCrv(pool.lptoken, gauge);
+        IStaker(voterProxy).claimCrv(pool.lptoken, pool.gauge);
 
         for (uint256 i = 0; i < tLen; i++) {
             IERC20 token = IERC20(tokens[i]);
-            uint256 balance = token.balanceOf(address(this)).sub(balances[i]);
+            uint256 balance = token.balanceOf(address(this)).sub(totalPendingRewards[i]);
+            if (lpPendingRewards[pool.lptoken][tokens[i]] > 0) {
+                balance = balance.add(lpPendingRewards[pool.lptoken][tokens[i]]);
+                lpPendingRewards[pool.lptoken][tokens[i]] = 0;
+            }
 
-            emit EarmarkRewards(address(token), balance);
+            emit EarmarkRewards(_pid, pool.lptoken, address(token), balance);
 
             if (balance == 0) {
                 continue;
@@ -610,19 +710,25 @@ contract Booster{
 
             for (uint256 j = 0; j < dLen; j++) {
                 TokenDistro memory tDistro = distributionByTokens[address(token)][j];
+                if (tDistro.share == 0) {
+                   continue;
+                }
                 uint256 amount = balance.mul(tDistro.share).div(DENOMINATOR);
                 if (tDistro.callQueue) {
                     IRewards(tDistro.distro).queueNewRewards(address(token), amount);
                 } else {
                     token.safeTransfer(tDistro.distro, amount);
                 }
+                emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), amount, tDistro.distro, tDistro.callQueue);
                 sentSum = sentSum.add(amount);
             }
             if (earmarkIncentiveAmount > 0) {
                 token.safeTransfer(msg.sender, earmarkIncentiveAmount);
+                emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), earmarkIncentiveAmount, msg.sender, false);
             }
             //send crv to lp provider reward contract
             IRewards(pool.crvRewards).queueNewRewards(address(token), balance.sub(sentSum));
+            emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), balance.sub(sentSum), pool.crvRewards, true);
         }
     }
 
