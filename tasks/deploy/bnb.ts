@@ -29,7 +29,14 @@ import {
     BoosterMigrator__factory,
     DepositorMigrator,
     DepositorMigrator__factory,
-    PoolDepositor, PoolDepositor__factory, WomDepositor__factory, WomStakingProxy__factory, WmxLocker__factory
+    PoolDepositor, PoolDepositor__factory, WomDepositor__factory, WomStakingProxy__factory, WmxLocker__factory,
+    ExtraRewardsDistributor__factory,
+    ExtraRewardsDistributor,
+    ExtraRewardsDistributorProxy,
+    ExtraRewardsDistributorProxy__factory,
+    PoolDepositor,
+    PoolDepositor__factory,
+    Asset__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -42,6 +49,7 @@ const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
 const fs = require('fs');
 const ethers = require('ethers');
+const _ = require('lodash');
 
 const forking = false;
 const waitForBlocks = forking ? undefined : 3;
@@ -255,8 +263,8 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
         bnbtConfig.cvx,
         treasuryMultisig,
         bnbtConfig.cvxLocker,
-        '1666302008',
-        '1729374008'
+        '1667980800',
+        '1731052800'
     ];
     fs.writeFileSync('./args/escrow.js', 'module.exports = ' + JSON.stringify(args));
 
@@ -270,6 +278,129 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
         waitForBlocks,
     );
     console.log('escrow', escrow.address);
+});
+
+task("deploy-zap:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+        bnbtConfig.token,
+        bnbtConfig.cvx,
+        bnbtConfig.cvxCrv,
+        bnbtConfig.crvDepositor,
+        bnbtConfig.initialCvxCrvStaking,
+        bnbtConfig.cvxLocker,
+    ];
+    console.log('args', args);
+    fs.writeFileSync('./args/zap.js', 'module.exports = ' + JSON.stringify(args));
+
+    const zap = await deployContract<WmxClaimZap>(
+        hre,
+        new WmxClaimZap__factory(deployer),
+        "WmxClaimZap",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('zap', zap.address);
+});
+
+task("deploy-erdp:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+        bnbConfig.booster,
+        bnbConfig.extraRewardsDistributor
+    ];
+    fs.writeFileSync('./args/extraRewardsDistributorProxy.js', 'module.exports = ' + JSON.stringify(args));
+
+    const extraRewardsDistributor = await deployContract<ExtraRewardsDistributorProxy>(
+        hre,
+        new ExtraRewardsDistributorProxy__factory(deployer),
+        "ExtraRewardsDistributorProxy",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('extraRewardsDistributorProxy', extraRewardsDistributor.address);
+});
+
+task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+        bnbConfig.weth,
+        bnbConfig.booster,
+        bnbConfig.masterWombat
+    ];
+    fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(args));
+
+    const poolDepositor = await deployContract<PoolDepositor>(
+        hre,
+        new PoolDepositor__factory(deployer),
+        "PoolDepositor",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('poolDepositor', poolDepositor.address);
+
+    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
+
+    const tokensByPool = {};
+    const poolLength = await masterWombat.poolLength().then(l => parseInt(l.toString()));
+    for (let i = 0; i < poolLength; i++) {
+        const {lpToken} = await masterWombat.poolInfo(i);
+        const asset = Asset__factory.connect(lpToken, deployer);
+        const [pool, underlying] = await Promise.all([
+            asset.pool(),
+            asset.underlyingToken(),
+        ]);
+        if (!tokensByPool[pool]) {
+            tokensByPool[pool] = [];
+        }
+        tokensByPool[pool] =  tokensByPool[pool].concat([underlying, lpToken]);
+    }
+
+    const pools = []
+    _.forEach(tokensByPool, (tokens, pool) => {
+        pools.push({
+            address: pool,
+            tokens: _.uniq(tokens)
+        })
+    })
+
+    for (let i = 0; i < pools.length; i++) {
+        await poolDepositor.approveSpendingByPool(pools[i].tokens, pools[i].address);
+        await poolDepositor.approveSpendingByPool(pools[i].tokens, bnbConfig.booster);
+    }
 });
 
 

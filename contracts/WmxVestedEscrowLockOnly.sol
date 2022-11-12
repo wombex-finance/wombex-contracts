@@ -40,6 +40,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
     event Cancelled(address indexed recipient);
     event Claim(address indexed user, uint256 amount);
     event TransferVestedToken(address indexed user, address indexed recipient, uint256 lockedAmount, uint256 claimedAmount);
+    event TransferVestedTokenShare(address indexed user, address indexed recipient, uint256 amount, uint256 share, uint256 senderTotalLocked, uint256 recipientTotalLocked);
 
     /**
      * @param rewardToken_    Reward token (WMX)
@@ -198,6 +199,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
      * @param _recipient  Address to receive locked rewards.
      */
     function transferVestedTokens(address _recipient) external nonReentrant {
+        require(totalLocked[_recipient] == 0, "!zero_recipient");
         totalLocked[_recipient] = totalLocked[msg.sender];
         totalClaimed[_recipient] = totalClaimed[msg.sender];
 
@@ -205,5 +207,57 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
         totalClaimed[msg.sender] = 0;
 
         emit TransferVestedToken(msg.sender, _recipient, totalLocked[_recipient], totalClaimed[_recipient]);
+    }
+
+    /**
+     * @notice Total pending vested amount
+     * @param _recipient Recipient to lookup
+     */
+    function totalPending(address _recipient) public view returns (uint256) {
+        return totalLocked[_recipient] - totalClaimed[_recipient];
+    }
+
+    /**
+     * @dev Transfer locked rewards to _recipient
+     * @param _recipient  Address to receive locked rewards.
+     */
+    function transferVestedTokensShare(address _recipient, uint256 _share) external nonReentrant {
+        _transferVestedTokensShare(_recipient, _share);
+    }
+
+    /**
+     * @dev Transfer locked rewards to _recipient
+     * @param _recipient  Address to receive locked rewards.
+     */
+    function transferVestedTokensAmount(address _recipient, uint256 _amount) external nonReentrant {
+        uint256 timeDiff = endTime - block.timestamp;
+        uint256 share = (((_amount * totalTime) / timeDiff) * 1 ether) / totalLocked[msg.sender];
+
+        _transferVestedTokensShare(_recipient, share);
+    }
+
+    function _transferVestedTokensShare(address _recipient, uint256 _share) internal {
+        require(block.timestamp < endTime, "end");
+        require(_share > 0, "zero");
+        require(msg.sender != _recipient, "sender_recipient");
+
+        _claim(msg.sender);
+        if (totalLocked[_recipient] > 0) {
+            _claim(_recipient);
+        }
+
+        uint256 amount = (totalLocked[msg.sender] * _share) / 1 ether;
+        uint256 senderPending = totalLocked[msg.sender] - totalClaimed[msg.sender];
+        require(senderPending >= amount, ">pending");
+
+        uint256 claimedAmountToTransfer = (totalClaimed[msg.sender] * _share) / 1 ether;
+
+        totalLocked[msg.sender] = totalLocked[msg.sender] - amount;
+        totalClaimed[msg.sender] = totalClaimed[msg.sender] - claimedAmountToTransfer;
+
+        totalLocked[_recipient] = totalLocked[_recipient] + amount;
+        totalClaimed[_recipient] = totalClaimed[_recipient] + claimedAmountToTransfer;
+
+        emit TransferVestedTokenShare(msg.sender, _recipient, amount, _share, totalLocked[msg.sender], totalLocked[_recipient]);
     }
 }

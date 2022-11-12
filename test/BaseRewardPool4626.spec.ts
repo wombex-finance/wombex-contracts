@@ -4,7 +4,6 @@ import { expect } from "chai";
 import {
     deploy,
     SystemDeployed,
-    updateDistributionByTokens
 } from "../scripts/deploySystem";
 import {
     deployTestFirstStage,
