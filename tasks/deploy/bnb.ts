@@ -251,8 +251,8 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
         bnbtConfig.cvx,
         treasuryMultisig,
         bnbtConfig.cvxLocker,
-        '1666302008',
-        '1729374008'
+        '1667980800',
+        '1731052800'
     ];
     fs.writeFileSync('./args/escrow.js', 'module.exports = ' + JSON.stringify(args));
 
