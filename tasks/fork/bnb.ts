@@ -147,6 +147,17 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     );
     console.log('depositorMigrator', depositorMigrator.address);
 
+    const poolDepositor = await deployContract<PoolDepositor>(
+        hre,
+        new PoolDepositor__factory(deployer),
+        "PoolDepositor",
+        [bnbConfig.weth, newBooster.address, bnbConfig.masterWombat],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('poolDepositor', poolDepositor.address);
+
     const daoSigner = await impersonate(await booster.owner(), true);
 
     await booster.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
@@ -160,17 +171,6 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     console.log('newBooster', newBoosterAddress);
     console.log('newBooster owner', await newBooster.owner());
     console.log('voterProxy owner', await voterProxy.owner());
-
-    const poolDepositor = await deployContract<PoolDepositor>(
-        hre,
-        new PoolDepositor__factory(deployer),
-        "PoolDepositor",
-        [bnbConfig.weth, newBoosterAddress, bnbConfig.masterWombat],
-        {},
-        true,
-        waitForBlocks,
-    );
-    console.log('poolDepositor', poolDepositor.address);
 
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 
