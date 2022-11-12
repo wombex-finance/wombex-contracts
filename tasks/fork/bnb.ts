@@ -19,7 +19,7 @@ import {
     RewardFactory__factory,
     TokenFactory, TokenFactory__factory
 } from "../../types/generated";
-import {impersonate, simpleToExactAmount } from "../../test-utils";
+import {BN, impersonate, simpleToExactAmount} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
 import {BoosterMigrator__factory} from "../../types/generated/factories/BoosterMigrator__factory";
 import {DepositorMigrator} from "../../types/generated/DepositorMigrator";
@@ -29,7 +29,7 @@ import hre from "hardhat";
 
 const fs = require('fs');
 const ethers = require('ethers');
-const {approvePoolDepositor} = require('../helpers');
+const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
 const waitForBlocks = undefined;
 
@@ -304,21 +304,38 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 });
 
 
-async function getBoosterValues(booster: Booster) {
+task("test-fork:check-earmark").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
+    const deployerAddress = await deployer.getAddress();
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
+    const voterProxy = VoterProxy__factory.connect(bnbConfig.voterProxy, deployer);
+    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
+    const wom = ERC20__factory.connect(bnbConfig.wom, deployer);
+
     const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    let totalPending = BN.from('0');
     for (let i = 0; i < poolLength; i++) {
-        await booster.earmarkRewards(i).then(tx => tx.wait(1));
         const pool = await booster.poolInfo(i);
-        const lp = IERC20__factory.connect(pool.lptoken, booster.provider);
-        await lp.balanceOf(booster.address);
+        const pendingCrvRewards = await booster.lpPendingRewards(pool.lptoken, bnbConfig.wom);
+        console.log(i, "   Pending           ", pendingCrvRewards.toString());
+        totalPending = pendingCrvRewards.add(totalPending);
     }
-    await booster.voterProxy();
-    await booster.crvLockRewards();
-    const distroTokens = await booster.distributionTokenList();
-    for (let i = 0; i < distroTokens.length; i++) {
-        const len = await booster.distributionByTokenLength(distroTokens[i]).then(l => parseInt(l.toString()));
-        for(let j = 0; j < len; j++) {
-            await booster.distributionByTokens(distroTokens[i], j);
-        }
-    }
-}
+    const pool5 = await booster.poolInfo(5);
+    const womBoosterBalanceBefore = await wom.balanceOf(booster.address);
+    console.log('womBoosterBalanceBefore', womBoosterBalanceBefore.toString());
+    const voterProxyBalanceBefore = await wom.balanceOf(voterProxy.address);
+    console.log('voterProxyBalanceBefore', voterProxyBalanceBefore.toString());
+    console.log('totalPending           ', totalPending.toString());
+    console.log('totalBalance           ', womBoosterBalanceBefore.add(voterProxyBalanceBefore).toString());
+});
+

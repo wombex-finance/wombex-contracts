@@ -1,4 +1,4 @@
-import {Asset__factory} from "../types/generated";
+import {Asset__factory, Booster, IERC20__factory} from "../types/generated";
 const _ = require('lodash');
 
 async function approvePoolDepositor(masterWombat, poolDepositor, signer) {
@@ -33,6 +33,27 @@ async function approvePoolDepositor(masterWombat, poolDepositor, signer) {
     }
 }
 
+async function getBoosterValues(booster: Booster) {
+    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    for (let i = 0; i < poolLength; i++) {
+        await booster.earmarkRewards(i).then(tx => tx.wait(1));
+        const pool = await booster.poolInfo(i);
+        const lp = IERC20__factory.connect(pool.lptoken, booster.provider);
+        await lp.balanceOf(booster.address);
+    }
+    await booster.voterProxy();
+    await booster.crvLockRewards();
+    const distroTokens = await booster.distributionTokenList();
+    for (let i = 0; i < distroTokens.length; i++) {
+        const len = await booster.distributionByTokenLength(distroTokens[i]).then(l => parseInt(l.toString()));
+        for(let j = 0; j < len; j++) {
+            await booster.distributionByTokens(distroTokens[i], j);
+        }
+    }
+}
+
+
 module.exports = {
-    approvePoolDepositor
+    approvePoolDepositor,
+    getBoosterValues
 };
