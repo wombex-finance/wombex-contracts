@@ -17,7 +17,7 @@ import {
     BaseRewardPool__factory,
     RewardFactory,
     RewardFactory__factory,
-    TokenFactory, TokenFactory__factory
+    TokenFactory, TokenFactory__factory, WomSwapDepositor, WomSwapDepositor__factory
 } from "../../types/generated";
 import {BN, impersonate, simpleToExactAmount} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
@@ -303,7 +303,6 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     console.log('2 wmx after ', await wmx.balanceOf(busdHolderAddress));
 });
 
-
 task("test-fork:check-earmark").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
     const deployerAddress = await deployer.getAddress();
@@ -337,5 +336,41 @@ task("test-fork:check-earmark").setAction(async function (taskArguments: TaskArg
     console.log('voterProxyBalanceBefore', voterProxyBalanceBefore.toString());
     console.log('totalPending           ', totalPending.toString());
     console.log('totalBalance           ', womBoosterBalanceBefore.add(voterProxyBalanceBefore).toString());
+});
+
+task("test-fork:wom-swap-depositor").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
+    const deployerAddress = await deployer.getAddress();
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const womSwapDepositor = await deployContract<WomSwapDepositor>(
+        hre,
+        new WomSwapDepositor__factory(deployer),
+        "WomSwapDepositor",
+        [bnbConfig.wom, bnbConfig.cvxCrv, '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e', '0x19609b03c976cca288fbdae5c21d4290e9a4add7'],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('womSwapDepositor', womSwapDepositor.address);
+
+    const womHolderAddress = '0xc37a89cdb064ac2921fcc8b3538ac0d6a3aadf48';
+    const womHolder = await impersonate(womHolderAddress, true);
+
+    const wom = ERC20__factory.connect(bnbConfig.wom, deployer);
+    await wom.connect(womHolder).approve(womSwapDepositor.address, await wom.balanceOf(womHolderAddress));
+
+    await womSwapDepositor.connect(womHolder).deposit(simpleToExactAmount(1), bnbConfig.cvxCrvRewards, '0', new Date().getTime().toString());
+
+    const wmxWomRewards = BaseRewardPool__factory.connect(bnbConfig.cvxCrvRewards, deployer);
+    console.log('wmxWomRewards balance', await wmxWomRewards.balanceOf(womHolderAddress));
 });
 
