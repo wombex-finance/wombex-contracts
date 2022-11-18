@@ -89,12 +89,19 @@ describe("WmxClaimZap", () => {
         expect(rewardBalance).gt(balanceBeforeReward);
 
         const cvxCrvBalance = await contracts.cvxCrv.balanceOf(aliceAddress);
+        const cvxBalance = await contracts.cvx.balanceOf(aliceAddress);
 
         await increaseTime(ONE_WEEK.mul("4"));
 
         await contracts.booster.earmarkRewards(0);
 
+        await contracts.extraRewardsDistributor.modifyWhitelist(await deployer.getAddress(), true).then(tx => tx.wait(1));
+        await contracts.cvx.approve(contracts.extraRewardsDistributor.address, ethers.utils.parseEther("1000"));
+        await contracts.extraRewardsDistributor.addReward(contracts.cvx.address, ethers.utils.parseEther("900")).then(tx => tx.wait(1));
+
         await increaseTime(ONE_WEEK.mul("4"));
+
+        await contracts.extraRewardsDistributor.addReward(contracts.cvx.address, ethers.utils.parseEther("100")).then(tx => tx.wait(1));
 
         const expectedRewards = await contracts.cvxCrvRewards.earned(mocks.crv.address, aliceAddress);
         console.log('expectedRewards', expectedRewards);
@@ -102,9 +109,20 @@ describe("WmxClaimZap", () => {
         await mocks.crv.connect(alice).approve(contracts.claimZap.address, ethers.constants.MaxUint256);
 
         let option = 1 + 16 + 8;
-        await contracts.claimZap
+        const tx = await contracts.claimZap
             .connect(alice)
-            .claimRewards([], [], [], [], expectedRewards, 0, 0, option);
+            .claimRewards([], [contracts.cvx.address], [], [], expectedRewards, 0, 0, option).then(tx => tx.wait(1));
+
+        const rewardPaid = tx.events
+            .filter(e => e.address.toLowerCase() === contracts.extraRewardsDistributor.address.toLowerCase())
+            .map(e => {
+                try { return contracts.extraRewardsDistributor.interface.decodeEventLog('RewardPaid', e.data, e.topics); }
+                catch (e) { return null; }
+            }).filter(e => e)[0];
+
+        expect(rewardPaid.user).eq(aliceAddress);
+        expect(rewardPaid.reward).gt('0');
+        expect(await contracts.cvx.balanceOf(aliceAddress)).gt(cvxBalance);
 
         const newCvxCrvBalance = await contracts.cvxCrv.balanceOf(aliceAddress);
         expect(newCvxCrvBalance).gt(cvxCrvBalance);

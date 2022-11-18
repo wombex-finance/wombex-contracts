@@ -614,7 +614,7 @@ async function deployFirstStage(
         hre,
         new WmxClaimZap__factory(deployer),
         "WmxClaimZap",
-        [token, cvx.address, cvxCrv.address, womDepositor.address, cvxCrvRewards.address, wmxLocker.address],
+        [token, cvx.address, cvxCrv.address, womDepositor.address, cvxCrvRewards.address, extraRewardsDistributor.address, wmxLocker.address],
         {},
         debug,
         waitForBlocks,

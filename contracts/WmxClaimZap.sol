@@ -6,6 +6,10 @@ import {IWmxLocker, IWomDepositorWrapper} from "./Interfaces.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 
+interface IExtraRewards {
+    function getReward(address _account, address _token) external;
+}
+
 interface IBasicRewards {
     function getReward(address _account, bool _lockWmx) external;
 
@@ -40,6 +44,7 @@ contract WmxClaimZap {
     address public immutable womWmx;
     address public immutable womDepositor;
     address public immutable wmxWomRewards;
+    address public immutable extraRewardsDistributor;
     address public immutable locker;
     address public immutable owner;
 
@@ -55,12 +60,13 @@ contract WmxClaimZap {
 }
 
     /**
-     * @param _wom                WOM token
-     * @param _wmx                WMX token
-     * @param _wmxWom             wmxWom token
-     * @param _womDepositor         womDepositor
-     * @param _wmxWomRewards      wmxWomRewards
-     * @param _locker             vlWMX
+     * @param _wom                      WOM token
+     * @param _wmx                      WMX token
+     * @param _wmxWom                   wmxWom token
+     * @param _womDepositor             womDepositor
+     * @param _wmxWomRewards            wmxWomRewards
+     * @param _extraRewardsDistributor  ExtraRewardsDistributor
+     * @param _locker                   vlWMX
      */
     constructor(
         address _wom,
@@ -68,6 +74,7 @@ contract WmxClaimZap {
         address _wmxWom,
         address _womDepositor,
         address _wmxWomRewards,
+        address _extraRewardsDistributor,
         address _locker
     ) {
         wom = _wom;
@@ -75,6 +82,7 @@ contract WmxClaimZap {
         womWmx = _wmxWom;
         womDepositor = _womDepositor;
         wmxWomRewards = _wmxWomRewards;
+        extraRewardsDistributor = _extraRewardsDistributor;
         locker = _locker;
         owner = msg.sender;
     }
@@ -112,7 +120,7 @@ contract WmxClaimZap {
     /**
      * @notice Claim all the rewards
      * @param rewardContracts       Array of addresses for LP token rewards
-     * @param extraRewardContracts  Array of addresses for extra rewards
+     * @param extraRewardTokens  Array of addresses for extra rewards
      * @param tokenRewardContracts  Array of addresses for token rewards e.g vlWmxExtraRewardDistribution
      * @param tokenRewardPids       Array of token staking ids to use with tokenRewardContracts
      * @param depositWomMaxAmount   The max amount of WOM to deposit if converting to womWmx
@@ -123,7 +131,7 @@ contract WmxClaimZap {
      */
     function claimRewards(
         address[] calldata rewardContracts,
-        address[] calldata extraRewardContracts,
+        address[] calldata extraRewardTokens,
         address[] calldata tokenRewardContracts,
         uint256[] calldata tokenRewardPids,
         uint256 depositWomMaxAmount,
@@ -141,8 +149,8 @@ contract WmxClaimZap {
             IBasicRewards(rewardContracts[i]).getReward(msg.sender, _checkOption(options, Options.LockWmxRewards));
         }
         //claim from extra rewards
-        for (uint256 i = 0; i < extraRewardContracts.length; i++) {
-            IBasicRewards(extraRewardContracts[i]).getReward(msg.sender);
+        for (uint256 i = 0; i < extraRewardTokens.length; i++) {
+            IExtraRewards(extraRewardsDistributor).getReward(msg.sender, extraRewardTokens[i]);
         }
         //claim from multi reward token contract
         for (uint256 i = 0; i < tokenRewardContracts.length; i++) {
