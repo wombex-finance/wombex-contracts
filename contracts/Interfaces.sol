@@ -149,3 +149,14 @@ interface IBooster {
     function earmarkRewards(uint256 _pid) external returns(bool);
     function setOwner(address _owner) external;
 }
+
+interface ISwapRouter {
+    function swapExactTokensForTokens(
+        address[] calldata tokenPath,
+        address[] calldata poolPath,
+        uint256 amountIn,
+        uint256 minimumamountOut,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountOut);
+}

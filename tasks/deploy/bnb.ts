@@ -1,8 +1,8 @@
-import { task } from "hardhat/config";
-import { HardhatRuntimeEnvironment, TaskArguments } from "hardhat/types";
-import { getSigner } from "../utils";
-import { deployContract, logContracts, waitForTx } from "./../utils/deploy-utils";
-import { deployFirstStage } from "../../scripts/deploySystem";
+import {task} from "hardhat/config";
+import {HardhatRuntimeEnvironment, TaskArguments} from "hardhat/types";
+import {getSigner} from "../utils";
+import {deployContract, logContracts, waitForTx} from "./../utils/deploy-utils";
+import {deployFirstStage} from "../../scripts/deploySystem";
 import {
     VoterProxy__factory,
     VoterProxy,
@@ -33,7 +33,7 @@ import {
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
     PoolDepositor__factory,
-    Asset__factory
+    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -42,6 +42,7 @@ import {
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
+
 const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
 const fs = require('fs');
@@ -95,8 +96,8 @@ task("deploy:bnb").setAction(async function (taskArguments: TaskArguments, hre) 
     const contracts = await deployFirstStage(
         hre,
         deployer,
-        { voterProxy, weth, masterWombat, crv, pool },
-        { vestingMultisig,  treasuryMultisig, daoMultisig },
+        {voterProxy, weth, masterWombat, crv, pool},
+        {vestingMultisig, treasuryMultisig, daoMultisig},
         {
             cvxName: "Wombex Token",
             cvxSymbol: "WMX",
@@ -135,7 +136,10 @@ task("bnb:all-distro-tokens").setAction(async function (taskArguments: TaskArgum
     const masterWombat = MasterWombatV2__factory.connect(bnbtConfig.masterWombat, deployer);
 
     const wbnb = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
-    console.log('wom', bnbtConfig.wom, {cvxCrvRewards: bnbtConfig.cvxCrvRewards, cvxStakingProxy: bnbtConfig.cvxStakingProxy});
+    console.log('wom', bnbtConfig.wom, {
+        cvxCrvRewards: bnbtConfig.cvxCrvRewards,
+        cvxStakingProxy: bnbtConfig.cvxStakingProxy
+    });
 
     let bonusRewardTokens = [];
     const poolLength = await masterWombat.poolLength().then(l => parseInt(l.toString()));
@@ -383,7 +387,7 @@ task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskA
         if (!tokensByPool[pool]) {
             tokensByPool[pool] = [];
         }
-        tokensByPool[pool] =  tokensByPool[pool].concat([underlying, lpToken]);
+        tokensByPool[pool] = tokensByPool[pool].concat([underlying, lpToken]);
     }
 
     const pools = []
@@ -496,4 +500,29 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
 
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
+
+task("deploy-wom-swap-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [bnbConfig.wom, bnbConfig.cvxCrv, '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e', '0x19609b03c976cca288fbdae5c21d4290e9a4add7'];
+    fs.writeFileSync('./args/womSwapDepositor.js', 'module.exports = ' + JSON.stringify(args));
+    const womSwapDepositor = await deployContract<WomSwapDepositor>(
+        hre,
+        new WomSwapDepositor__factory(deployer),
+        "WomSwapDepositor",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('womSwapDepositor', womSwapDepositor.address);
 });
