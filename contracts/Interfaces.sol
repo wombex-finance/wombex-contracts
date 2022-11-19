@@ -160,3 +160,7 @@ interface ISwapRouter {
         uint256 deadline
     ) external returns (uint256 amountOut);
 }
+
+interface IWomSwapDepositor {
+    function deposit(uint256 _amount, address _stakeAddress, uint256 _minAmountOut, uint256 _deadline) external returns (bool);
+}

@@ -17,7 +17,7 @@ import {
     BaseRewardPool__factory,
     RewardFactory,
     RewardFactory__factory,
-    TokenFactory, TokenFactory__factory, WomSwapDepositor, WomSwapDepositor__factory
+    TokenFactory, TokenFactory__factory, WomSwapDepositor, WomSwapDepositor__factory, WmxClaimZap, WmxClaimZap__factory
 } from "../../types/generated";
 import {BN, impersonate, simpleToExactAmount} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
@@ -362,6 +362,27 @@ task("test-fork:wom-swap-depositor").setAction(async function (taskArguments: Ta
     );
     console.log('womSwapDepositor', womSwapDepositor.address);
 
+    const zap = await deployContract<WmxClaimZap>(
+        hre,
+        new WmxClaimZap__factory(deployer),
+        "WmxClaimZap",
+        [
+            bnbConfig.token,
+            bnbConfig.cvx,
+            bnbConfig.cvxCrv,
+            bnbConfig.crvDepositor,
+            bnbConfig.cvxCrvRewards,
+            bnbConfig.extraRewardsDistributor,
+            womSwapDepositor.address,
+            bnbConfig.cvxLocker,
+            deployerAddress
+        ],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('zap', zap.address);
+
     const womHolderAddress = '0xc37a89cdb064ac2921fcc8b3538ac0d6a3aadf48';
     const womHolder = await impersonate(womHolderAddress, true);
 
@@ -372,5 +393,21 @@ task("test-fork:wom-swap-depositor").setAction(async function (taskArguments: Ta
 
     const wmxWomRewards = BaseRewardPool__factory.connect(bnbConfig.cvxCrvRewards, deployer);
     console.log('wmxWomRewards balance', await wmxWomRewards.balanceOf(womHolderAddress));
+
+    const pendingRewardsUserAddress = '0x46919f4016befb3c9a01e72a1cfc395695276a01';
+    const pendingRewardsUser = await impersonate(pendingRewardsUserAddress, true);
+
+    const wmxWom = ERC20__factory.connect(bnbConfig.cvxCrv, deployer);
+    console.log('wmxWomRewards balance', await wmxWomRewards.balanceOf(womHolderAddress));
+    const wmxWomBalanceBefore = await wmxWom.balanceOf(pendingRewardsUserAddress);
+    const womBalanceBefore = await wom.balanceOf(pendingRewardsUserAddress);
+
+    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
+    const pool0RewardsAddress = await booster.poolInfo(0).then(pi => pi.crvRewards);
+
+    await wom.connect(pendingRewardsUser).approve(zap.address, simpleToExactAmount(999999999)).then(tx => tx.wait(1));
+    await zap.connect(pendingRewardsUser).claimRewards([pool0RewardsAddress], [], [], [], simpleToExactAmount(1), simpleToExactAmount(1), '0', '256')
+    console.log('wom received', await wom.balanceOf(pendingRewardsUserAddress).then(b => b.sub(womBalanceBefore)));
+    console.log('wmxWom received', await wmxWom.balanceOf(pendingRewardsUserAddress).then(b => b.sub(wmxWomBalanceBefore)));
 });
 

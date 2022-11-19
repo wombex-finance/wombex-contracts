@@ -62,9 +62,13 @@ contract WomSwapDepositor is Ownable {
         uint256 wmxWomAmount = ISwapRouter(swapRouter).swapExactTokensForTokens(tokens, pools, _amount, _minAmountOut, address(this), _deadline);
 
         //stake for to
-        IERC20(wmxWom).safeApprove(_stakeAddress, 0);
-        IERC20(wmxWom).safeApprove(_stakeAddress, wmxWomAmount);
-        IRewards(_stakeAddress).stakeFor(msg.sender, wmxWomAmount);
+        if (_stakeAddress == address(0)) {
+            IERC20(wmxWom).safeTransfer(msg.sender, wmxWomAmount);
+        } else {
+            IERC20(wmxWom).safeApprove(_stakeAddress, 0);
+            IERC20(wmxWom).safeApprove(_stakeAddress, wmxWomAmount);
+            IRewards(_stakeAddress).stakeFor(msg.sender, wmxWomAmount);
+        }
 
         emit Deposit(msg.sender, _stakeAddress, wmxWomAmount);
         return true;
