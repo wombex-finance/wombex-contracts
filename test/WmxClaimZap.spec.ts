@@ -59,7 +59,7 @@ describe("WmxClaimZap", () => {
     });
 
     it("initial configuration is correct", async () => {
-        expect(await contracts.claimZap.getName()).to.be.eq("ClaimZap V2.0");
+        expect(await contracts.claimZap.getName()).to.be.eq("ClaimZap V3.0");
     });
 
     it("set approval for deposits", async () => {

@@ -614,15 +614,12 @@ async function deployFirstStage(
         hre,
         new WmxClaimZap__factory(deployer),
         "WmxClaimZap",
-        [token, cvx.address, cvxCrv.address, womDepositor.address, cvxCrvRewards.address, extraRewardsDistributor.address, wmxLocker.address],
+        [token, cvx.address, cvxCrv.address, womDepositor.address, cvxCrvRewards.address, extraRewardsDistributor.address, wmxLocker.address, wmxLocker.address, multisigs.daoMultisig],
         {},
         debug,
         waitForBlocks,
     );
     console.log('claimZap', claimZap.address)
-
-    tx = await claimZap.setApprovals();
-    await waitForTx(tx, debug, waitForBlocks);
 
     console.log('cvx.init')
     tx = await cvx.init(multisigs.daoMultisig, minter.address);
