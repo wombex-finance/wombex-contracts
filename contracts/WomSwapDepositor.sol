@@ -18,7 +18,7 @@ contract WomSwapDepositor is Ownable {
     address public pool;
     address public swapRouter;
 
-    event Deposit(address indexed account, address stakeAddress, uint256 amount);
+    event Deposit(address indexed account, address stakeAddress, uint256 amountIn, uint256 amountOut);
 
     /**
      * @param _wom              WOM Token address
@@ -52,14 +52,7 @@ contract WomSwapDepositor is Ownable {
 
         IERC20(wom).safeTransferFrom(msg.sender, address(this), _amount);
 
-        address[] memory tokens = new address[](2);
-        tokens[0] = wom;
-        tokens[1] = wmxWom;
-
-        address[] memory pools = new address[](1);
-        pools[0] = pool;
-
-        uint256 wmxWomAmount = ISwapRouter(swapRouter).swapExactTokensForTokens(tokens, pools, _amount, _minAmountOut, address(this), _deadline);
+        uint256 wmxWomAmount = ISwapRouter(swapRouter).swapExactTokensForTokens(getTokensPath(), getPoolsPath(), _amount, _minAmountOut, address(this), _deadline);
 
         //stake for to
         if (_stakeAddress == address(0)) {
@@ -70,8 +63,23 @@ contract WomSwapDepositor is Ownable {
             IRewards(_stakeAddress).stakeFor(msg.sender, wmxWomAmount);
         }
 
-        emit Deposit(msg.sender, _stakeAddress, wmxWomAmount);
+        emit Deposit(msg.sender, _stakeAddress, _amount, wmxWomAmount);
         return true;
+    }
+
+    function getWmxWomAmountOut(uint256 _amountIn) external view returns (uint256 amountOut, uint256[] memory haircuts) {
+        (amountOut, haircuts) = ISwapRouter(swapRouter).getAmountOut(getTokensPath(), getPoolsPath(), int256(_amountIn));
+    }
+
+    function getTokensPath() public view returns (address[] memory tokens) {
+        tokens = new address[](2);
+        tokens[0] = wom;
+        tokens[1] = wmxWom;
+    }
+
+    function getPoolsPath() public view returns (address[] memory pools) {
+        pools = new address[](1);
+        pools[0] = pool;
     }
 
     /**

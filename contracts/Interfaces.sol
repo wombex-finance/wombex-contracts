@@ -159,6 +159,12 @@ interface ISwapRouter {
         address to,
         uint256 deadline
     ) external returns (uint256 amountOut);
+
+    function getAmountOut(
+        address[] calldata tokenPath,
+        address[] calldata poolPath,
+        int256 amountIn
+    ) external view returns (uint256 amountOut, uint256[] memory haircuts);
 }
 
 interface IWomSwapDepositor {
