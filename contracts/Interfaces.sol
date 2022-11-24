@@ -135,6 +135,12 @@ interface IPool {
         address to,
         uint256 deadline
     ) external returns (uint256 amount);
+
+    function quotePotentialSwap(
+        address fromToken,
+        address toToken,
+        int256 fromAmount
+    ) external view returns (uint256 potentialOutcome, uint256 haircut);
 }
 
 interface IMasterWombatV2 {

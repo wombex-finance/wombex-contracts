@@ -5,6 +5,7 @@ import "./Interfaces.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.8/access/Ownable.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
+import "hardhat/console.sol";
 
 /**
  * @title   WomSwapDepositor
@@ -67,8 +68,14 @@ contract WomSwapDepositor is Ownable {
         return true;
     }
 
-    function getWmxWomAmountOut(uint256 _amountIn) external view returns (uint256 amountOut, uint256[] memory haircuts) {
-        (amountOut, haircuts) = ISwapRouter(swapRouter).getAmountOut(getTokensPath(), getPoolsPath(), int256(_amountIn));
+    function quotePotentialSwap(int256 _amountIn) external view returns (uint256 amountOut, uint256 amountOutFee, int256 priceImpact) {
+        (amountOut, amountOutFee) = IPool(pool).quotePotentialSwap(wom, wmxWom, _amountIn);
+        (uint256 etherOut, ) = IPool(pool).quotePotentialSwap(wom, wmxWom, 1 ether);
+        priceImpact = getPriceImpact(_amountIn, int256(amountOut), int256(etherOut));
+    }
+
+    function getPriceImpact(int256 _amountIn, int256 _amountOut, int256 _etherOut) public pure returns (int256) {
+        return ((((_amountOut * 1 ether) / _amountIn) - _etherOut) * 1 ether) / _etherOut * 100;
     }
 
     function getTokensPath() public view returns (address[] memory tokens) {

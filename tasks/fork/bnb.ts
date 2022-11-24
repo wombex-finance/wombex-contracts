@@ -391,6 +391,11 @@ task("test-fork:wom-swap-depositor").setAction(async function (taskArguments: Ta
 
     await womSwapDepositor.connect(womHolder).deposit(simpleToExactAmount(1), bnbConfig.cvxCrvRewards, '0', new Date().getTime().toString());
 
+    console.log('womSwapDepositor quote 1', await womSwapDepositor.quotePotentialSwap(simpleToExactAmount(1)));
+    console.log('womSwapDepositor quote 2', await womSwapDepositor.quotePotentialSwap(simpleToExactAmount(2)));
+    console.log('womSwapDepositor quote 1000', await womSwapDepositor.quotePotentialSwap(simpleToExactAmount(1000)));
+    console.log('womSwapDepositor quote 1000000', await womSwapDepositor.quotePotentialSwap(simpleToExactAmount(1000000)));
+
     const wmxWomRewards = BaseRewardPool__factory.connect(bnbConfig.cvxCrvRewards, deployer);
     console.log('wmxWomRewards balance', await wmxWomRewards.balanceOf(womHolderAddress));
 
