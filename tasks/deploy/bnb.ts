@@ -291,6 +291,7 @@ task("deploy-zap:bnb").setAction(async function (taskArguments: TaskArguments, h
     })) as any;
 
     const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
 
     const args = [
         bnbtConfig.token,
@@ -298,7 +299,10 @@ task("deploy-zap:bnb").setAction(async function (taskArguments: TaskArguments, h
         bnbtConfig.cvxCrv,
         bnbtConfig.crvDepositor,
         bnbtConfig.cvxCrvRewards,
+        bnbtConfig.extraRewardsDistributor,
+        bnbtConfig.womSwapDepositor,
         bnbtConfig.cvxLocker,
+        treasuryMultisig
     ];
     console.log('args', args);
     fs.writeFileSync('./args/zap.js', 'module.exports = ' + JSON.stringify(args));

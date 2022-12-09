@@ -18,7 +18,7 @@ contract WomSwapDepositor is Ownable {
     address public pool;
     address public swapRouter;
 
-    event Deposit(address indexed account, address stakeAddress, uint256 amount);
+    event Deposit(address indexed account, address stakeAddress, uint256 amountIn, uint256 amountOut);
 
     /**
      * @param _wom              WOM Token address
@@ -52,22 +52,40 @@ contract WomSwapDepositor is Ownable {
 
         IERC20(wom).safeTransferFrom(msg.sender, address(this), _amount);
 
-        address[] memory tokens = new address[](2);
-        tokens[0] = wom;
-        tokens[1] = wmxWom;
-
-        address[] memory pools = new address[](1);
-        pools[0] = pool;
-
-        uint256 wmxWomAmount = ISwapRouter(swapRouter).swapExactTokensForTokens(tokens, pools, _amount, _minAmountOut, address(this), _deadline);
+        uint256 wmxWomAmount = ISwapRouter(swapRouter).swapExactTokensForTokens(getTokensPath(), getPoolsPath(), _amount, _minAmountOut, address(this), _deadline);
 
         //stake for to
-        IERC20(wmxWom).safeApprove(_stakeAddress, 0);
-        IERC20(wmxWom).safeApprove(_stakeAddress, wmxWomAmount);
-        IRewards(_stakeAddress).stakeFor(msg.sender, wmxWomAmount);
+        if (_stakeAddress == address(0)) {
+            IERC20(wmxWom).safeTransfer(msg.sender, wmxWomAmount);
+        } else {
+            IERC20(wmxWom).safeApprove(_stakeAddress, 0);
+            IERC20(wmxWom).safeApprove(_stakeAddress, wmxWomAmount);
+            IRewards(_stakeAddress).stakeFor(msg.sender, wmxWomAmount);
+        }
 
-        emit Deposit(msg.sender, _stakeAddress, wmxWomAmount);
+        emit Deposit(msg.sender, _stakeAddress, _amount, wmxWomAmount);
         return true;
+    }
+
+    function quotePotentialSwap(int256 _amountIn) external view returns (uint256 amountOut, uint256 amountOutFee, int256 priceImpact) {
+        (amountOut, amountOutFee) = IPool(pool).quotePotentialSwap(wom, wmxWom, _amountIn);
+        (uint256 etherOut, ) = IPool(pool).quotePotentialSwap(wom, wmxWom, 1 ether);
+        priceImpact = getPriceImpact(_amountIn, int256(amountOut), int256(etherOut));
+    }
+
+    function getPriceImpact(int256 _amountIn, int256 _amountOut, int256 _etherOut) public pure returns (int256) {
+        return ((((_amountOut * 1 ether) / _amountIn) - _etherOut) * 1 ether) / _etherOut * 100;
+    }
+
+    function getTokensPath() public view returns (address[] memory tokens) {
+        tokens = new address[](2);
+        tokens[0] = wom;
+        tokens[1] = wmxWom;
+    }
+
+    function getPoolsPath() public view returns (address[] memory pools) {
+        pools = new address[](1);
+        pools[0] = pool;
     }
 
     /**

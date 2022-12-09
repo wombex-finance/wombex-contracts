@@ -135,6 +135,12 @@ interface IPool {
         address to,
         uint256 deadline
     ) external returns (uint256 amount);
+
+    function quotePotentialSwap(
+        address fromToken,
+        address toToken,
+        int256 fromAmount
+    ) external view returns (uint256 potentialOutcome, uint256 haircut);
 }
 
 interface IMasterWombatV2 {
@@ -159,4 +165,14 @@ interface ISwapRouter {
         address to,
         uint256 deadline
     ) external returns (uint256 amountOut);
+
+    function getAmountOut(
+        address[] calldata tokenPath,
+        address[] calldata poolPath,
+        int256 amountIn
+    ) external view returns (uint256 amountOut, uint256[] memory haircuts);
+}
+
+interface IWomSwapDepositor {
+    function deposit(uint256 _amount, address _stakeAddress, uint256 _minAmountOut, uint256 _deadline) external returns (bool);
 }
