@@ -141,6 +141,16 @@ interface IPool {
         address toToken,
         int256 fromAmount
     ) external view returns (uint256 potentialOutcome, uint256 haircut);
+
+    function quotePotentialDeposit(
+        address token,
+        uint256 amount
+    ) external view returns (uint256 liquidity, uint256 reward);
+
+    function quotePotentialWithdraw(
+        address token,
+        uint256 liquidity
+    ) external view returns (uint256 amount, uint256 fee);
 }
 
 interface IMasterWombatV2 {

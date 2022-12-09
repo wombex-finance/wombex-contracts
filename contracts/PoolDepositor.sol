@@ -86,9 +86,9 @@ contract PoolDepositor is Ownable {
 
     function deposit(address _lptoken, uint256 _amount, uint256 _minLiquidity, bool _stake) public {
         address underlying = IAsset(_lptoken).underlyingToken();
-
         IERC20(underlying).transferFrom(msg.sender, address(this), _amount);
         _deposit(_lptoken, underlying, _amount, _minLiquidity, _stake);
+
     }
 
     function _deposit(address _lptoken, address _underlying, uint256 _amount, uint256 _minLiquidity, bool _stake) internal {
@@ -108,5 +108,23 @@ contract PoolDepositor is Ownable {
 
         address underlying = IAsset(_lptoken).underlyingToken();
         IPool(pool).withdraw(underlying, _amount, _minOut, _recipient, block.timestamp + 1);
+    }
+
+    function getDepositAmountOut(
+        address _lptoken,
+        uint256 _amount
+    ) external view returns (uint256 liquidity, uint256 reward) {
+        address pool = IAsset(_lptoken).pool();
+        address underlying = IAsset(_lptoken).underlyingToken();
+        return IPool(pool).quotePotentialDeposit(underlying, _amount);
+    }
+
+    function getWithdrawAmountOut(
+        address _lptoken,
+        uint256 _amount
+    ) external view returns (uint256 amount, uint256 fee) {
+        address pool = IAsset(_lptoken).pool();
+        address underlying = IAsset(_lptoken).underlyingToken();
+        return IPool(pool).quotePotentialWithdraw(underlying, _amount);
     }
 }
