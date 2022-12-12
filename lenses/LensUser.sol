@@ -19,6 +19,7 @@ interface IBooster {
         bool shutdown;
     }
     function poolInfo(uint256 _index) external view returns (PoolInfo memory);
+    function crvLockRewards() external view returns (address);
 }
 
 interface IWomLpToken {
@@ -42,6 +43,28 @@ contract LensUser {
 
     address internal constant PANCAKE_ROUTER = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
+    function getUserBalancesDefault(
+        IBooster _booster,
+        address _user
+    ) public view returns(
+        uint256[] memory lpTokenBalances,
+        uint256[] memory underlyingBalances,
+        uint256[] memory usdOuts,
+        uint256 womWmxBalance,
+        uint256 womWmxUsdOut
+    ) {
+        (lpTokenBalances, underlyingBalances, usdOuts) = getUserBalances(_booster, _user, defaultPools());
+        (womWmxBalance, womWmxUsdOut) = getUserWmxWom(IBooster(_booster).crvLockRewards(), _user);
+    }
+
+    function defaultPools() public pure returns (uint256[] memory) {
+        uint256[] memory poolIds = new uint256[](12);
+        for (uint256 i = 0; i < 12; i++) {
+            poolIds[i] = i;
+        }
+        return poolIds;
+    }
+
     function getUserWmxWom(
         address _crvLockRewards,
         address _user
@@ -57,25 +80,6 @@ contract LensUser {
             uint256[] memory amountsOut = IUniswapV2Router01(PANCAKE_ROUTER).getAmountsOut(womWmxBalance, path);
             usdOut = amountsOut[1];
         }
-    }
-
-    function getUserBalancesDefault(
-        IBooster _booster,
-        address _user
-    ) public view returns(
-        uint256[] memory lpTokenBalances,
-        uint256[] memory underlyingBalances,
-        uint256[] memory usdOuts
-    ) {
-        return getUserBalances(_booster, _user, defaultPools());
-    }
-
-    function defaultPools() public pure returns (uint256[] memory) {
-        uint256[] memory poolIds = new uint256[](12);
-        for (uint256 i = 0; i < 12; i++) {
-            poolIds[i] = i;
-        }
-        return poolIds;
     }
 
     function getUserBalances(
