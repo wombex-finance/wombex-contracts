@@ -42,6 +42,23 @@ contract LensUser {
 
     address internal constant PANCAKE_ROUTER = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
+    function getUserWmxWom(
+        address _crvLockRewards,
+        address _user
+    ) public view returns(
+        uint256 womWmxBalance,
+        uint256 usdOut
+    ) {
+        womWmxBalance = IERC20(_crvLockRewards).balanceOf(_user);
+        if (womWmxBalance > 0) {
+            address[] memory path = new address[](2);
+            path[0] = WOM_TOKEN;
+            path[1] = BUSD_TOKEN;
+            uint256[] memory amountsOut = IUniswapV2Router01(PANCAKE_ROUTER).getAmountsOut(womWmxBalance, path);
+            usdOut = amountsOut[1];
+        }
+    }
+
     function getUserBalancesDefault(
         IBooster _booster,
         address _user

@@ -6,8 +6,10 @@ const path = require('path');
 const LENS_ADDRESS = '0xf5c285c77ac0d4668cf8749309aa3db99a138d85';
 // const METHOD_NAME = 'getUserBalances';
 const METHOD_NAME = 'getUserBalancesDefault';
+// const METHOD_NAME = 'getUserWmxWom';
 // const METHOD_NAME = 'check';
 
+// example: hardhat lens:user --network bsc --user 0xCA31D21901CFEDEf50c5dc8C3F4efe461FF9C96C
 task("lens:user")
     .addParam("user", "user address")
     .setAction(async function (taskArgs, hre, runSuper) {
