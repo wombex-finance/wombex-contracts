@@ -36,6 +36,11 @@ interface IWomPool {
     ) external view returns (uint256 potentialOutcome, uint256 haircut);
 }
 
+interface IBaseRewardPool4626 {
+    function claimableRewards(address _account)
+        external view returns (address[] memory tokens, uint256[] memory amounts);
+}
+
 contract LensUser {
     address internal constant WOM_STABLE_MAIN_POOL = 0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0;
     address internal constant WOM_STABLE_SIDE_POOL = 0x0520451B19AD0bb00eD35ef391086A692CFC74B2;
@@ -56,10 +61,14 @@ contract LensUser {
         uint256[] memory lpTokenBalances,
         uint256[] memory underlyingBalances,
         uint256[] memory usdOuts,
+        address[][] memory rewardTokens,
+        uint256[][] memory earnedRewards,
         uint256 womWmxBalance,
         uint256 womWmxUsdOut
     ) {
-        (lpTokenBalances, underlyingBalances, usdOuts) = getUserBalances(_booster, _user, defaultPools());
+        (lpTokenBalances, underlyingBalances, usdOuts, rewardTokens, earnedRewards) = getUserBalances(
+            _booster, _user, defaultPools()
+        );
         (womWmxBalance, womWmxUsdOut) = getUserWmxWom(IBooster(_booster).crvLockRewards(), _user);
     }
 
@@ -101,29 +110,38 @@ contract LensUser {
     ) public view returns(
         uint256[] memory lpTokenBalances,
         uint256[] memory underlyingBalances,
-        uint256[] memory usdOuts
+        uint256[] memory usdOuts,
+        address[][] memory rewardTokens,
+        uint256[][] memory earnedRewards
     ) {
         uint256 len = _poolIds.length;
         lpTokenBalances = new uint256[](len);
         underlyingBalances = new uint256[](len);
         usdOuts = new uint256[](len);
+        rewardTokens = new address[][](len);
+        earnedRewards = new uint256[][](len);
 
         for (uint256 i = 0; i < len; i++) {
-            // 1. LP token balance
             IBooster.PoolInfo memory poolInfo = _booster.poolInfo(_poolIds[i]);
+
+            // 1. Earned rewards
+            (rewardTokens[i], earnedRewards[i]) = IBaseRewardPool4626(poolInfo.crvRewards)
+                .claimableRewards(_user);
+
+            // 2. LP token balance
             uint256 lpTokenBalance = IERC20(poolInfo.crvRewards).balanceOf(_user);
             lpTokenBalances[i] = lpTokenBalance;
             if (lpTokenBalance == 0) {
                 continue;
             }
 
-            // 2. Underlying balance
+            // 3. Underlying balance
             address pool = IWomLpToken(poolInfo.lptoken).pool();
             address underlyingToken = IWomLpToken(poolInfo.lptoken).underlyingToken();
             try IWomPool(pool).quotePotentialWithdraw(underlyingToken, lpTokenBalance) returns (uint256 underlyingBalance) {
                 underlyingBalances[i] = underlyingBalance;
 
-                // 3. Usd outs
+                // 4. Usd outs
                 usdOuts[i] = getUsdOut(pool, lpTokenBalance, underlyingBalance);
             } catch {}
         }
