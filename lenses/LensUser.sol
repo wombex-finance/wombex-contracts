@@ -47,8 +47,11 @@ contract LensUser {
     address internal constant WOM_BNB_POOL = 0x0029b7e8e9eD8001c868AA09c74A1ac6269D4183;
     address internal constant WOM_WMX_POOL = 0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e;
 
-    address internal constant WOM_TOKEN = 0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1;
     address internal constant BUSD_TOKEN = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
+    address internal constant USDT_TOKEN = 0x55d398326f99059fF775485246999027B3197955;
+    address internal constant USDC_TOKEN = 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d;
+    address internal constant DAI_TOKEN = 0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3;
+    address internal constant WOM_TOKEN = 0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1;
     address internal constant WBNB_TOKEN = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address internal constant SD_TOKEN = 0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8;
     address internal constant WMX_WOM_TOKEN = 0x0415023846Ff1C6016c4d9621de12b24B2402979;
@@ -64,14 +67,16 @@ contract LensUser {
         uint256[] memory underlyingBalances,
         uint256[] memory usdOuts,
         address[][] memory rewardTokens,
-        uint256[][] memory earnedRewards,
+        uint256[][] memory earnedRewardsUSD,
         uint256 womWmxBalance,
-        uint256 womWmxUsdOut
+        uint256 womWmxUsdOut,
+        address[] memory womWmxRewardTokens,
+        uint256[] memory womWmxRewards
     ) {
-        (lpTokenBalances, underlyingBalances, usdOuts, rewardTokens, earnedRewards) = getUserBalances(
+        (lpTokenBalances, underlyingBalances, usdOuts, rewardTokens, earnedRewardsUSD) = getUserBalances(
             _booster, _user, defaultPools()
         );
-        (womWmxBalance, womWmxUsdOut) = getUserWmxWom(IBooster(_booster).crvLockRewards(), _user);
+        (womWmxBalance, womWmxUsdOut, womWmxRewardTokens, womWmxRewards) = getUserWmxWom(IBooster(_booster).crvLockRewards(), _user);
     }
 
     function defaultPools() public pure returns (uint256[] memory) {
@@ -87,10 +92,14 @@ contract LensUser {
         address _user
     ) public view returns(
         uint256 womWmxBalance,
-        uint256 usdOut
+        uint256 usdOut,
+        address[] memory womWmxRewardTokens,
+        uint256[] memory womWmxRewards
     ) {
+        (womWmxRewardTokens,,womWmxRewards) = getUserPendingRewards(_crvLockRewards, _user);
         womWmxBalance = IERC20(_crvLockRewards).balanceOf(_user);
         if (womWmxBalance > 0) {
+
             (uint256 womAmountOut,) = IWomPool(WOM_WMX_POOL)
                 .quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(womWmxBalance));
 
@@ -202,13 +211,20 @@ contract LensUser {
     }
 
     function estimateInUSD(address _token, uint256 _amountIn) public view returns (uint256) {
+        if (_token == BUSD_TOKEN || _token == USDT_TOKEN || _token == USDC_TOKEN || _token == DAI_TOKEN) {
+            return _amountIn;
+        }
         address router = PANCAKE_ROUTER;
         bool throughBnb = true;
+
         if (_token == SD_TOKEN) {
             router = APE_ROUTER;
             throughBnb = false;
         }
         if (_token == WOM_TOKEN) {
+            throughBnb = false;
+        }
+        if (_token == WBNB_TOKEN) {
             throughBnb = false;
         }
 
