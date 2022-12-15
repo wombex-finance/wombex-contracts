@@ -68,15 +68,15 @@ contract LensUser {
         uint256[] memory usdOuts,
         address[][] memory rewardTokens,
         uint256[][] memory earnedRewardsUSD,
-        uint256 womWmxBalance,
-        uint256 womWmxUsdOut,
-        address[] memory womWmxRewardTokens,
-        uint256[] memory womWmxRewards
+        uint256 wmxWomBalance,
+        uint256 wmxWomUsdOut,
+        address[] memory wmxWomRewardTokens,
+        uint256[] memory wmxWomRewards
     ) {
         (lpTokenBalances, underlyingBalances, usdOuts, rewardTokens, earnedRewardsUSD) = getUserBalances(
             _booster, _user, defaultPools()
         );
-        (womWmxBalance, womWmxUsdOut, womWmxRewardTokens, womWmxRewards) = getUserWmxWom(IBooster(_booster).crvLockRewards(), _user);
+        (wmxWomBalance, wmxWomUsdOut, wmxWomRewardTokens, wmxWomRewards) = getUserWmxWom(IBooster(_booster).crvLockRewards(), _user);
     }
 
     function defaultPools() public pure returns (uint256[] memory) {
@@ -91,17 +91,17 @@ contract LensUser {
         address _crvLockRewards,
         address _user
     ) public view returns(
-        uint256 womWmxBalance,
+        uint256 wmxWomBalance,
         uint256 usdOut,
-        address[] memory womWmxRewardTokens,
-        uint256[] memory womWmxRewards
+        address[] memory wmxWomRewardTokens,
+        uint256[] memory wmxWomRewardsUSD
     ) {
-        (womWmxRewardTokens,,womWmxRewards) = getUserPendingRewards(_crvLockRewards, _user);
-        womWmxBalance = IERC20(_crvLockRewards).balanceOf(_user);
-        if (womWmxBalance > 0) {
+        (wmxWomRewardTokens,,wmxWomRewardsUSD) = getUserPendingRewards(_crvLockRewards, _user);
+        wmxWomBalance = IERC20(_crvLockRewards).balanceOf(_user);
+        if (wmxWomBalance > 0) {
 
             (uint256 womAmountOut,) = IWomPool(WOM_WMX_POOL)
-                .quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(womWmxBalance));
+                .quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(wmxWomBalance));
 
             if (womAmountOut > 0) {
                 address[] memory path = new address[](2);
