@@ -29,6 +29,11 @@ interface IWomLpToken {
 
 interface IWomPool {
     function quotePotentialWithdraw(address _token, uint256 _liquidity) external view returns (uint256);
+    function quotePotentialSwap(
+        address fromToken,
+        address toToken,
+        int256 fromAmount
+    ) external view returns (uint256 potentialOutcome, uint256 haircut);
 }
 
 contract LensUser {
@@ -40,6 +45,7 @@ contract LensUser {
     address internal constant WOM_TOKEN = 0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1;
     address internal constant BUSD_TOKEN = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
     address internal constant WBNB_TOKEN = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address internal constant WMX_WOM_TOKEN = 0x0415023846Ff1C6016c4d9621de12b24B2402979;
 
     address internal constant PANCAKE_ROUTER = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
@@ -74,11 +80,17 @@ contract LensUser {
     ) {
         womWmxBalance = IERC20(_crvLockRewards).balanceOf(_user);
         if (womWmxBalance > 0) {
-            address[] memory path = new address[](2);
-            path[0] = WOM_TOKEN;
-            path[1] = BUSD_TOKEN;
-            uint256[] memory amountsOut = IUniswapV2Router01(PANCAKE_ROUTER).getAmountsOut(womWmxBalance, path);
-            usdOut = amountsOut[1];
+            (uint256 womAmountOut,) = IWomPool(WOM_WMX_POOL)
+                .quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(womWmxBalance));
+
+            if (womAmountOut > 0) {
+                address[] memory path = new address[](2);
+
+                path[0] = WOM_TOKEN;
+                path[1] = BUSD_TOKEN;
+                uint256[] memory amountsOut = IUniswapV2Router01(PANCAKE_ROUTER).getAmountsOut(womAmountOut, path);
+                usdOut = amountsOut[1];
+            }
         }
     }
 
