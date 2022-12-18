@@ -530,3 +530,27 @@ task("deploy-wom-swap-depositor:bnb").setAction(async function (taskArguments: T
     );
     console.log('womSwapDepositor', womSwapDepositor.address);
 });
+
+task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const poolDepositorArgs = [bnbConfig.weth, bnbConfig.booster, bnbConfig.masterWombat];
+    fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
+    const poolDepositor = await deployContract<PoolDepositor>(
+        hre,
+        new PoolDepositor__factory(deployer),
+        "PoolDepositor",
+        poolDepositorArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('poolDepositor', poolDepositor.address);
+    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
+    await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
