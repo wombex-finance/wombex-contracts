@@ -6,7 +6,6 @@ import "@openzeppelin/contracts-0.8/access/Ownable.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.8/utils/Address.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-import { SafeMath } from "@openzeppelin/contracts-0.8/utils/math/SafeMath.sol";
 
 /**
  * @title   WomDepositor
@@ -16,7 +15,6 @@ import { SafeMath } from "@openzeppelin/contracts-0.8/utils/math/SafeMath.sol";
 contract WomDepositor is Ownable {
     using SafeERC20 for IERC20;
     using Address for address;
-    using SafeMath for uint256;
 
     address public wom;
     address public staker;
@@ -171,10 +169,10 @@ contract WomDepositor is Ownable {
             if (!lockedCustomSlots[checkOldSlot]) {
                 IStaker(staker).releaseLock(checkOldSlot);
                 slotEnds[checkOldSlot] = slotEnds[currentSlot - 1];
-                currentSlot = currentSlot.sub(1);
+                currentSlot = currentSlot - 1;
                 emit SmartLockReleased(msg.sender, checkOldSlot);
             }
-            checkOldSlot = checkOldSlot.add(1);
+            checkOldSlot = checkOldSlot + 1;
             emit SmartLockCheck(msg.sender, checkOldSlot, lockedCustomSlots[checkOldSlot]);
         }
 
@@ -184,7 +182,7 @@ contract WomDepositor is Ownable {
         executing = true;
 
         uint256 slot = currentSlot;
-        currentSlot = currentSlot.add(1);
+        currentSlot = currentSlot + 1;
 
         uint256 senderLockDays = lockDays;
         uint256 amountToLock = _amount;
@@ -234,9 +232,9 @@ contract WomDepositor is Ownable {
         IERC20(wom).safeTransfer(msg.sender, slot.amount);
 
         lockedCustomSlots[slot.number] = false;
-        slotEnds[slot.number] = slotEnds[currentSlot.sub(1)];
+        slotEnds[slot.number] = slotEnds[currentSlot - 1];
 
-        checkOldSlot = slot.number.add(1);
+        checkOldSlot = slot.number + 1;
 
         uint256 len = customLockSlots[msg.sender].length;
         if (_index != len - 1) {
@@ -244,7 +242,7 @@ contract WomDepositor is Ownable {
         }
         customLockSlots[msg.sender].pop();
 
-        currentSlot = currentSlot.sub(1);
+        currentSlot = currentSlot - 1;
 
         emit ReleaseCustomLock(msg.sender, _index, slot.number, slot.amount);
     }
