@@ -29,7 +29,13 @@ import {
     BoosterMigrator__factory,
     DepositorMigrator,
     DepositorMigrator__factory,
-    PoolDepositor, PoolDepositor__factory, WomDepositor__factory, WomStakingProxy__factory, WmxLocker__factory
+    PoolDepositor,
+    PoolDepositor__factory,
+    WomDepositor__factory,
+    WomStakingProxy__factory,
+    WmxLocker__factory,
+    LensUser,
+    LensUser__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -369,3 +375,31 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 });
+
+task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    // const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+    ];
+    fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
+
+    const lens = await deployContract<LensUser>(
+        hre,
+        new LensUser__factory(deployer),
+        "Lens",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lens', lens.address);
+});
+
