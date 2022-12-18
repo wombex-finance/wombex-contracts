@@ -67,14 +67,14 @@ contract WomSwapDepositor is Ownable {
         return true;
     }
 
-    function quotePotentialSwap(int256 _amountIn) external view returns (uint256 amountOut, uint256 amountOutFee, int256 priceImpact) {
+    function quotePotentialSwap(int256 _amountIn) external view returns (uint256 amountOut, uint256 oneOut, uint256 amountOutFee, int256 priceImpact) {
         (amountOut, amountOutFee) = IPool(pool).quotePotentialSwap(wom, wmxWom, _amountIn);
-        (uint256 etherOut, ) = IPool(pool).quotePotentialSwap(wom, wmxWom, 1 ether);
-        priceImpact = getPriceImpact(_amountIn, int256(amountOut), int256(etherOut));
+        (oneOut, ) = IPool(pool).quotePotentialSwap(wom, wmxWom, 1 ether);
+        priceImpact = getPriceImpact(_amountIn, int256(amountOut), int256(oneOut));
     }
 
-    function getPriceImpact(int256 _amountIn, int256 _amountOut, int256 _etherOut) public pure returns (int256) {
-        return ((((_amountOut * 1 ether) / _amountIn) - _etherOut) * 1 ether) / _etherOut * 100;
+    function getPriceImpact(int256 _amountIn, int256 _amountOut, int256 _oneOut) public pure returns (int256) {
+        return ((((_amountOut * 1 ether) / _amountIn) - _oneOut) * 1 ether) / _oneOut * 100;
     }
 
     function getTokensPath() public view returns (address[] memory tokens) {
