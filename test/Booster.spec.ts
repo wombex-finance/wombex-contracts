@@ -489,7 +489,7 @@ describe("Booster", () => {
             expect(stakedBalanceAfter.sub(stakedBalanceBefore)).to.equal(balance);
         });
 
-        it("@method BaseRewardPool.getReward", async () => {
+        it("@method BaseRewardPool.getReward with custom mint ratio", async () => {
             let tx = await booster.connect(daoSigner).setRewardClaimedPenalty(0);
             await tx.wait();
 
@@ -503,8 +503,8 @@ describe("Booster", () => {
             tx = await booster.earmarkRewards(pid);
             await tx.wait();
 
-            const crvRewards = BaseRewardPool__factory.connect(defPool.crvRewards, bob);
-            const queuedRewards = await crvRewards.tokenRewards(crv.address).then(r => r.queuedRewards);
+            const crvRewards1 = BaseRewardPool__factory.connect(defPool.crvRewards, bob);
+            const queuedRewards = await crvRewards1.tokenRewards(crv.address).then(r => r.queuedRewards);
             expect(queuedRewards).gt(0);
 
             await increaseTime(60 * 60 * 24 * 6);
@@ -512,9 +512,9 @@ describe("Booster", () => {
             let cvxBalanceBefore = await cvx.balanceOf(bobAddress);
             let crvBalanceBefore = await crv.balanceOf(bobAddress);
             let underlyingBalanceBefore = await underlying.balanceOf(bobAddress);
-            const userRewardPerTokenPaid = await crvRewards.userRewardPerTokenPaid(crv.address, bobAddress);
+            const userRewardPerTokenPaid = await crvRewards1.userRewardPerTokenPaid(crv.address, bobAddress);
 
-            tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
+            tx = await crvRewards1["getReward(address,bool)"](bobAddress, false);
             let boosterReward = await getBoosterReward(tx, booster, 1);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
@@ -524,9 +524,9 @@ describe("Booster", () => {
 
             const receivedCrv = (await crv.balanceOf(bobAddress)).sub(crvBalanceBefore);
 
-            const balance = await crvRewards.balanceOf(bobAddress);
-            const rewardPerToken = (await crvRewards.rewardPerToken(crv.address)).sub(userRewardPerTokenPaid);
-            const expectedRewards = rewardPerToken.mul(balance).div(simpleToExactAmount(1));
+            let balance = await crvRewards1.balanceOf(bobAddress);
+            let rewardPerToken = (await crvRewards1.rewardPerToken(crv.address)).sub(userRewardPerTokenPaid);
+            let expectedRewards = rewardPerToken.mul(balance).div(simpleToExactAmount(1));
 
             expect(expectedRewards).to.equal(receivedCrv);
 
@@ -538,16 +538,16 @@ describe("Booster", () => {
             tx = await underlying.connect(daoSigner).pause(true);
             await tx.wait();
 
-            await expect(crvRewards["getReward(address,bool)"](bobAddress, false)).to.be.revertedWith("pause");
-            await expect(booster.setRewardTokenPausedInPools([crvRewards.address], underlying.address, true)).to.be.revertedWith("!auth");
+            await expect(crvRewards1["getReward(address,bool)"](bobAddress, false)).to.be.revertedWith("pause");
+            await expect(booster.setRewardTokenPausedInPools([crvRewards1.address], underlying.address, true)).to.be.revertedWith("!auth");
 
-            tx = await booster.connect(daoSigner).setRewardTokenPausedInPools([crvRewards.address], underlying.address, true);
+            tx = await booster.connect(daoSigner).setRewardTokenPausedInPools([crvRewards1.address], underlying.address, true);
             await tx.wait();
 
             cvxBalanceBefore = await cvx.balanceOf(bobAddress);
             underlyingBalanceBefore = await underlying.balanceOf(bobAddress);
 
-            tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
+            tx = await crvRewards1["getReward(address,bool)"](bobAddress, false);
             boosterReward = await getBoosterReward(tx, booster, 1);
 
             expect(boosterReward.amount).eq(boosterReward.mintAmount);
@@ -558,13 +558,55 @@ describe("Booster", () => {
             tx = await underlying.connect(daoSigner).pause(false);
             await tx.wait();
 
-            tx = await booster.connect(daoSigner).setRewardTokenPausedInPools([crvRewards.address], underlying.address, false);
+            tx = await booster.connect(daoSigner).setRewardTokenPausedInPools([crvRewards1.address], underlying.address, false);
             await tx.wait();
 
-            tx = await crvRewards["getReward(address,bool)"](bobAddress, false);
+            tx = await crvRewards1["getReward(address,bool)"](bobAddress, false);
             await tx.wait();
 
             expect(await underlying.balanceOf(bobAddress)).gt(underlyingBalanceBefore);
+
+            await increaseTime(60 * 60);
+
+            const mintRatio = 8000;
+            const customMintRatio = 9000;
+            await booster.connect(daoSigner).setMintRatio(mintRatio).then(tx => tx.wait());
+            await booster.connect(daoSigner).setCustomMintRatio(0, customMintRatio).then(tx => tx.wait());
+
+            cvxBalanceBefore = await cvx.balanceOf(bobAddress);
+            let lockerBalanceBefore = await contracts.cvxLocker.balances(bobAddress).then(b => b.locked);
+            tx = await crvRewards1["getReward(address,bool)"](bobAddress, true);
+            boosterReward = await getBoosterReward(tx, booster, 1);
+
+            expect(boosterReward.mintAmount).eq(boosterReward.amount.mul(mintRatio).div(10000));
+            expect(boosterReward.lock).eq(true);
+
+            expect(await cvx.balanceOf(bobAddress)).eq(cvxBalanceBefore);
+            let factMint = await cvx.getFactAmounMint(boosterReward.amount);
+            expect(
+                await contracts.cvxLocker.balances(bobAddress).then(b => b.locked)
+            ).eq(
+                lockerBalanceBefore.add(factMint.mul(mintRatio).div(10000))
+            );
+
+            const pool = await booster.poolInfo(0);
+            const crvRewards0 = BaseRewardPool__factory.connect(pool.crvRewards, bob);
+
+            cvxBalanceBefore = await cvx.balanceOf(bobAddress);
+            lockerBalanceBefore = await contracts.cvxLocker.balances(bobAddress).then(b => b.locked);
+            tx = await crvRewards0["getReward(address,bool)"](bobAddress, true);
+            boosterReward = await getBoosterReward(tx, booster, 1);
+
+            expect(boosterReward.mintAmount).eq(boosterReward.amount.mul(customMintRatio).div(10000));
+            expect(boosterReward.lock).eq(true);
+
+            expect(await cvx.balanceOf(bobAddress)).eq(cvxBalanceBefore);
+            factMint = await cvx.getFactAmounMint(boosterReward.amount);
+            expect(
+                await contracts.cvxLocker.balances(bobAddress).then(b => b.locked)
+            ).eq(
+                lockerBalanceBefore.add(factMint.mul(customMintRatio).div(10000))
+            );
         });
     });
 
@@ -805,6 +847,25 @@ describe("Booster", () => {
 
             expect(pool.shutdown).to.equal(true);
 
+            const excessAmount = ethers.utils.parseEther("100");
+
+            let tx = await booster.connect(daoSigner).releaseToken(pool.lptoken, treasuryAddress).then(tx => tx.wait());
+            let ReleaseTokenEvent = tx.events.filter(e => e.event === 'ReleaseToken')[0];
+            expect(ReleaseTokenEvent.args.amount).eq(0);
+
+            const token = ERC20__factory.connect(pool.token, deployer);
+            expect(await mocks.lptoken.balanceOf(booster.address)).to.equal(await token.totalSupply());
+
+            await mocks.lptoken.transfer(booster.address, excessAmount).then(tx => tx.wait());
+
+            expect(await mocks.lptoken.balanceOf(booster.address)).to.equal(await token.totalSupply().then(t => t.add(excessAmount)));
+
+            tx = await booster.connect(daoSigner).releaseToken(pool.lptoken, treasuryAddress).then(tx => tx.wait());
+            ReleaseTokenEvent = tx.events.filter(e => e.event === 'ReleaseToken')[0];
+            expect(ReleaseTokenEvent.args.amount).eq(excessAmount);
+
+            expect(await mocks.lptoken.balanceOf(booster.address)).to.equal(await token.totalSupply());
+
             balanceBefore = await crvRewards.balanceOf(bobAddress);
             await crvRewards.connect(bob).withdrawAndUnwrap(amount.div(2), true).then(tx => tx.wait());
             expect(await crvRewards.balanceOf(bobAddress)).to.equal(balanceBefore.sub(amount.div(2)));
@@ -828,7 +889,7 @@ describe("Booster", () => {
 
             await expect(booster.connect(bob).deposit(0, amount, true)).to.revertedWith("pool is closed");
 
-            let tx = await booster.connect(bob).deposit(poolLength, amount, true).then(tx => tx.wait());
+            tx = await booster.connect(bob).deposit(poolLength, amount, true).then(tx => tx.wait());
             let earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards')[0];
             expect(earmarkRewards).eq(undefined);
 
@@ -1063,8 +1124,6 @@ describe("Booster", () => {
 
             const oldDistroTokens = await booster.distributionTokenList();
             const newDistroTokens = await newBoosterContract.distributionTokenList();
-            console.log('oldDistroTokens', oldDistroTokens);
-            console.log('newDistroTokens', newDistroTokens);
 
             expect(oldDistroTokens.length).eq(newDistroTokens.length);
             for (let i = 0; i < oldDistroTokens.length; i++) {
@@ -1101,7 +1160,6 @@ describe("Booster", () => {
             const migrated = migrateTx.events.filter(e => e.event === 'Migrated')[0];
             contracts.crvDepositor = WomDepositor__factory.connect(migrated.args.newDepositor, deployer);
 
-            console.log('earmarkRewards');
             await expect(newBoosterContract.earmarkRewards(lastPid)).to.be.revertedWith("!auth");
 
             await contracts.cvxStakingProxy.connect(daoSigner).setConfig(contracts.crvDepositor.address, contracts.cvxLocker.address).then(tx => tx.wait(1));
@@ -1199,23 +1257,35 @@ describe("Booster", () => {
 
             await increaseTime(60 * 60 * 24);
 
+            const excessCrvAmount = simpleToExactAmount(4);
+
+            await crv.transfer(newBoosterContract.address, excessCrvAmount);
+
             let ethBalanceBefore = await hre.ethers.provider.getBalance(contracts.voterProxy.address);
             let tx = await newBoosterContract.connect(bob).deposit(3, amount, true).then(tx => tx.wait(1));
             const reward00 = getMasterWombatReward(tx, contracts.voterProxy.address, crv);
             expect(await newBoosterContract.lpPendingRewards(lpToken3.address, crv.address)).eq(reward00.value);
+            expect(await crv.balanceOf(newBoosterContract.address)).eq(excessCrvAmount);
+            expect(await crv.balanceOf(contracts.voterProxy.address)).eq(reward00.value);
             expect(reward00.value).gt(0);
             let ethBalanceAfter = await hre.ethers.provider.getBalance(contracts.voterProxy.address);
             expect(await newBoosterContract.lpPendingRewards(lpToken3.address, mocks.weth.address)).eq(ethBalanceAfter.sub(ethBalanceBefore));
             expect(ethBalanceAfter.sub(ethBalanceBefore)).gt(0);
 
+            await crv.transfer(contracts.voterProxy.address, excessCrvAmount);
+
             ethBalanceBefore = await hre.ethers.provider.getBalance(contracts.voterProxy.address);
             tx = await newBoosterContract.connect(bob).deposit(4, amount9, true).then(tx => tx.wait());
             const reward01 = getMasterWombatReward(tx, contracts.voterProxy.address, crv);
             expect(await newBoosterContract.lpPendingRewards(lpToken4.address, crv.address)).eq(reward01.value);
+            expect(await crv.balanceOf(newBoosterContract.address)).eq(excessCrvAmount);
+            expect(await crv.balanceOf(contracts.voterProxy.address)).eq(reward00.value.add(reward01.value).add(excessCrvAmount));
             expect(reward01.value).gt(0);
             ethBalanceAfter = await hre.ethers.provider.getBalance(contracts.voterProxy.address);
             expect(await newBoosterContract.lpPendingRewards(lpToken4.address, mocks.weth.address)).eq(ethBalanceAfter.sub(ethBalanceBefore));
             expect(ethBalanceAfter.sub(ethBalanceBefore)).gt(0);
+
+            await expect(newBoosterContract.connect(daoSigner).releaseToken(crv.address, treasuryAddress)).to.revertedWith("SafeMath: subtraction overflow");
 
             const crvPendingRewards02 = await newBoosterContract.lpPendingRewards(lpToken3.address, crv.address);
             const wethPendingRewards04 = await newBoosterContract.lpPendingRewards(lpToken4.address, mocks.weth.address);
@@ -1229,6 +1299,9 @@ describe("Booster", () => {
             const reward02Weth = getMasterWombatReward(tx, newBoosterContract.address, mocks.weth);
             const reward02WethDistributed = getMasterWombatReward(tx, crvRewards3.address, mocks.weth);
 
+            expect(await crv.balanceOf(newBoosterContract.address)).eq(excessCrvAmount.mul(2).add(reward01.value));
+            expect(await crv.balanceOf(contracts.voterProxy.address)).eq(0);
+
             let resultRewardsCrv = reward02Crv.value.add(crvPendingRewards02).mul(feesSub).div(10000);
             equalWithSmallDiff(resultRewardsCrv, reward02CrvDistributed.value);
             equalWithSmallDiff(resultRewardsCrv.add(crvRewardsBefore), await crvRewards3.tokenRewards(crv.address).then(r => r.historicalRewards.add(r.queuedRewards)));
@@ -1238,9 +1311,40 @@ describe("Booster", () => {
             expect(await newBoosterContract.lpPendingRewards(lpToken3.address, crv.address)).eq(0);
             expect(await newBoosterContract.lpPendingRewards(lpToken3.address, mocks.weth.address)).eq(0);
 
+            const treasuryBalanceBefore = await crv.balanceOf(treasuryAddress);
+            await expect(newBoosterContract.releaseToken(crv.address, treasuryAddress)).to.revertedWith("!auth");
+            tx = await newBoosterContract.connect(daoSigner).releaseToken(crv.address, treasuryAddress).then(tx => tx.wait());
+            let ReleaseTokenEvent = tx.events.filter(e => e.event === 'ReleaseToken')[0];
+            expect(ReleaseTokenEvent.args.amount).eq(excessCrvAmount.mul(2));
+            expect(treasuryBalanceBefore.add(excessCrvAmount.mul(2))).eq(await crv.balanceOf(treasuryAddress));
+            expect(await crv.balanceOf(newBoosterContract.address)).eq(reward01.value);
+            expect(await crv.balanceOf(contracts.voterProxy.address)).eq(0);
+
+            await crv.transfer(newBoosterContract.address, excessCrvAmount);
+            await crv.transfer(contracts.voterProxy.address, excessCrvAmount);
+
             await newBoosterContract.connect(bob).earmarkRewards(4).then(tx => tx.wait());
             expect(await mocks.weth.balanceOf(newBoosterContract.address)).eq(0);
-            expect(await mocks.crv.balanceOf(newBoosterContract.address)).eq(0);
+            expect(await mocks.crv.balanceOf(newBoosterContract.address)).eq(excessCrvAmount.mul(2));
+            expect(await mocks.crv.balanceOf(contracts.voterProxy.address)).eq(0);
+
+            tx = await newBoosterContract.connect(daoSigner).releaseToken(crv.address, treasuryAddress).then(tx => tx.wait());
+            ReleaseTokenEvent = tx.events.filter(e => e.event === 'ReleaseToken')[0];
+            expect(ReleaseTokenEvent.args.amount).eq(excessCrvAmount.mul(2));
+
+            expect(await crv.balanceOf(newBoosterContract.address)).eq(0);
+            expect(await mocks.crv.balanceOf(contracts.voterProxy.address)).eq(0);
+
+            tx = await newBoosterContract.connect(daoSigner).releaseToken(crv.address, treasuryAddress).then(tx => tx.wait());
+            ReleaseTokenEvent = tx.events.filter(e => e.event === 'ReleaseToken')[0];
+            expect(ReleaseTokenEvent.args.amount).eq(0);
+
+            await crv.transfer(newBoosterContract.address, excessCrvAmount);
+            expect(await crv.balanceOf(newBoosterContract.address)).eq(excessCrvAmount);
+            tx = await newBoosterContract.connect(daoSigner).releaseToken(crv.address, treasuryAddress).then(tx => tx.wait());
+            ReleaseTokenEvent = tx.events.filter(e => e.event === 'ReleaseToken')[0];
+            expect(ReleaseTokenEvent.args.amount).eq(excessCrvAmount);
+            expect(await crv.balanceOf(newBoosterContract.address)).eq(0);
 
             tx = await newBoosterContract.connect(bob).deposit(0, amount, true).then(tx => tx.wait());
             const reward1 = getMasterWombatReward(tx, contracts.voterProxy.address);

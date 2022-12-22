@@ -48,6 +48,8 @@ contract Booster{
     uint256 public maxMintRatio;
     uint256 public mintRatio;
 
+    mapping(uint256 => uint256) public customMintRatio;
+
     mapping(address => TokenDistro[]) public distributionByTokens;
     struct TokenDistro {
         address distro;
@@ -86,11 +88,13 @@ contract Booster{
     event FactoriesUpdated(address rewardFactory, address tokenFactory);
     event ExtraRewardsDistributorUpdated(address newDist);
     event LpPendingRewardTokensUpdated(address indexed lpToken, address[] pendingRewardTokens);
+    event ReleaseToken(address token, uint256 amount, address recipient);
     event PenaltyShareUpdated(uint256 newPenalty);
     event VoteDelegateUpdated(address newVoteDelegate);
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
     event MintRatioUpdated(uint256 mintRatio);
+    event CustomMintRatioUpdated(uint256 pid, uint256 mintRatio);
     event SetEarmarkIncentive(uint256 earmarkIncentive);
     event SetEarmarkOnDeposit(bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
@@ -292,6 +296,19 @@ contract Booster{
     }
 
     /**
+     * @notice Change mint ratio for pool
+     */
+    function setCustomMintRatio(uint256 _pid, uint256 _mintRatio) external {
+        require(msg.sender == owner, "!auth");
+        if (_mintRatio != 0) {
+            require(_mintRatio >= minMintRatio && _mintRatio <= maxMintRatio, "!boundaries");
+        }
+
+        customMintRatio[_pid] = _mintRatio;
+        emit CustomMintRatioUpdated(_pid, _mintRatio);
+    }
+
+    /**
      * @notice Allows turning off or on for fee distro
      */
     function updateDistributionByTokens(address _token, address[] memory _distros, uint256[] memory _shares, bool[] memory _callQueue) external {
@@ -488,6 +505,25 @@ contract Booster{
         }
     }
 
+    function releaseToken(address _token, address _recipient) external {
+        require(msg.sender == owner, "!auth");
+
+        uint256 totalPendingRewards;
+        for (uint256 i = 0; i < poolInfo.length; i++) {
+            if (poolInfo[i].shutdown) {
+                if (_token == poolInfo[i].lptoken) {
+                    totalPendingRewards = totalPendingRewards.add(IERC20(poolInfo[i].token).totalSupply());
+                }
+            } else {
+                totalPendingRewards = totalPendingRewards.add(lpPendingRewards[poolInfo[i].lptoken][_token]);
+            }
+        }
+
+        uint256 amountToWithdraw = IERC20(_token).balanceOf(address(this)).sub(totalPendingRewards);
+        IERC20(_token).transfer(_recipient, amountToWithdraw);
+        emit ReleaseToken(_token, amountToWithdraw, _recipient);
+    }
+
     /**
      * @notice  Deposits an "_amount" to a given gauge (specified by _pid), mints a `DepositToken`
      *          and subsequently stakes that on BaseRewardPool
@@ -677,13 +713,12 @@ contract Booster{
         //claim crv/wom and bonus tokens
         address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, pool.gauge);
         uint256 tLen = tokens.length;
-        uint256[] memory totalPendingRewards = new uint256[](tLen);
-        for (uint256 i = 0; i < poolInfo.length; i++) {
-            if (poolInfo[i].shutdown) {
-                continue;
-            }
-            for (uint256 j = 0; j < tLen; j++) {
-                totalPendingRewards[j] = totalPendingRewards[j].add(lpPendingRewards[poolInfo[i].lptoken][tokens[j]]);
+
+        uint256[] memory balancesBefore = new uint256[](tLen);
+        for (uint256 i = 0; i < tLen; i++) {
+            balancesBefore[i] = IERC20(tokens[i]).balanceOf(address(this)).add(IERC20(tokens[i]).balanceOf(voterProxy));
+            if (tokens[i] == weth) {
+                balancesBefore[i] = balancesBefore[i].add(voterProxy.balance);
             }
         }
 
@@ -691,7 +726,7 @@ contract Booster{
 
         for (uint256 i = 0; i < tLen; i++) {
             IERC20 token = IERC20(tokens[i]);
-            uint256 balance = token.balanceOf(address(this)).sub(totalPendingRewards[i]);
+            uint256 balance = token.balanceOf(address(this)).sub(balancesBefore[i]);
             if (lpPendingRewards[pool.lptoken][tokens[i]] > 0) {
                 balance = balance.add(lpPendingRewards[pool.lptoken][tokens[i]]);
                 lpPendingRewards[pool.lptoken][tokens[i]] = 0;
@@ -752,8 +787,12 @@ contract Booster{
         require(msg.sender == rewardContract || msg.sender == crvLockRewards, "!auth");
 
         uint256 mintAmount = _amount;
-        if (mintRatio > 0) {
-            mintAmount = mintAmount.mul(mintRatio).div(DENOMINATOR);
+        uint256 poolMintRatio = customMintRatio[_pid];
+        if (poolMintRatio == 0) {
+            poolMintRatio = mintRatio;
+        }
+        if (poolMintRatio > 0) {
+            mintAmount = mintAmount.mul(poolMintRatio).div(DENOMINATOR);
         }
 
         uint256 penalty;
