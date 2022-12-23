@@ -298,14 +298,20 @@ contract Booster{
     /**
      * @notice Change mint ratio for pool
      */
-    function setCustomMintRatio(uint256 _pid, uint256 _mintRatio) external {
+    function setCustomMintRatioMultiple(uint256[] memory _pids, uint256[] memory _mintRatios) external {
         require(msg.sender == owner, "!auth");
-        if (_mintRatio != 0) {
-            require(_mintRatio >= minMintRatio && _mintRatio <= maxMintRatio, "!boundaries");
-        }
 
-        customMintRatio[_pid] = _mintRatio;
-        emit CustomMintRatioUpdated(_pid, _mintRatio);
+        uint256 len = _pids.length;
+        require(len == _mintRatios.length, "!len");
+
+        for(uint256 i = 0; i < len; i++) {
+            if (_mintRatios[i] != 0) {
+                require(_mintRatios[i] >= minMintRatio && _mintRatios[i] <= maxMintRatio, "!boundaries");
+            }
+
+            customMintRatio[_pids[i]] = _mintRatios[i];
+            emit CustomMintRatioUpdated(_pids[i], _mintRatios[i]);
+        }
     }
 
     /**

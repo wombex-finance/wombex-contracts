@@ -490,8 +490,7 @@ describe("Booster", () => {
         });
 
         it("@method BaseRewardPool.getReward with custom mint ratio", async () => {
-            await booster.connect(daoSigner).setCustomMintRatio(0, 0).then(tx => tx.wait());
-            await booster.connect(daoSigner).setCustomMintRatio(1, 0).then(tx => tx.wait());
+            await booster.connect(daoSigner).setCustomMintRatioMultiple([0, 1], [0, 0]).then(tx => tx.wait());
 
             let tx = await booster.connect(daoSigner).setRewardClaimedPenalty(0);
             await tx.wait();
@@ -574,7 +573,7 @@ describe("Booster", () => {
             const mintRatio = 8000;
             const customMintRatio = 9000;
             await booster.connect(daoSigner).setMintRatio(mintRatio).then(tx => tx.wait());
-            await booster.connect(daoSigner).setCustomMintRatio(0, customMintRatio).then(tx => tx.wait());
+            await booster.connect(daoSigner).setCustomMintRatioMultiple([0], [customMintRatio]).then(tx => tx.wait());
 
             cvxBalanceBefore = await cvx.balanceOf(bobAddress);
             let lockerBalanceBefore = await contracts.cvxLocker.balances(bobAddress).then(b => b.locked);
