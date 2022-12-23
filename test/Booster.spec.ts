@@ -490,6 +490,9 @@ describe("Booster", () => {
         });
 
         it("@method BaseRewardPool.getReward with custom mint ratio", async () => {
+            await booster.connect(daoSigner).setCustomMintRatio(0, 0).then(tx => tx.wait());
+            await booster.connect(daoSigner).setCustomMintRatio(1, 0).then(tx => tx.wait());
+
             let tx = await booster.connect(daoSigner).setRewardClaimedPenalty(0);
             await tx.wait();
 
@@ -583,9 +586,8 @@ describe("Booster", () => {
 
             expect(await cvx.balanceOf(bobAddress)).eq(cvxBalanceBefore);
             let factMint = await cvx.getFactAmounMint(boosterReward.amount);
-            expect(
-                await contracts.cvxLocker.balances(bobAddress).then(b => b.locked)
-            ).eq(
+            equalWithSmallDiff(
+                await contracts.cvxLocker.balances(bobAddress).then(b => b.locked),
                 lockerBalanceBefore.add(factMint.mul(mintRatio).div(10000))
             );
 

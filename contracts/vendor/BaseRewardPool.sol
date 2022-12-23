@@ -120,6 +120,8 @@ contract BaseRewardPool {
         operator = operator_;
         pid = pid_;
 
+        _onOperatorUpdate();
+
         emit UpdateOperatorData(msg.sender, operator_, pid_);
     }
 
@@ -422,5 +424,9 @@ contract BaseRewardPool {
 
     function rewardTokensList() external view returns (address[] memory) {
         return allRewardTokens;
+    }
+
+    function _onOperatorUpdate() internal virtual {
+
     }
 }
