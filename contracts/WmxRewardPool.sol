@@ -22,7 +22,8 @@ contract WmxRewardPool {
 
     IERC20 public immutable rewardToken;
     IERC20 public immutable stakingToken;
-    uint256 public constant duration = 14 days;
+    uint256 public duration;
+    address public operator;
 
     address public immutable rewardManager;
 
@@ -35,12 +36,13 @@ contract WmxRewardPool {
     uint256 public rewardRate = 0;
     uint256 public lastUpdateTime;
     uint256 public rewardPerTokenStored;
-    uint256 private _totalSupply;
+    uint256 internal _totalSupply;
 
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
     mapping(address => uint256) private _balances;
 
+    event UpdateOperatorData(address indexed sender, address indexed operator, uint256 indexed pid);
     event RewardAdded(uint256 reward);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
@@ -77,6 +79,8 @@ contract WmxRewardPool {
 
         require(_startDelay < 2 weeks, "!delay");
         startTime = block.timestamp + _startDelay;
+
+        duration = 14 days;
     }
 
     function totalSupply() public view returns (uint256) {
@@ -120,6 +124,7 @@ contract WmxRewardPool {
 
     function stake(uint256 _amount) public updateReward(msg.sender) returns (bool) {
         require(_amount > 0, "RewardPool : Cannot stake 0");
+        _stakeCheck(_amount);
 
         _totalSupply = _totalSupply.add(_amount);
         _balances[msg.sender] = _balances[msg.sender].add(_amount);
@@ -138,6 +143,7 @@ contract WmxRewardPool {
 
     function stakeFor(address _for, uint256 _amount) public updateReward(_for) returns (bool) {
         require(_amount > 0, "RewardPool : Cannot stake 0");
+        _stakeCheck(_amount);
 
         //give to _for
         _totalSupply = _totalSupply.add(_amount);
@@ -241,5 +247,9 @@ contract WmxRewardPool {
         emit RewardAdded(rewardsAvailable);
 
         return true;
+    }
+
+    function _stakeCheck(uint256) internal virtual {
+
     }
 }

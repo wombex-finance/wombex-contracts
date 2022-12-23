@@ -480,7 +480,7 @@ contract Booster{
                 continue;
             }
             IRewards(_rewards[i]).updateOperatorData(_newBooster, _pids[i]);
-            if (_rewards[i] != crvLockRewards) {
+            if (_pids[i] < poolInfo.length) {
                 address stakingToken = IRewards(_rewards[i]).stakingToken();
                 ITokenMinter(stakingToken).updateOperator(_newBooster);
             }
