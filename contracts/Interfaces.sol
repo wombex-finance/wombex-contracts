@@ -135,6 +135,22 @@ interface IPool {
         address to,
         uint256 deadline
     ) external returns (uint256 amount);
+
+    function quotePotentialSwap(
+        address fromToken,
+        address toToken,
+        int256 fromAmount
+    ) external view returns (uint256 potentialOutcome, uint256 haircut);
+
+    function quotePotentialDeposit(
+        address token,
+        uint256 amount
+    ) external view returns (uint256 liquidity, uint256 reward);
+
+    function quotePotentialWithdraw(
+        address token,
+        uint256 liquidity
+    ) external view returns (uint256 amount, uint256 fee);
 }
 
 interface IMasterWombatV2 {
@@ -148,4 +164,25 @@ interface IBooster {
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
     function earmarkRewards(uint256 _pid) external returns(bool);
     function setOwner(address _owner) external;
+}
+
+interface ISwapRouter {
+    function swapExactTokensForTokens(
+        address[] calldata tokenPath,
+        address[] calldata poolPath,
+        uint256 amountIn,
+        uint256 minimumamountOut,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountOut);
+
+    function getAmountOut(
+        address[] calldata tokenPath,
+        address[] calldata poolPath,
+        int256 amountIn
+    ) external view returns (uint256 amountOut, uint256[] memory haircuts);
+}
+
+interface IWomSwapDepositor {
+    function deposit(uint256 _amount, address _stakeAddress, uint256 _minAmountOut, uint256 _deadline) external returns (bool);
 }

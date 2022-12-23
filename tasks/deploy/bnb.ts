@@ -1,8 +1,8 @@
-import { task } from "hardhat/config";
-import { HardhatRuntimeEnvironment, TaskArguments } from "hardhat/types";
-import { getSigner } from "../utils";
-import { deployContract, logContracts, waitForTx } from "./../utils/deploy-utils";
-import { deployFirstStage } from "../../scripts/deploySystem";
+import {task} from "hardhat/config";
+import {HardhatRuntimeEnvironment, TaskArguments} from "hardhat/types";
+import {getSigner} from "../utils";
+import {deployContract, logContracts, waitForTx} from "./../utils/deploy-utils";
+import {deployFirstStage} from "../../scripts/deploySystem";
 import {
     VoterProxy__factory,
     VoterProxy,
@@ -29,7 +29,11 @@ import {
     BoosterMigrator__factory,
     DepositorMigrator,
     DepositorMigrator__factory,
-    PoolDepositor, PoolDepositor__factory, WomDepositor__factory, WomStakingProxy__factory, WmxLocker__factory
+    ExtraRewardsDistributorProxy,
+    ExtraRewardsDistributorProxy__factory,
+    PoolDepositor,
+    PoolDepositor__factory,
+    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -38,10 +42,12 @@ import {
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
+
 const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
 const fs = require('fs');
 const ethers = require('ethers');
+const _ = require('lodash');
 
 const forking = false;
 const waitForBlocks = forking ? undefined : 3;
@@ -90,8 +96,8 @@ task("deploy:bnb").setAction(async function (taskArguments: TaskArguments, hre) 
     const contracts = await deployFirstStage(
         hre,
         deployer,
-        { voterProxy, weth, masterWombat, crv, pool },
-        { vestingMultisig,  treasuryMultisig, daoMultisig },
+        {voterProxy, weth, masterWombat, crv, pool},
+        {vestingMultisig, treasuryMultisig, daoMultisig},
         {
             cvxName: "Wombex Token",
             cvxSymbol: "WMX",
@@ -130,7 +136,10 @@ task("bnb:all-distro-tokens").setAction(async function (taskArguments: TaskArgum
     const masterWombat = MasterWombatV2__factory.connect(bnbtConfig.masterWombat, deployer);
 
     const wbnb = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
-    console.log('wom', bnbtConfig.wom, {cvxCrvRewards: bnbtConfig.cvxCrvRewards, cvxStakingProxy: bnbtConfig.cvxStakingProxy});
+    console.log('wom', bnbtConfig.wom, {
+        cvxCrvRewards: bnbtConfig.cvxCrvRewards,
+        cvxStakingProxy: bnbtConfig.cvxStakingProxy
+    });
 
     let bonusRewardTokens = [];
     const poolLength = await masterWombat.poolLength().then(l => parseInt(l.toString()));
@@ -255,8 +264,8 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
         bnbtConfig.cvx,
         treasuryMultisig,
         bnbtConfig.cvxLocker,
-        '1666302008',
-        '1729374008'
+        '1667980800',
+        '1731052800'
     ];
     fs.writeFileSync('./args/escrow.js', 'module.exports = ' + JSON.stringify(args));
 
@@ -270,6 +279,133 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
         waitForBlocks,
     );
     console.log('escrow', escrow.address);
+});
+
+task("deploy-zap:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+
+    const args = [
+        bnbtConfig.token,
+        bnbtConfig.cvx,
+        bnbtConfig.cvxCrv,
+        bnbtConfig.crvDepositor,
+        bnbtConfig.cvxCrvRewards,
+        bnbtConfig.extraRewardsDistributor,
+        bnbtConfig.womSwapDepositor,
+        bnbtConfig.cvxLocker,
+        treasuryMultisig
+    ];
+    console.log('args', args);
+    fs.writeFileSync('./args/zap.js', 'module.exports = ' + JSON.stringify(args));
+
+    const zap = await deployContract<WmxClaimZap>(
+        hre,
+        new WmxClaimZap__factory(deployer),
+        "WmxClaimZap",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('zap', zap.address);
+});
+
+task("deploy-erdp:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+        bnbConfig.booster,
+        bnbConfig.extraRewardsDistributor
+    ];
+    fs.writeFileSync('./args/extraRewardsDistributorProxy.js', 'module.exports = ' + JSON.stringify(args));
+
+    const extraRewardsDistributor = await deployContract<ExtraRewardsDistributorProxy>(
+        hre,
+        new ExtraRewardsDistributorProxy__factory(deployer),
+        "ExtraRewardsDistributorProxy",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('extraRewardsDistributorProxy', extraRewardsDistributor.address);
+});
+
+task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+        bnbConfig.weth,
+        bnbConfig.booster,
+        bnbConfig.masterWombat
+    ];
+    fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(args));
+
+    const poolDepositor = await deployContract<PoolDepositor>(
+        hre,
+        new PoolDepositor__factory(deployer),
+        "PoolDepositor",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('poolDepositor', poolDepositor.address);
+
+    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
+
+    const tokensByPool = {};
+    const poolLength = await masterWombat.poolLength().then(l => parseInt(l.toString()));
+    for (let i = 0; i < poolLength; i++) {
+        const {lpToken} = await masterWombat.poolInfo(i);
+        const asset = Asset__factory.connect(lpToken, deployer);
+        const [pool, underlying] = await Promise.all([
+            asset.pool(),
+            asset.underlyingToken(),
+        ]);
+        if (!tokensByPool[pool]) {
+            tokensByPool[pool] = [];
+        }
+        tokensByPool[pool] = tokensByPool[pool].concat([underlying, lpToken]);
+    }
+
+    const pools = []
+    _.forEach(tokensByPool, (tokens, pool) => {
+        pools.push({
+            address: pool,
+            tokens: _.uniq(tokens)
+        })
+    })
+
+    for (let i = 0; i < pools.length; i++) {
+        await poolDepositor.approveSpendingByPool(pools[i].tokens, pools[i].address);
+        await poolDepositor.approveSpendingByPool(pools[i].tokens, bnbConfig.booster);
+    }
 });
 
 
@@ -366,6 +502,55 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     );
     console.log('poolDepositor', poolDepositor.address);
 
+    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
+    await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
+
+task("deploy-wom-swap-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [bnbConfig.wom, bnbConfig.cvxCrv, '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e', '0x19609b03c976cca288fbdae5c21d4290e9a4add7'];
+    fs.writeFileSync('./args/womSwapDepositor.js', 'module.exports = ' + JSON.stringify(args));
+    const womSwapDepositor = await deployContract<WomSwapDepositor>(
+        hre,
+        new WomSwapDepositor__factory(deployer),
+        "WomSwapDepositor",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('womSwapDepositor', womSwapDepositor.address);
+});
+
+task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const poolDepositorArgs = [bnbConfig.weth, bnbConfig.booster, bnbConfig.masterWombat];
+    fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
+    const poolDepositor = await deployContract<PoolDepositor>(
+        hre,
+        new PoolDepositor__factory(deployer),
+        "PoolDepositor",
+        poolDepositorArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('poolDepositor', poolDepositor.address);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 });
