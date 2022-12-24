@@ -23,7 +23,6 @@ contract WmxRewardPool {
     IERC20 public immutable rewardToken;
     IERC20 public immutable stakingToken;
     uint256 public duration;
-    address public operator;
 
     address public immutable rewardManager;
 
@@ -42,7 +41,6 @@ contract WmxRewardPool {
     mapping(address => uint256) public rewards;
     mapping(address => uint256) private _balances;
 
-    event UpdateOperatorData(address indexed sender, address indexed operator, uint256 indexed pid);
     event RewardAdded(uint256 reward);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);

@@ -65,7 +65,7 @@ contract BoosterMigrator is Ownable {
         }
 
         crvRewards[poolLen] = oldBooster.crvLockRewards();
-        pids[poolLen] = type(uint256).max;
+        pids[poolLen] = 0;
 
         oldBooster.migrateRewards(crvRewards, pids, address(newBooster));
 
