@@ -19,6 +19,7 @@ contract WmxRewardPoolFactory is Ownable {
     address public immutable penaltyForwarder;
     address[] public depositors;
 
+    event DepositorsUpdate(address[] depositor);
     event RewardPoolCreated(address rewardPool, uint256 _startDelay);
 
     /**
@@ -42,6 +43,12 @@ contract WmxRewardPoolFactory is Ownable {
         wmxLocker = _wmxLocker;
         penaltyForwarder = _penaltyForwarder;
         depositors = _depositors;
+    }
+
+    function updateDepositors(address[] calldata _depositors) external onlyOwner {
+        depositors = _depositors;
+
+        emit DepositorsUpdate(depositors);
     }
 
     /**
