@@ -292,7 +292,7 @@ contract VoterProxy {
         }
     }
 
-    function getGaugeRewardTokens(address _lptoken, address _gauge) public returns (IERC20[] memory tokens) {
+    function getGaugeRewardTokens(address _lptoken, address _gauge) public view returns (IERC20[] memory tokens) {
         require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
         uint256 pid = lpTokenToPid[_gauge][_lptoken];
 

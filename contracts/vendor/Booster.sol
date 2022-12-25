@@ -51,6 +51,8 @@ contract Booster{
     mapping(uint256 => uint256) public customMintRatio;
 
     mapping(address => TokenDistro[]) public distributionByTokens;
+    mapping(uint256 => mapping(address => TokenDistro[])) public customDistributionByTokens;
+
     struct TokenDistro {
         address distro;
         uint256 share;
@@ -101,6 +103,7 @@ contract Booster{
     event FeeInfoChanged(address feeToken, bool active);
     event TokenDistributionUpdate(address indexed token, address indexed distro, uint256 share, bool callQueue);
     event DistributionUpdate(address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
+    event CustomDistributionUpdate(uint256 indexed pid, address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
 
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
     event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
@@ -317,36 +320,20 @@ contract Booster{
     /**
      * @notice Allows turning off or on for fee distro
      */
-    function updateDistributionByTokens(address _token, address[] memory _distros, uint256[] memory _shares, bool[] memory _callQueue) external {
+    function updateDistributionByTokens(
+        address _token,
+        address[] memory _distros,
+        uint256[] memory _shares,
+        bool[] memory _callQueue
+    ) external {
         require(msg.sender==owner, "!auth");
-        uint256 len = _distros.length;
-        require(len > 0, "zero");
-        require(len==_shares.length && len==_callQueue.length, "!length");
+        require(_distros.length > 0, "zero");
 
         if (distributionByTokens[_token].length == 0) {
             distributionTokens.push(_token);
         }
 
-        uint256 curLen = distributionByTokens[_token].length;
-        for (uint256 i = 0; i < curLen; i++) {
-            address distro = distributionByTokens[_token][distributionByTokens[_token].length - 1].distro;
-            IERC20(_token).safeApprove(distro, 0);
-            distributionByTokens[_token].pop();
-        }
-
-        uint256 totalShares = 0;
-        for (uint256 i = 0; i < len; i++) {
-            require(_distros[i] != address(0), "!distro");
-            totalShares = totalShares.add(_shares[i]);
-            distributionByTokens[_token].push(TokenDistro(_distros[i], _shares[i], _callQueue[i]));
-            emit TokenDistributionUpdate(_token, _distros[i], _shares[i], _callQueue[i]);
-
-            if (_callQueue[i]) {
-                IERC20(_token).safeApprove(_distros[i], 0);
-                IERC20(_token).safeApprove(_distros[i], type(uint256).max);
-            }
-        }
-        require(totalShares <= MAX_DISTRIBUTION, ">max");
+        uint256 totalShares = _updateDistributionByTokens(_token, distributionByTokens[_token], _distros, _shares, _callQueue);
 
         uint256 poolLen = poolInfo.length;
         for (uint256 i = 0; i < poolLen; i++) {
@@ -355,6 +342,60 @@ contract Booster{
         }
 
         emit DistributionUpdate(_token, _distros.length, _shares.length, _callQueue.length, totalShares);
+    }
+
+
+    /**
+     * @notice Allows turning off or on for fee distro
+     */
+    function updateCustomDistributionByTokens(
+        uint256 _pid, address _token,
+        address[] memory _distros,
+        uint256[] memory _shares,
+        bool[] memory _callQueue
+    ) external {
+        require(msg.sender==owner, "!auth");
+
+        uint256 totalShares = _updateDistributionByTokens(_token, customDistributionByTokens[_pid][_token], _distros, _shares, _callQueue);
+
+        IERC20(_token).safeApprove(poolInfo[_pid].crvRewards, 0);
+        IERC20(_token).safeApprove(poolInfo[_pid].crvRewards, type(uint256).max);
+
+        emit CustomDistributionUpdate(_pid, _token, _distros.length, _shares.length, _callQueue.length, totalShares);
+    }
+
+    function _updateDistributionByTokens(
+        address _token,
+        TokenDistro[] storage _tds,
+        address[] memory _distros,
+        uint256[] memory _shares,
+        bool[] memory _callQueue
+    ) internal returns(uint256) {
+        uint256 curLen = _tds.length;
+        for (uint256 i = 0; i < curLen; i++) {
+            address distro = _tds[_tds.length - 1].distro;
+            IERC20(_token).safeApprove(distro, 0);
+            _tds.pop();
+        }
+
+        uint256 totalShares = 0;
+
+        uint256 len = _distros.length;
+        require(len==_shares.length && len==_callQueue.length, "!length");
+
+        for (uint256 i = 0; i < len; i++) {
+            require(_distros[i] != address(0), "!distro");
+            totalShares = totalShares.add(_shares[i]);
+            _tds.push(TokenDistro(_distros[i], _shares[i], _callQueue[i]));
+            emit TokenDistributionUpdate(_token, _distros[i], _shares[i], _callQueue[i]);
+
+            if (_callQueue[i]) {
+                IERC20(_token).safeApprove(_distros[i], 0);
+                IERC20(_token).safeApprove(_distros[i], type(uint256).max);
+            }
+        }
+        require(totalShares <= MAX_DISTRIBUTION, ">max");
+        return totalShares;
     }
 
     /**
@@ -743,14 +784,14 @@ contract Booster{
             if (balance == 0) {
                 continue;
             }
-            uint256 dLen = distributionByTokens[address(token)].length;
+            uint256 dLen = _getDistributionByTokens(_pid, address(token)).length;
             require(dLen > 0, "!dLen");
 
             uint256 earmarkIncentiveAmount = balance.mul(earmarkIncentive).div(DENOMINATOR);
             uint256 sentSum = earmarkIncentiveAmount;
 
             for (uint256 j = 0; j < dLen; j++) {
-                TokenDistro memory tDistro = distributionByTokens[address(token)][j];
+                TokenDistro memory tDistro = _getDistributionByTokens(_pid, address(token))[j];
                 if (tDistro.share == 0) {
                    continue;
                 }
@@ -771,6 +812,13 @@ contract Booster{
             IRewards(pool.crvRewards).queueNewRewards(address(token), balance.sub(sentSum));
             emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), balance.sub(sentSum), pool.crvRewards, true);
         }
+    }
+
+    function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] storage) {
+        if (customDistributionByTokens[_pid][_rewardToken].length > 0) {
+            return customDistributionByTokens[_pid][_rewardToken];
+        }
+        return distributionByTokens[_rewardToken];
     }
 
     /**
@@ -828,6 +876,10 @@ contract Booster{
 
     function distributionByTokenLength(address _token) external view returns (uint256) {
         return distributionByTokens[_token].length;
+    }
+
+    function customDistributionByTokenLength(uint256 _pid, address _token) external view returns (uint256) {
+        return customDistributionByTokens[_pid][_token].length;
     }
 
     function distributionTokenList() external view returns (address[] memory) {

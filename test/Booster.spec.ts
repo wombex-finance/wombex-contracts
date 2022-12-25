@@ -144,7 +144,7 @@ describe("Booster", () => {
         await tx.wait();
     });
 
-    describe("performing core functions", async () => {
+    describe.only("performing core functions", async () => {
         it("@method Booster.deposit", async () => {
             const stake = false;
             const amount = ethers.utils.parseEther("1000");
@@ -374,7 +374,7 @@ describe("Booster", () => {
         });
     });
 
-    describe("performing core functions with deflationary token", async () => {
+    describe.only("performing core functions with deflationary token", async () => {
         let lptoken, defPool, multiRewarder, pid;
         before(async () => {
             pid = await booster.poolLength();
@@ -611,7 +611,7 @@ describe("Booster", () => {
         });
     });
 
-    describe("managing system revenue fees", async () => {
+    describe.only("managing system revenue fees", async () => {
         before(async () => {
             const amount = ethers.utils.parseEther("10");
             let tx = await mocks.lptoken.connect(alice).approve(booster.address, amount);
@@ -666,6 +666,9 @@ describe("Booster", () => {
             await expect(tx).to.emit(booster, "SetEarmarkIncentive").withArgs(100);
         });
         it("distributes the fees to the correct places", async () => {
+            const mwPool = await mocks.masterWombat.poolInfo('0');
+            await deployer.sendTransaction({ to: mwPool.rewarder, value: BN.from(10).pow(20) });
+
             await increaseTime(60 * 60 * 24);
 
             await booster.connect(daoSigner).updateDistributionByTokens(
@@ -683,6 +686,16 @@ describe("Booster", () => {
 
             await increaseTime(60 * 60 * 24);
 
+            expect(await booster.customDistributionByTokenLength(1, crv.address)).eq(0);
+            await booster.connect(daoSigner).updateCustomDistributionByTokens(
+                1,
+                crv.address,
+                [cvxCrvRewards.address, cvxStakingProxy.address, treasuryAddress],
+                [1000, 1400, 100],
+                [true, true, false]
+            );
+            expect(await booster.customDistributionByTokenLength(1, crv.address)).eq(3);
+
             await booster.connect(daoSigner).updateDistributionByTokens(
                 crv.address,
                 [cvxCrvRewards.address, cvxStakingProxy.address, treasuryAddress],
@@ -695,42 +708,78 @@ describe("Booster", () => {
                 [2000, 400, 100],
                 [true, true, false]
             );
+            await booster.connect(daoSigner).updateDistributionByTokens(
+                underlying.address,
+                [cvxCrvRewards.address, cvxLocker.address, treasuryAddress],
+                [2000, 400, 100],
+                [true, true, false]
+            );
             await booster.connect(daoSigner).setEarmarkIncentive(50);
 
-            const tokens = [crv, mocks.weth];
-            for (let i = 0; i < tokens.length; i++) {
-                const token = tokens[i];
-                const lockerAddress = token.address === mocks.weth.address ? cvxLocker.address : veWom.address
-                // bals before
-                const balsBefore = await Promise.all([
-                    await token.balanceOf((await booster.poolInfo(0)).crvRewards), // reward pool
+            async function distroBalances(pid, token) {
+                const lockerAddress = token.address === mocks.crv.address ? veWom.address : cvxLocker.address
+                return Promise.all([
+                    await token.balanceOf((await booster.poolInfo(pid)).crvRewards), // reward pool
                     await token.balanceOf(cvxCrvRewards.address), // cvxCrv
                     await token.balanceOf(lockerAddress), // veWom
                     await token.balanceOf(aliceAddress), // alice
                     await token.balanceOf(treasuryAddress), // platform
                 ]);
+            }
+
+            for (let pid = 0; pid < 2; pid++) {
+                await increaseTime(60 * 60 * 24);
+
+                const pool = await booster.poolInfo(pid);
+                const tokenAddresses = await contracts.voterProxy.getGaugeRewardTokens(pool.lptoken, mocks.masterWombat.address);
+                const tokens = [];
+
+                const balsBeforeArr = [];
+                for (let i = 0; i < tokenAddresses.length; i++) {
+                    const token = await ERC20__factory.connect(tokenAddresses[i], deployer);
+                    tokens.push(token);
+                    // bals before
+                    balsBeforeArr.push(await distroBalances(pid, token));
+                }
 
                 // collect the rewards
-                tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
+                tx = await (await booster.connect(alice).earmarkRewards(pid)).wait(1);
 
-                const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === token.address.toLowerCase())[0].args;
+                for (let i = 0; i < tokens.length; i++) {
+                    const token = tokens[i];
+                    const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === token.address.toLowerCase())[0].args;
+                    const RewardsDistributedLogs = tx.events.filter(e => e.address === cvxStakingProxy.address);
 
-                // bals after
-                const balsAfter = await Promise.all([
-                    await token.balanceOf((await booster.poolInfo(0)).crvRewards), // reward pool
-                    await token.balanceOf(cvxCrvRewards.address), // cvxCrv
-                    await token.balanceOf(lockerAddress), // veWom
-                    await token.balanceOf(aliceAddress), // alice
-                    await token.balanceOf(treasuryAddress), // platform
-                ]);
-                let amountChecked = '0';
-                [100, 50, 400, 2000].forEach((share, index) => {
-                    let shareAmount = amount.mul(share).div(10000);
-                    amountChecked = shareAmount.add(amountChecked);
-                    expect(balsAfter[4 - index].sub(balsBefore[4 - index])).eq(shareAmount);
-                })
-                expect(balsAfter[0]).eq(balsBefore[0].add(amount.sub(amountChecked)));
+                    const balsBefore = balsBeforeArr[i];
+                    // bals after
+                    const balsAfter = await distroBalances(pid, token);
+                    let amountChecked = '0';
+                    if (pid === 1 && token.address === mocks.crv.address) {
+                        [100, 50, 1400, 1000].forEach((share, index) => {
+                            let shareAmount = amount.mul(share).div(10000);
+                            amountChecked = shareAmount.add(amountChecked);
+                            expect(balsAfter[4 - index].sub(balsBefore[4 - index])).eq(shareAmount);
+                        });
+                    } else {
+                        [100, 50, 400, 2000].forEach((share, index) => {
+                            let shareAmount = amount.mul(share).div(10000);
+                            if (token.address === underlying.address) {
+                                shareAmount = shareAmount.mul(90).div(100);
+                            }
+                            amountChecked = shareAmount.add(amountChecked);
+                            equalWithSmallDiff(balsAfter[4 - index].sub(balsBefore[4 - index]), shareAmount);
+                        });
+                    }
+                    if (token.address === underlying.address) {
+                        equalWithSmallDiff(balsAfter[0], balsBefore[0].add(amount.mul(90).div(100).sub(amountChecked)));
+                    } else {
+                        equalWithSmallDiff(balsAfter[0], balsBefore[0].add(amount.sub(amountChecked)));
+                    }
+                }
             }
+
+            await booster.connect(daoSigner).updateCustomDistributionByTokens(1, crv.address, [], [], []);
+            expect(await booster.customDistributionByTokenLength(1, crv.address)).eq(0);
         });
     });
 
