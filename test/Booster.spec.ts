@@ -144,7 +144,7 @@ describe("Booster", () => {
         await tx.wait();
     });
 
-    describe.only("performing core functions", async () => {
+    describe("performing core functions", async () => {
         it("@method Booster.deposit", async () => {
             const stake = false;
             const amount = ethers.utils.parseEther("1000");
@@ -374,7 +374,7 @@ describe("Booster", () => {
         });
     });
 
-    describe.only("performing core functions with deflationary token", async () => {
+    describe("performing core functions with deflationary token", async () => {
         let lptoken, defPool, multiRewarder, pid;
         before(async () => {
             pid = await booster.poolLength();
@@ -611,7 +611,7 @@ describe("Booster", () => {
         });
     });
 
-    describe.only("managing system revenue fees", async () => {
+    describe("managing system revenue fees", async () => {
         before(async () => {
             const amount = ethers.utils.parseEther("10");
             let tx = await mocks.lptoken.connect(alice).approve(booster.address, amount);
