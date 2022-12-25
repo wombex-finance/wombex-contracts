@@ -684,6 +684,9 @@ describe("Booster", () => {
 
             await increaseTime(60 * 60 * 24);
 
+            await booster.connect(daoSigner).clearDistroApprovals(cvxCrvRewards.address).then(tx => tx.wait(1));
+            await expect(booster.connect(alice).earmarkRewards(0)).to.be.revertedWith("SafeERC20: low-level call failed");
+
             expect(await booster.customDistributionByTokenLength(1, crv.address)).eq(0);
             await booster.connect(daoSigner).updateCustomDistributionByTokens(
                 1,
