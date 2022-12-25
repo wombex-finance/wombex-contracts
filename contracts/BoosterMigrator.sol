@@ -71,6 +71,7 @@ contract BoosterMigrator is Ownable {
 
         newBooster.setFeeManager(address(this));
 
+        uint256 pid;
         for (uint256 i = 0; i < poolLen; i++) {
             (address lptoken, address token, address gauge, address rewards, bool shutdown) = oldBooster.poolInfo(i);
             if (shutdown) {
@@ -78,6 +79,8 @@ contract BoosterMigrator is Ownable {
             }
 
             newBooster.addCreatedPool(lptoken, gauge, token, rewards);
+            newBooster.updateLpPendingRewardTokensByGauge(pid);
+            pid++;
         }
 
         require(newBooster.poolLength() == activePoolLen, "active_pool_len");

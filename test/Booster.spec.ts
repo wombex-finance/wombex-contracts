@@ -644,9 +644,7 @@ describe("Booster", () => {
             await expect(tx).to.emit(booster, "DistributionUpdate").withArgs(pool.lptoken, 1, 1, 1, 1);
         });
         it("enforces 1% upper bound", async () => {
-            console.log('setEarmarkIncentive');
             await expect(booster.connect(daoSigner).setEarmarkIncentive(101)).to.be.revertedWith(">max");
-            console.log('updateDistributionByTokens');
             await expect(booster.connect(daoSigner).updateDistributionByTokens(
                 pool.lptoken,
                 [cvxCrvRewards.address, cvxLocker.address],
@@ -748,7 +746,6 @@ describe("Booster", () => {
                 for (let i = 0; i < tokens.length; i++) {
                     const token = tokens[i];
                     const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === token.address.toLowerCase())[0].args;
-                    const RewardsDistributedLogs = tx.events.filter(e => e.address === cvxStakingProxy.address);
 
                     const balsBefore = balsBeforeArr[i];
                     // bals after
@@ -997,10 +994,9 @@ describe("Booster", () => {
 
             const amount = ethers.utils.parseEther("1000");
 
-            tx = await lptoken.connect(bob).approve(booster.address, amount);
-            await tx.wait();
-            tx = await booster.connect(bob).deposit(poolLen, amount, true);
-            await tx.wait();
+            await booster.connect(daoSigner).updateLpPendingRewardTokensByGauge(poolLen).then(tx => tx.wait(1));
+            await lptoken.connect(bob).approve(booster.address, amount).then(tx => tx.wait(1));
+            await booster.connect(bob).deposit(poolLen, amount, true).then(tx => tx.wait(1));
 
             await mocks.masterWombat.setPause(true);
 
@@ -1155,6 +1151,7 @@ describe("Booster", () => {
             let balanceBefore = await crvRewards.balanceOf(bobAddress);
 
             // await expect(booster.connect(bob).deposit(0, amount, true)).to.revertedWith("pool is closed");
+            await newBoosterContract.connect(daoSigner).updateLpPendingRewardTokensByGauge(lastPid).then(tx => tx.wait(1));
 
             tx = await lptoken.connect(bob).approve(newBoosterContract.address, amount);
             await tx.wait();
@@ -1304,6 +1301,7 @@ describe("Booster", () => {
 
             await newBoosterContract.connect(bob).deposit(3, amount, true).then(tx => tx.wait(1));
             await newBoosterContract.connect(bob).deposit(4, amount9, true).then(tx => tx.wait(1));
+            await newBoosterContract.connect(bob).earmarkRewards(3).then(tx => tx.wait());
 
             await increaseTime(60 * 60 * 24);
 
@@ -1374,6 +1372,7 @@ describe("Booster", () => {
             await crv.transfer(contracts.voterProxy.address, excessCrvAmount);
 
             await newBoosterContract.connect(bob).earmarkRewards(4).then(tx => tx.wait());
+            await newBoosterContract.connect(daoSigner).releaseToken(mocks.weth.address, treasuryAddress).then(tx => tx.wait());
             expect(await mocks.weth.balanceOf(newBoosterContract.address)).eq(0);
             expect(await mocks.crv.balanceOf(newBoosterContract.address)).eq(excessCrvAmount.mul(2));
             expect(await mocks.crv.balanceOf(contracts.voterProxy.address)).eq(0);

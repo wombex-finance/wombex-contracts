@@ -104,6 +104,7 @@ contract Booster{
     event TokenDistributionUpdate(address indexed token, address indexed distro, uint256 share, bool callQueue);
     event DistributionUpdate(address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
     event CustomDistributionUpdate(uint256 indexed pid, address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
+    event ClearDistributionApproval(address indexed distro, address[] tokens);
 
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
     event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
@@ -344,12 +345,12 @@ contract Booster{
         emit DistributionUpdate(_token, _distros.length, _shares.length, _callQueue.length, totalShares);
     }
 
-
     /**
      * @notice Allows turning off or on for fee distro
      */
     function updateCustomDistributionByTokens(
-        uint256 _pid, address _token,
+        uint256 _pid,
+        address _token,
         address[] memory _distros,
         uint256[] memory _shares,
         bool[] memory _callQueue
@@ -374,7 +375,6 @@ contract Booster{
         uint256 curLen = _tds.length;
         for (uint256 i = 0; i < curLen; i++) {
             address distro = _tds[_tds.length - 1].distro;
-            IERC20(_token).safeApprove(distro, 0);
             _tds.pop();
         }
 
@@ -396,6 +396,19 @@ contract Booster{
         }
         require(totalShares <= MAX_DISTRIBUTION, ">max");
         return totalShares;
+    }
+
+    /**
+     * @notice Allows turning off or on for fee distro
+     */
+    function clearDistroApprovals(address distro) external {
+        require(msg.sender==owner, "!auth");
+
+        for (uint256 i = 0; i < distributionTokens.length; i++) {
+            IERC20(distributionTokens[i]).safeApprove(distro, 0);
+        }
+
+        emit ClearDistributionApproval(distro, distributionTokens);
     }
 
     /**
