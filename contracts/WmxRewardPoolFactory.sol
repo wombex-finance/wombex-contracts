@@ -20,7 +20,7 @@ contract WmxRewardPoolFactory is Ownable {
     address[] public depositors;
 
     event DepositorsUpdate(address[] depositor);
-    event RewardPoolCreated(address rewardPool, uint256 _startDelay);
+    event RewardPoolCreated(address rewardPool, uint256 startDelay, uint256 duration, uint256 maxCap);
 
     /**
      * @param _stakingToken  Pool LP token
@@ -55,9 +55,9 @@ contract WmxRewardPoolFactory is Ownable {
      * @notice Create a Managed Reward Pool to handle distribution of all crv/wom mined in a pool
      */
     function CreateWmxRewardPoolV2(uint256 _startDelay, uint256 _duration, uint256 _maxCap) external onlyOwner returns (address) {
-        WmxRewardPool rewardPool = new WmxRewardPoolV2(stakingToken, rewardToken, rewardManager, wmxLocker, penaltyForwarder, _startDelay, _duration, _maxCap, depositors);
+        WmxRewardPoolV2 rewardPool = new WmxRewardPoolV2(stakingToken, rewardToken, rewardManager, wmxLocker, penaltyForwarder, _startDelay, _duration, _maxCap, depositors);
 
-        emit RewardPoolCreated(address(rewardPool), _startDelay);
+        emit RewardPoolCreated(address(rewardPool), _startDelay, _duration, _maxCap);
         return address(rewardPool);
     }
 }

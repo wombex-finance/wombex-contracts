@@ -7,13 +7,20 @@ import {
     SystemDeployed,
 } from "../scripts/deploySystem";
 import {deployTestFirstStage, getMockDistro, getMockMultisigs} from "../scripts/deployMocks";
-import {WmxRewardPool, WmxRewardPool__factory, ERC20, WomDepositor} from "../types/generated";
-import { DEAD_ADDRESS, ONE_DAY, ONE_WEEK, ZERO_ADDRESS } from "../test-utils/constants";
+import {
+    WmxRewardPool,
+    WmxRewardPool__factory,
+    ERC20,
+    WomDepositor,
+    WmxRewardPoolFactory, WmxRewardPoolFactory__factory, WmxRewardPoolV2__factory
+} from "../types/generated";
+import { ONE_DAY, ONE_WEEK, ZERO_ADDRESS } from "../test-utils/constants";
 import { increaseTime, getTimestamp } from "../test-utils/time";
 import { BN, simpleToExactAmount } from "../test-utils/math";
 import { assertBNClose, assertBNClosePercent } from "../test-utils/assertions";
+import {deployContract} from "../tasks/utils";
 
-describe.only("WmxRewardPool", () => {
+describe("WmxRewardPool", () => {
     let accounts: Signer[];
 
     let contracts: SystemDeployed;
@@ -23,7 +30,7 @@ describe.only("WmxRewardPool", () => {
     let womDepositor: WomDepositor;
     let mocks: any;
 
-    let deployer: Signer, daoSigner: Signer;
+    let deployer: Signer, daoSigner: Signer, treasurySigner: Signer;
 
     let alice: Signer;
     let aliceAddress: string;
@@ -38,7 +45,8 @@ describe.only("WmxRewardPool", () => {
     const setup = async () => {
         mocks = await deployTestFirstStage(hre, deployer);
         daoSigner = accounts[0];
-        multisigs = await getMockMultisigs(accounts[0], accounts[7], accounts[0]);
+        treasurySigner = accounts[7];
+        multisigs = await getMockMultisigs(daoSigner, treasurySigner, daoSigner);
         const distro = getMockDistro();
 
         contracts = await deploy(hre, deployer, daoSigner, mocks, distro, multisigs, mocks.namingConfig, mocks);
@@ -60,21 +68,15 @@ describe.only("WmxRewardPool", () => {
         await womDepositor.connect(daoSigner).setLockConfig(14, 60 * 60);
 
         initialBal = simpleToExactAmount(1000);
-        console.log("mocks.crv.transfer(aliceAddress, initialBal)");
         await mocks.crv.transfer(aliceAddress, initialBal);
-        const stakeAddress = contracts.cvxCrvRewards.address;
         await mocks.crv.connect(alice).approve(womDepositor.address, initialBal);
-        console.log("womDepositor.connect(alice)[\"deposit");
         await womDepositor.connect(alice)["deposit(uint256,address)"](initialBal, ZERO_ADDRESS).then(r => r.wait(1));
-        initialBal = initialBal.div(2);
 
-        await mocks.crv.approve(womDepositor.address, initialBal);
-        console.log("womDepositor[\"deposit");
-        await womDepositor["deposit(uint256,address)"](initialBal, ZERO_ADDRESS).then(r => r.wait(1));
-        console.log("contracts.cvxCrv.transfer");
-        await contracts.cvxCrv.transfer(bobAddress, initialBal);
+        await mocks.crv.approve(womDepositor.address, initialBal.div(2));
+        await womDepositor["deposit(uint256,address)"](initialBal.div(2), ZERO_ADDRESS).then(r => r.wait(1));
+        await contracts.cvxCrv.transfer(bobAddress, initialBal.div(2));
 
-        stakeAmount = initialBal.div(5);
+        stakeAmount = initialBal.div(10);
     };
     async function verifyWithdraw(signer: Signer, accountAddress: string, amount: BN, claim = false, lock = false) {
         const totalSupplyBefore = await rewards.totalSupply();
@@ -255,25 +257,69 @@ describe.only("WmxRewardPool", () => {
             await expect(rewards.connect(accounts[7]).rescueReward()).to.be.revertedWith("Already started");
         });
     });
-    describe("rescuing", () => {
+
+    describe("wmxRewardPoolV2", () => {
+        let wmxRewardPoolFactory, wmxRewardPoolV2;
         before(async () => {
             await setup();
+            wmxRewardPoolFactory = await deployContract<WmxRewardPoolFactory>(
+                hre,
+                new WmxRewardPoolFactory__factory(deployer),
+                "WmxRewardPoolFactory",
+                [cvxCrv.address, contracts.cvx.address, multisigs.treasuryMultisig, contracts.cvxLocker.address, contracts.penaltyForwarder.address, [contracts.crvDepositor.address]],
+                {},
+                true,
+                1,
+            );
         });
-        it("rescues rewards before contract has started", async () => {
-            const treasuryAddress = await accounts[7].getAddress();
-            const contractBal = await contracts.cvx.balanceOf(rewards.address);
-            expect(contractBal).gt(0);
-            const treasuryBal = await contracts.cvx.balanceOf(treasuryAddress);
-            await rewards.connect(accounts[7]).rescueReward();
-            const treasuryBalAfter = await contracts.cvx.balanceOf(treasuryAddress);
-            expect(treasuryBalAfter).eq(treasuryBal.add(contractBal));
+        it("wrong creation by wmxRewardPoolFactory", async () => {
+            await expect(wmxRewardPoolFactory.connect(bob).CreateWmxRewardPoolV2(0, ONE_WEEK, simpleToExactAmount(100))).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.mul(2), ONE_WEEK, simpleToExactAmount(100))).to.be.revertedWith("!delay");
         });
         it("allows admin to update wmxLocker address", async () => {
-            await expect(rewards.connect(deployer).setLocker(DEAD_ADDRESS)).to.be.revertedWith("!auth");
-            await rewards.connect(accounts[7]).setLocker(DEAD_ADDRESS);
-            expect(await rewards.wmxLocker()).eq(DEAD_ADDRESS);
+            expect(await wmxRewardPoolFactory.depositors(0)).eq(contracts.crvDepositor.address);
+
+            const tx = await wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.div(2), ONE_WEEK, simpleToExactAmount(100)).then(tx => tx.wait(1));
+            const [RewardPoolCreated] = tx.events.filter(e => e.event === 'RewardPoolCreated');
+            wmxRewardPoolV2 = WmxRewardPoolV2__factory.connect(RewardPoolCreated.args.rewardPool, deployer);
+
+            expect(await wmxRewardPoolV2.duration()).eq(ONE_WEEK);
+            expect(await wmxRewardPoolV2.maxCap()).eq(simpleToExactAmount(100));
+            expect(await wmxRewardPoolV2.canStake(contracts.crvDepositor.address)).eq(true);
+            expect(await wmxRewardPoolV2.canStake(bobAddress)).eq(false);
+        });
+        it("allows manager to initialiseRewards", async () => {
+            await expect(wmxRewardPoolV2.connect(bob).initialiseRewards()).to.be.revertedWith("!authorized");
+            await expect(wmxRewardPoolV2.connect(treasurySigner).initialiseRewards()).to.be.revertedWith("!balance");
+
+            await contracts.cvx.transfer(wmxRewardPoolV2.address, simpleToExactAmount(2000));
+
+            await wmxRewardPoolV2.connect(treasurySigner).initialiseRewards().then(tx => tx.wait(1));
+
+            await expect(wmxRewardPoolV2.connect(treasurySigner).initialiseRewards()).to.be.revertedWith("!one time");
+        });
+        it("allows to stake only from womDepositor", async () => {
+            await mocks.crv.transfer(aliceAddress, stakeAmount.mul(2));
+            await mocks.crv.connect(alice).approve(womDepositor.address, stakeAmount.mul(2));
+
+            await womDepositor.connect(alice)["deposit(uint256,address)"](stakeAmount.div(2), wmxRewardPoolV2.address).then(r => r.wait(1));
+            await expect(await wmxRewardPoolV2.balanceOf(aliceAddress)).to.eq(stakeAmount.div(2));
+
+            await womDepositor.connect(alice)["deposit(uint256,address)"](stakeAmount.div(2), ZERO_ADDRESS).then(r => r.wait(1));
+            await cvxCrv.connect(alice).approve(wmxRewardPoolV2.address, stakeAmount.div(2));
+
+            await expect(wmxRewardPoolV2.connect(alice)["stake(uint256)"](stakeAmount.div(2))).to.be.revertedWith("!authorized");
+            await expect(wmxRewardPoolV2.connect(alice)["stakeFor(address,uint256)"](aliceAddress, stakeAmount.div(2))).to.be.revertedWith("!authorized");
+
+            console.log('maxCap')
+            await expect(await wmxRewardPoolV2.totalSupply()).to.eq(stakeAmount.div(2));
+            await expect(womDepositor.connect(alice)["deposit(uint256,address)"](stakeAmount, wmxRewardPoolV2.address)).to.be.revertedWith("maxCap");
+
+            await womDepositor.connect(alice)["deposit(uint256,address)"](stakeAmount.div(2), wmxRewardPoolV2.address).then(r => r.wait(1));
+            await expect(await wmxRewardPoolV2.balanceOf(aliceAddress)).to.eq(stakeAmount);
         });
     });
+
     describe("fails", () => {
         it("if stake amount is zero", async () => {
             await expect(rewards.connect(bob).stake(0)).to.revertedWith("RewardPool : Cannot stake 0");
