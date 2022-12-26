@@ -90,13 +90,13 @@ contract Booster{
     event FactoriesUpdated(address rewardFactory, address tokenFactory);
     event ExtraRewardsDistributorUpdated(address newDist);
     event LpPendingRewardTokensUpdated(address indexed lpToken, address[] pendingRewardTokens);
-    event ReleaseToken(address token, uint256 amount, address recipient);
+    event ReleaseToken(address indexed token, uint256 amount, address indexed recipient);
     event PenaltyShareUpdated(uint256 newPenalty);
     event VoteDelegateUpdated(address newVoteDelegate);
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
     event MintRatioUpdated(uint256 mintRatio);
-    event CustomMintRatioUpdated(uint256 pid, uint256 mintRatio);
+    event CustomMintRatioUpdated(uint256 indexed pid, uint256 mintRatio);
     event SetEarmarkIncentive(uint256 earmarkIncentive);
     event SetEarmarkOnDeposit(bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
@@ -580,7 +580,7 @@ contract Booster{
         }
 
         uint256 amountToWithdraw = IERC20(_token).balanceOf(address(this)).sub(totalPendingRewards);
-        IERC20(_token).transfer(_recipient, amountToWithdraw);
+        IERC20(_token).safeTransfer(_recipient, amountToWithdraw);
         emit ReleaseToken(_token, amountToWithdraw, _recipient);
     }
 
