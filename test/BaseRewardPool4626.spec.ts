@@ -1,11 +1,7 @@
 import { simpleToExactAmount } from "../test-utils/math";
 import hre, { ethers } from "hardhat";
 import { expect } from "chai";
-import {
-    deploy,
-    SystemDeployed,
-    updateDistributionByTokens
-} from "../scripts/deploySystem";
+import { deploy, SystemDeployed } from "../scripts/deploySystem";
 import {
     deployTestFirstStage,
     getMockDistro,
@@ -18,7 +14,7 @@ import {
     BaseRewardPool4626,
 } from "../types/generated";
 import { Signer } from "ethers";
-import { DEAD_ADDRESS, ZERO_ADDRESS } from "../test-utils/constants";
+import { ZERO_ADDRESS } from "../test-utils/constants";
 
 type Pool = {
     lptoken: string;
@@ -352,6 +348,43 @@ describe("BaseRewardPool4626", () => {
                     .connect(withdrawer)
                     ["withdraw(uint256,address,address)"](simpleToExactAmount(1), withdrawerAddress, depositorAddress),
             ).to.be.revertedWith("ERC4626: withdrawal amount exceeds allowance");
+        });
+    });
+
+    describe("donate", () => {
+        let depositor: Signer;
+        let depositorAddress: string;
+        let withdrawer: Signer;
+        let withdrawerAddress: string;
+        let rewardPool: BaseRewardPool4626;
+        before(async () => {
+            depositor = accounts[2];
+            depositorAddress = await depositor.getAddress();
+            withdrawer = accounts[3];
+            withdrawerAddress = await withdrawer.getAddress();
+
+            rewardPool = BaseRewardPool4626__factory.connect(pool.crvRewards, depositor);
+        });
+        it("donate should working not for booster reward token", async () => {
+            expect(await rewardPool.boosterRewardToken()).eq(mocks.crv.address);
+
+            await mocks.crv.connect(deployer).approve(rewardPool.address, simpleToExactAmount(100));
+            await expect(
+                rewardPool.connect(deployer).donate(mocks.crv.address, simpleToExactAmount(100)),
+            ).to.be.revertedWith("booster_reward_token");
+
+            await mocks.lptoken.connect(deployer).approve(rewardPool.address, simpleToExactAmount(100));
+            await rewardPool.connect(deployer).donate(mocks.lptoken.address, simpleToExactAmount(100));
+
+            expect(await contracts.cvxCrvRewards.boosterRewardToken()).eq(mocks.crv.address);
+
+            await mocks.crv.connect(deployer).approve(contracts.cvxCrvRewards.address, simpleToExactAmount(100));
+            await expect(
+                contracts.cvxCrvRewards.connect(deployer).donate(mocks.crv.address, simpleToExactAmount(100)),
+            ).to.be.revertedWith("booster_reward_token");
+
+            await mocks.lptoken.connect(deployer).approve(contracts.cvxCrvRewards.address, simpleToExactAmount(100));
+            await contracts.cvxCrvRewards.connect(deployer).donate(mocks.lptoken.address, simpleToExactAmount(100));
         });
     });
 });
