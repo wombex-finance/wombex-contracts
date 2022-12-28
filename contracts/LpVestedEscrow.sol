@@ -104,11 +104,11 @@ contract LpVestedEscrow is ReentrancyGuard {
      * @notice Cancel recipients vesting rewardTokens
      * @param _recipient Recipient address
      */
-    function cancel(address _recipient) external {
+    function cancel(address _recipient) external nonReentrant {
         require(msg.sender == admin, "!auth");
         require(totalLocked[_recipient] > 0, "!funding");
 
-        claim(_recipient);
+        _claim(_recipient);
 
         uint256 delta = remaining(_recipient);
         rewardToken.safeTransfer(admin, delta);
@@ -158,11 +158,15 @@ contract LpVestedEscrow is ReentrancyGuard {
                     CLAIM
     ****************************************/
 
+    function claim(address _recipient) external nonReentrant {
+        _claim(_recipient);
+    }
+
     /**
      * @dev Claim reward token
      * @param _recipient  Address to receive rewards.
      */
-    function claim(address _recipient) public nonReentrant {
+    function _claim(address _recipient) internal {
         uint256 claimable = available(_recipient);
 
         totalClaimed[_recipient] += claimable;
