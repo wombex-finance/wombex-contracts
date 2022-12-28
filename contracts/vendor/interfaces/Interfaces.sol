@@ -42,7 +42,7 @@ interface IStaker{
     function withdrawLp(address, address, uint256) external returns (bool);
     function withdrawAllLp(address, address) external returns (bool);
     function lock(uint256 _lockDays) external;
-    function releaseLock(uint256 _slot) external returns(bool);
+    function releaseLock(uint256 _slot) external returns(uint256);
     function getGaugeRewardTokens(address _lptoken, address _gauge) external returns (address[] memory tokens);
     function claimCrv(address, address) external returns (address[] memory tokens);
     function balanceOfPool(address, address) external view returns (uint256);
