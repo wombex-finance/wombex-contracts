@@ -6,7 +6,7 @@ import {
     getMockDistro,
     getMockMultisigs
 } from "../scripts/deployMocks";
-import {SystemDeployed, deploy, updateDistributionByTokens} from "../scripts/deploySystem";
+import {SystemDeployed, deploy} from "../scripts/deploySystem";
 import { increaseTime } from "../test-utils/time";
 import { ONE_WEEK, ZERO_ADDRESS, DEAD_ADDRESS, MAX_UINT256 } from "../test-utils/constants";
 import { simpleToExactAmount } from "../test-utils/math";
@@ -59,7 +59,7 @@ describe("WmxClaimZap", () => {
     });
 
     it("initial configuration is correct", async () => {
-        expect(await contracts.claimZap.getName()).to.be.eq("ClaimZap V2.0");
+        expect(await contracts.claimZap.getName()).to.be.eq("ClaimZap V3.0");
     });
 
     it("set approval for deposits", async () => {
@@ -88,23 +88,57 @@ describe("WmxClaimZap", () => {
         const rewardBalance = await contracts.cvxCrvRewards.balanceOf(aliceAddress);
         expect(rewardBalance).gt(balanceBeforeReward);
 
+        const cvxCrvBalance = await contracts.cvxCrv.balanceOf(aliceAddress);
+        const cvxBalance = await contracts.cvx.balanceOf(aliceAddress);
+
         await increaseTime(ONE_WEEK.mul("4"));
 
         await contracts.booster.earmarkRewards(0);
 
+        await contracts.extraRewardsDistributor.modifyWhitelist(await deployer.getAddress(), true).then(tx => tx.wait(1));
+        await contracts.cvx.approve(contracts.extraRewardsDistributor.address, ethers.utils.parseEther("1000"));
+        await contracts.extraRewardsDistributor.addReward(contracts.cvx.address, ethers.utils.parseEther("900")).then(tx => tx.wait(1));
+
         await increaseTime(ONE_WEEK.mul("4"));
+
+        await contracts.extraRewardsDistributor.addReward(contracts.cvx.address, ethers.utils.parseEther("100")).then(tx => tx.wait(1));
 
         const expectedRewards = await contracts.cvxCrvRewards.earned(mocks.crv.address, aliceAddress);
         console.log('expectedRewards', expectedRewards);
 
         await mocks.crv.connect(alice).approve(contracts.claimZap.address, ethers.constants.MaxUint256);
-        const option = 1 + 16 + 8;
+
+        let option = 1 + 16 + 8;
+        const tx = await contracts.claimZap
+            .connect(alice)
+            .claimRewards([], [contracts.cvx.address], [], [], expectedRewards, 0, 0, option).then(tx => tx.wait(1));
+
+        const rewardPaid = tx.events
+            .filter(e => e.address.toLowerCase() === contracts.extraRewardsDistributor.address.toLowerCase())
+            .map(e => {
+                try { return contracts.extraRewardsDistributor.interface.decodeEventLog('RewardPaid', e.data, e.topics); }
+                catch (e) { return null; }
+            }).filter(e => e)[0];
+
+        expect(rewardPaid.user).eq(aliceAddress);
+        expect(rewardPaid.reward).gt('0');
+        expect(await contracts.cvx.balanceOf(aliceAddress)).gt(cvxBalance);
+
+        const newCvxCrvBalance = await contracts.cvxCrv.balanceOf(aliceAddress);
+        expect(newCvxCrvBalance).gt(cvxCrvBalance);
+
+        expect(rewardBalance).eq(await contracts.cvxCrvRewards.balanceOf(aliceAddress));
+
+        await increaseTime(ONE_WEEK.mul("4"));
+
+        await contracts.booster.earmarkRewards(0);
+        option = 1 + 16 + 8 + 128;
         await contracts.claimZap
             .connect(alice)
             .claimRewards([], [], [], [], expectedRewards, 0, 0, option);
 
-        const newRewardBalance = await contracts.cvxCrvRewards.balanceOf(aliceAddress);
-        expect(newRewardBalance).gt(rewardBalance);
+        expect(newCvxCrvBalance).eq(await contracts.cvxCrv.balanceOf(aliceAddress));
+        expect(await contracts.cvxCrvRewards.balanceOf(aliceAddress)).gt(rewardBalance);
     });
 
     it("claim from lp staking pool", async () => {

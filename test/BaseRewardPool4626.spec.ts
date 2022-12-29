@@ -4,7 +4,6 @@ import { expect } from "chai";
 import {
     deploy,
     SystemDeployed,
-    updateDistributionByTokens
 } from "../scripts/deploySystem";
 import {
     deployTestFirstStage,
@@ -18,7 +17,7 @@ import {
     BaseRewardPool4626,
 } from "../types/generated";
 import { Signer } from "ethers";
-import { DEAD_ADDRESS, ZERO_ADDRESS } from "../test-utils/constants";
+import { ZERO_ADDRESS } from "../test-utils/constants";
 
 type Pool = {
     lptoken: string;
