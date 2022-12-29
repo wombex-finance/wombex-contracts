@@ -1,4 +1,4 @@
-const { task } = require('hardhat/config');
+import { task } from "hardhat/config";
 const ethers = require('ethers');
 const fs = require('fs');
 const path = require('path');
