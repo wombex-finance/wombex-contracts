@@ -1,9 +1,6 @@
 import hre, { ethers } from "hardhat";
 import { expect } from "chai";
-import {
-    deploy,
-    updateDistributionByTokens
-} from "../scripts/deploySystem";
+import {deploy} from "../scripts/deploySystem";
 import {
     deployTestFirstStage,
     getMockDistro,
