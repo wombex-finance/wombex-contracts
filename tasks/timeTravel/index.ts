@@ -1,8 +1,9 @@
 import { task } from "hardhat/config";
 import { TaskArguments } from "hardhat/types";
 import { HardhatRuntime } from "../utils/networkAddressFactory";
-import {MasterWombatV2__factory} from "../../types/generated";
+import {IERC20__factory, LpVestedEscrow__factory, MasterWombatV2__factory} from "../../types/generated";
 import {getSigner} from "../utils";
+import {impersonate, increaseTime, ONE_DAY, ZERO_ADDRESS} from "../../test-utils";
 const fs = require('fs');
 
 task("timeTravel")
@@ -43,4 +44,21 @@ task("tt:wombat:pool").setAction(async function (taskArguments: TaskArguments, h
             .add(user.pendingWom)
             .sub(user.rewardDebt);
     console.log('pending', pending);
+});
+
+task("tt:lp-vested-escrow:claim").setAction(async function (taskArguments: TaskArguments, hre) {
+    const daoSignerAddress = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const daoSigner = await impersonate(daoSignerAddress, true);
+    const lpToken = IERC20__factory.connect('0xe86eaAD81C32ffbb88B7ec9B325C8f75C8c9f1Ab', daoSigner);
+    const lpVestedEscrow = LpVestedEscrow__factory.connect('0xA1B677531db12f01D2608A00D8c7BDe930D54D98', daoSigner);
+
+    await lpVestedEscrow.setAdmin(ZERO_ADDRESS);
+
+    await increaseTime(ONE_DAY.mul(183));
+
+    console.log('balance before claim', await lpToken.balanceOf(daoSignerAddress));
+
+    await lpVestedEscrow.claim(daoSignerAddress);
+
+    console.log('balance after claim', await lpToken.balanceOf(daoSignerAddress));
 });
