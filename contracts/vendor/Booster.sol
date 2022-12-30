@@ -827,7 +827,7 @@ contract Booster{
         }
     }
 
-    function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] storage) {
+    function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] memory) {
         if (customDistributionByTokens[_pid][_rewardToken].length > 0) {
             return customDistributionByTokens[_pid][_rewardToken];
         }
