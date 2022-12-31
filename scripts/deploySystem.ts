@@ -496,7 +496,6 @@ async function deployFirstStage(
             cvx.address,
             cvxCrv.address,
             womDepositor.address,
-            ZERO_ADDRESS,
             wmxLocker.address,
         ],
         {},
@@ -526,9 +525,6 @@ async function deployFirstStage(
     await waitForTx(tx, debug, waitForBlocks);
 
     tx = await wmxLocker.setApprovals();
-    await waitForTx(tx, debug, waitForBlocks);
-
-    tx = await wmxStakingProxy.setApprovals();
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('voterProxy.setOperator')

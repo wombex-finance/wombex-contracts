@@ -6,8 +6,6 @@ import {
     Asset,
     Asset__factory,
     Booster,
-    VoterProxy,
-    VoterProxy__factory,
     WombatRouter,
     WombatRouter__factory,
     WomSwapDepositor,
@@ -16,7 +14,7 @@ import {
 import { Signer} from "ethers";
 import {increaseTime} from "../test-utils/time";
 import {simpleToExactAmount} from "../test-utils/math";
-import {DEAD_ADDRESS, impersonateAccount} from "../test-utils";
+import {DEAD_ADDRESS, impersonateAccount, ZERO, ZERO_ADDRESS} from "../test-utils";
 import {deployContract} from "../tasks/utils";
 
 type Pool = {
@@ -30,7 +28,7 @@ type Pool = {
 describe.only("WomStakingProxy", () => {
     let accounts: Signer[];
     let booster: Booster;
-    let crv, cvx, cvxCrv, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, underlying;
+    let crv, cvx, cvxCrv, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, crvDepositor;
     let mocks: any;
     let pool: Pool;
     let contracts: SystemDeployed;
@@ -61,8 +59,8 @@ describe.only("WomStakingProxy", () => {
 
         pool = await booster.poolInfo(0);
 
-        await crv.approve(crvDepositor.address, simpleToExactAmount(90000));
-        await crvDepositor.deposit(simpleToExactAmount(90000), ZERO_ADDRESS);
+        await crv.approve(crvDepositor.address, simpleToExactAmount(150000));
+        await crvDepositor['deposit(uint256,address)'](simpleToExactAmount(150000), ZERO_ADDRESS);
 
         const wmxWomTokens = [crv, cvxCrv];
         for (let i = 0; i < wmxWomTokens.length; i++) {
@@ -90,6 +88,9 @@ describe.only("WomStakingProxy", () => {
             1,
         );
 
+        await cvxCrv.approve(wombatRouter.address, simpleToExactAmount(20000));
+        await wombatRouter.swapExactTokensForTokens([cvxCrv.address, crv.address], [mocks.pool.address], simpleToExactAmount(90000), '0', deployerAddress, new Date().getTime());
+
         womSwapDepositor = await deployContract<WomSwapDepositor>(
             hre,
             new WomSwapDepositor__factory(deployer),
@@ -100,7 +101,10 @@ describe.only("WomStakingProxy", () => {
             1,
         );
 
-        await cvxStakingProxy.connect(daoSigner).setConfig(crvDepositor.address, womSwapDepositor.address, cvxLocker.address);
+        await cvxStakingProxy.connect(daoSigner).setConfig(crvDepositor.address, cvxLocker.address);
+        await cvxStakingProxy.connect(daoSigner).setSwapConfig(womSwapDepositor.address, '5000');
+
+        console.log('quotePotentialSwap', await mocks.pool.quotePotentialSwap(crv.address, cvxCrv.address, simpleToExactAmount(1)));
 
         // transfer LP tokens to accounts
         const balance = await mocks.lptoken.balanceOf(deployerAddress);

@@ -41,28 +41,25 @@ contract WomStakingProxy is Ownable {
     /* ========== CONSTRUCTOR ========== */
 
     /**
-     * @param _rewards              vlWMX
      * @param _wom                  WOM token
      * @param _wmx                  WMX token
      * @param _wmxWom               wmxWOM token
      * @param _womDepositor         Wrapper that locks WOM to veWom
-     * @param _womSwapDepositor     Wrapper that swap WOM to wmxWom
+     * @param _rewards              Rewards contract to queue wmxWOM
      */
     constructor(
         address _wom,
         address _wmx,
         address _wmxWom,
         address _womDepositor,
-        address _womSwapDepositor,
         address _rewards
     ) {
         wom = _wom;
         wmx = _wmx;
         wmxWom = _wmxWom;
         womDepositor = _womDepositor;
-        womSwapDepositor = _womSwapDepositor;
-        womSwapDepositorPool = IWomSwapDepositor(_womSwapDepositor).pool();
         rewards = _rewards;
+        _setApprovals();
     }
 
     /**
@@ -73,6 +70,7 @@ contract WomStakingProxy is Ownable {
     function setConfig(address _womDepositor, address _rewards) external onlyOwner {
         womDepositor = _womDepositor;
         rewards = _rewards;
+        _setApprovals();
     }
 
     /**
@@ -81,21 +79,25 @@ contract WomStakingProxy is Ownable {
      * @param   _swapShare Share to swap through WomSwapDepositor
      */
     function setSwapConfig(address _womSwapDepositor, uint256 _swapShare) external onlyOwner {
+        require(_swapShare <= DENOMINATOR, ">denominator");
         womSwapDepositor = _womSwapDepositor;
         womSwapDepositorPool = IWomSwapDepositor(_womSwapDepositor).pool();
         swapShare = _swapShare;
+        _setApprovals();
     }
 
     /**
      * @notice  Approve womDepositor to transfer contract WOM
      *          and rewards to transfer wmxWom
      */
-    function setApprovals() external {
+    function _setApprovals() internal {
         IERC20(wom).safeApprove(womDepositor, 0);
         IERC20(wom).safeApprove(womDepositor, type(uint256).max);
 
-        IERC20(wom).safeApprove(womSwapDepositor, 0);
-        IERC20(wom).safeApprove(womSwapDepositor, type(uint256).max);
+        if (womSwapDepositor != address(0)) {
+            IERC20(wom).safeApprove(womSwapDepositor, 0);
+            IERC20(wom).safeApprove(womSwapDepositor, type(uint256).max);
+        }
 
         IERC20(wmxWom).safeApprove(rewards, 0);
         IERC20(wmxWom).safeApprove(rewards, type(uint256).max);
