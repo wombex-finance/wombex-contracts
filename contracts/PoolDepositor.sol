@@ -2,7 +2,6 @@
 pragma solidity 0.8.11;
 
 import "./Interfaces.sol";
-import "@openzeppelin/contracts-0.8/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.8/utils/Address.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
@@ -17,7 +16,6 @@ import "@openzeppelin/contracts-0.8/utils/Address.sol";
 contract PoolDepositor is Ownable {
     using SafeERC20 for IERC20;
     using Address for address payable;
-    using SafeMath for uint256;
 
     address public weth;
     address public booster;
@@ -78,7 +76,7 @@ contract PoolDepositor is Ownable {
     function withdrawNative(address _lptoken, uint256 _amount, uint256 _minOut, address payable _recipient) external {
         uint256 wethBalanceBefore = IERC20(weth).balanceOf(address(this));
         withdraw(_lptoken, _amount, _minOut, address(this));
-        uint256 wethAmount = IERC20(weth).balanceOf(address(this)).sub(wethBalanceBefore);
+        uint256 wethAmount = IERC20(weth).balanceOf(address(this)) - wethBalanceBefore;
 
         IWETH(weth).withdraw(wethAmount);
         _recipient.sendValue(wethAmount);
@@ -95,7 +93,7 @@ contract PoolDepositor is Ownable {
         address pool = IAsset(_lptoken).pool();
         uint256 balanceBefore = IERC20(_lptoken).balanceOf(address(this));
         IPool(pool).deposit(_underlying, _amount, _minLiquidity, address(this), block.timestamp + 1, false);
-        uint256 resultLpAmount = IERC20(_lptoken).balanceOf(address(this)).sub(balanceBefore);
+        uint256 resultLpAmount = IERC20(_lptoken).balanceOf(address(this)) - balanceBefore;
 
         IBooster(booster).depositFor(lpTokenToPid[_lptoken], resultLpAmount, _stake, msg.sender);
     }

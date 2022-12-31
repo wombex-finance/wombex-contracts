@@ -4,7 +4,6 @@ pragma solidity 0.8.11;
 import { Address } from "@openzeppelin/contracts-0.8/utils/Address.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-import { SafeMath } from "@openzeppelin/contracts-0.8/utils/math/SafeMath.sol";
 import {IWmxLocker, IWomDepositor } from "./Interfaces.sol";
 import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
 
@@ -22,7 +21,6 @@ import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
 contract WomStakingProxy is Ownable {
     using SafeERC20 for IERC20;
     using Address for address;
-    using SafeMath for uint256;
 
     //tokens
     address public immutable wom;

@@ -4,7 +4,6 @@ pragma solidity 0.8.11;
 import "./WomDepositor.sol";
 
 contract WomDepositorV2 is WomDepositor {
-    using SafeMath for uint256;
 
     event Migrated(uint256 currentSlot, uint256 checkOldSlot, uint256 customLockAccountsLen, uint256 lockDays, uint256 smartLockPeriod, uint256 lastLockAt);
 
