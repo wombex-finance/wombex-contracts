@@ -22,6 +22,8 @@ contract WomStakingProxy is Ownable {
     using SafeERC20 for IERC20;
     using Address for address;
 
+    uint256 public constant DENOMINATOR = 10000;
+
     //tokens
     address public immutable wom;
     address public immutable wmx;
@@ -30,6 +32,7 @@ contract WomStakingProxy is Ownable {
     address public womDepositor;
     address public womSwapDepositor;
     address public womSwapDepositorPool;
+    uint256 public swapShare;
     address public rewards;
 
     event RewardsSwapped(address indexed swapContract, bool indexed swapDepositor, uint256 amountIn, uint256 amountOut);
@@ -65,14 +68,22 @@ contract WomStakingProxy is Ownable {
     /**
      * @notice Set WomDepositor
      * @param   _womDepositor WomDepositor address
-     * @param   _womSwapDepositor WomSwapDepositor address
      * @param   _rewards Rewards address
      */
-    function setConfig(address _womDepositor, address _womSwapDepositor, address _rewards) external onlyOwner {
+    function setConfig(address _womDepositor, address _rewards) external onlyOwner {
         womDepositor = _womDepositor;
+        rewards = _rewards;
+    }
+
+    /**
+     * @notice Set swap config
+     * @param   _womSwapDepositor WomSwapDepositor address
+     * @param   _swapShare Share to swap through WomSwapDepositor
+     */
+    function setSwapConfig(address _womSwapDepositor, uint256 _swapShare) external onlyOwner {
         womSwapDepositor = _womSwapDepositor;
         womSwapDepositorPool = IWomSwapDepositor(_womSwapDepositor).pool();
-        rewards = _rewards;
+        swapShare = _swapShare;
     }
 
     /**
@@ -112,17 +123,22 @@ contract WomStakingProxy is Ownable {
         //convert wom to wmxWom
         uint256 womBal = IERC20(wom).balanceOf(address(this));
         if (womBal > 0) {
+            uint256 womBalToSwap = womBal * swapShare / DENOMINATOR;
             uint256 amountOut;
             if (womSwapDepositorPool != address(0)) {
-                (amountOut, ) = IPool(womSwapDepositorPool).quotePotentialSwap(wom, wmxWom, int256(womBal));
+                (amountOut, ) = IPool(womSwapDepositorPool).quotePotentialSwap(wom, wmxWom, int256(womBalToSwap));
             }
-            if (amountOut > womBal) {
-                IWomSwapDepositor(womSwapDepositor).deposit(womBal, address(0), amountOut, block.timestamp + 1);
-                emit RewardsSwapped(womSwapDepositor, true, womBal, amountOut);
-            } else  {
-                IWomDepositor(womDepositor).deposit(womBal, address(0));
-                emit RewardsSwapped(womDepositor, false, womBal, womBal);
+
+            if (amountOut > womBalToSwap) {
+                IWomSwapDepositor(womSwapDepositor).deposit(womBalToSwap, address(0), amountOut, block.timestamp + 1);
+                emit RewardsSwapped(womSwapDepositor, true, womBalToSwap, amountOut);
+            } else {
+                womBalToSwap = 0;
             }
+
+            uint256 womBalToDeposit = womBal - womBalToSwap;
+            IWomDepositor(womDepositor).deposit(womBalToDeposit, address(0));
+            emit RewardsSwapped(womDepositor, false, womBalToDeposit, womBalToDeposit);
         }
 
         //distribute wmxWom
