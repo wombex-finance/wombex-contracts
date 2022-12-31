@@ -4,7 +4,7 @@ pragma solidity 0.8.11;
 import { Address } from "@openzeppelin/contracts-0.8/utils/Address.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-import {IWmxLocker, IWomDepositor } from "./Interfaces.sol";
+import { IWmxLocker, IWomDepositor, IWomSwapDepositor, IPool } from "./Interfaces.sol";
 import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
 
 /**
@@ -28,40 +28,50 @@ contract WomStakingProxy is Ownable {
     address public immutable wmxWom;
 
     address public womDepositor;
+    address public womSwapDepositor;
+    address public womSwapDepositorPool;
     address public rewards;
 
+    event RewardsSwapped(address indexed swapContract, bool indexed swapDepositor, uint256 amountIn, uint256 amountOut);
     event RewardsDistributed(address indexed token, uint256 amount);
 
     /* ========== CONSTRUCTOR ========== */
 
     /**
-     * @param _rewards       vlWMX
-     * @param _wom           WOM token
-     * @param _wmx           WMX token
-     * @param _wmxWom        wmxWOM token
-     * @param _womDepositor    Wrapper that locks WOM to veWom
+     * @param _rewards              vlWMX
+     * @param _wom                  WOM token
+     * @param _wmx                  WMX token
+     * @param _wmxWom               wmxWOM token
+     * @param _womDepositor         Wrapper that locks WOM to veWom
+     * @param _womSwapDepositor     Wrapper that swap WOM to wmxWom
      */
     constructor(
         address _wom,
         address _wmx,
         address _wmxWom,
         address _womDepositor,
+        address _womSwapDepositor,
         address _rewards
     ) {
         wom = _wom;
         wmx = _wmx;
         wmxWom = _wmxWom;
         womDepositor = _womDepositor;
+        womSwapDepositor = _womSwapDepositor;
+        womSwapDepositorPool = IWomSwapDepositor(_womSwapDepositor).pool();
         rewards = _rewards;
     }
 
     /**
      * @notice Set WomDepositor
      * @param   _womDepositor WomDepositor address
+     * @param   _womSwapDepositor WomSwapDepositor address
      * @param   _rewards Rewards address
      */
-    function setConfig(address _womDepositor, address _rewards) external onlyOwner {
+    function setConfig(address _womDepositor, address _womSwapDepositor, address _rewards) external onlyOwner {
         womDepositor = _womDepositor;
+        womSwapDepositor = _womSwapDepositor;
+        womSwapDepositorPool = IWomSwapDepositor(_womSwapDepositor).pool();
         rewards = _rewards;
     }
 
@@ -72,6 +82,9 @@ contract WomStakingProxy is Ownable {
     function setApprovals() external {
         IERC20(wom).safeApprove(womDepositor, 0);
         IERC20(wom).safeApprove(womDepositor, type(uint256).max);
+
+        IERC20(wom).safeApprove(womSwapDepositor, 0);
+        IERC20(wom).safeApprove(womSwapDepositor, type(uint256).max);
 
         IERC20(wmxWom).safeApprove(rewards, 0);
         IERC20(wmxWom).safeApprove(rewards, type(uint256).max);
@@ -99,7 +112,17 @@ contract WomStakingProxy is Ownable {
         //convert wom to wmxWom
         uint256 womBal = IERC20(wom).balanceOf(address(this));
         if (womBal > 0) {
-            IWomDepositor(womDepositor).deposit(womBal, address(0));
+            uint256 amountOut;
+            if (womSwapDepositorPool != address(0)) {
+                (amountOut, ) = IPool(womSwapDepositorPool).quotePotentialSwap(wom, wmxWom, int256(womBal));
+            }
+            if (amountOut > womBal) {
+                IWomSwapDepositor(womSwapDepositor).deposit(womBal, address(0), amountOut, block.timestamp + 1);
+                emit RewardsSwapped(womSwapDepositor, true, womBal, amountOut);
+            } else  {
+                IWomDepositor(womDepositor).deposit(womBal, address(0));
+                emit RewardsSwapped(womDepositor, false, womBal, womBal);
+            }
         }
 
         //distribute wmxWom

@@ -496,6 +496,7 @@ async function deployFirstStage(
             cvx.address,
             cvxCrv.address,
             womDepositor.address,
+            ZERO_ADDRESS,
             wmxLocker.address,
         ],
         {},
