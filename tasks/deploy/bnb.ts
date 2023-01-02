@@ -33,7 +33,7 @@ import {
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
     PoolDepositor__factory,
-    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory, WomStakingProxy, WomStakingProxy__factory
+    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory, LpVestedEscrow__factory, LpVestedEscrow, WomStakingProxy, WomStakingProxy__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -279,6 +279,37 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
         waitForBlocks,
     );
     console.log('escrow', escrow.address);
+});
+
+task("deploy-lp-escrow:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+
+    const args = [
+        '0xe86eaAD81C32ffbb88B7ec9B325C8f75C8c9f1Ab',
+        treasuryMultisig,
+        '1687996800',
+        '1688083200'
+    ];
+    fs.writeFileSync('./args/lp-escrow.js', 'module.exports = ' + JSON.stringify(args));
+
+    const lpEscrow = await deployContract<LpVestedEscrow>(
+        hre,
+        new LpVestedEscrow__factory(deployer),
+        "LpVestedEscrow",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lp escrow', lpEscrow.address);
 });
 
 task("deploy-zap:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
