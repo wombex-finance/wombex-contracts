@@ -20,7 +20,7 @@ import { BN, simpleToExactAmount } from "../test-utils/math";
 import { assertBNClose, assertBNClosePercent } from "../test-utils/assertions";
 import {deployContract} from "../tasks/utils";
 
-describe("WmxRewardPool", () => {
+describe.only("WmxRewardPool", () => {
     let accounts: Signer[];
 
     let contracts: SystemDeployed;
@@ -279,9 +279,14 @@ describe("WmxRewardPool", () => {
         it("allows admin to update wmxLocker address", async () => {
             expect(await wmxRewardPoolFactory.depositors(0)).eq(contracts.crvDepositor.address);
 
+            expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools.length)).eq(0);
+
             const tx = await wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.div(2), ONE_WEEK, simpleToExactAmount(100)).then(tx => tx.wait(1));
             const [RewardPoolCreated] = tx.events.filter(e => e.event === 'RewardPoolCreated');
             wmxRewardPoolV2 = WmxRewardPoolV2__factory.connect(RewardPoolCreated.args.rewardPool, deployer);
+
+            expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools.length)).eq(1);
+            expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools[0])).eq(RewardPoolCreated.args.rewardPool);
 
             expect(await wmxRewardPoolV2.duration()).eq(ONE_WEEK);
             expect(await wmxRewardPoolV2.maxCap()).eq(simpleToExactAmount(100));

@@ -4,7 +4,6 @@ pragma solidity 0.8.11;
 import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
 import "./WmxRewardPoolV2.sol";
 
-
 /**
  * @title   RewardFactory
  * @author  ConvexFinance -> WombexFinance
@@ -18,6 +17,7 @@ contract WmxRewardPoolFactory is Ownable {
     address public immutable wmxLocker;
     address public immutable penaltyForwarder;
     address[] public depositors;
+    address[] public pools;
 
     event DepositorsUpdate(address[] depositor);
     event RewardPoolCreated(address rewardPool, uint256 startDelay, uint256 duration, uint256 maxCap);
@@ -58,6 +58,11 @@ contract WmxRewardPoolFactory is Ownable {
         WmxRewardPoolV2 rewardPool = new WmxRewardPoolV2(stakingToken, rewardToken, rewardManager, wmxLocker, penaltyForwarder, _startDelay, _duration, _maxCap, depositors);
 
         emit RewardPoolCreated(address(rewardPool), _startDelay, _duration, _maxCap);
+        pools.push(address(rewardPool));
         return address(rewardPool);
+    }
+
+    function getCreatedPools() external view returns (address[] memory) {
+        return pools;
     }
 }
