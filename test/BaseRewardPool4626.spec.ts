@@ -17,7 +17,7 @@ import {
     BaseRewardPool4626,
 } from "../types/generated";
 import { Signer } from "ethers";
-import { DEAD_ADDRESS, ZERO_ADDRESS } from "../test-utils/constants";
+import { ZERO_ADDRESS } from "../test-utils/constants";
 
 type Pool = {
     lptoken: string;

@@ -209,7 +209,7 @@ contract WmxRewardPool {
         require(block.timestamp < startTime && rewardRate == 0, "Already started");
 
         uint256 balance = rewardToken.balanceOf(address(this));
-        rewardToken.transfer(rewardManager, balance);
+        rewardToken.safeTransfer(rewardManager, balance);
 
         emit Rescued();
     }
