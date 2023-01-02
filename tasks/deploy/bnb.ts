@@ -1,7 +1,7 @@
 import {task} from "hardhat/config";
-import {HardhatRuntimeEnvironment, TaskArguments} from "hardhat/types";
+import {TaskArguments} from "hardhat/types";
 import {getSigner} from "../utils";
-import {deployContract, logContracts, waitForTx} from "./../utils/deploy-utils";
+import {deployContract} from "./../utils/deploy-utils";
 import {deployFirstStage} from "../../scripts/deploySystem";
 import {
     VoterProxy__factory,
@@ -47,7 +47,7 @@ import {
     ZERO_ADDRESS
 } from "../../test-utils";
 
-const {approvePoolDepositor, getBoosterValues} = require('../helpers');
+const {approvePoolDepositor} = require('../helpers');
 
 const fs = require('fs');
 const ethers = require('ethers');
