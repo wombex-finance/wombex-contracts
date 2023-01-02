@@ -33,7 +33,7 @@ import {
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
     PoolDepositor__factory,
-    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory
+    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory, WmxRewardPoolFactory__factory, WmxRewardPoolFactory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -553,4 +553,34 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
     console.log('poolDepositor', poolDepositor.address);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
+
+task("wmx-reward-pool-factory:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const WmxRewardPoolFactoryArgs = [
+        bnbConfig.cvxCrv,
+        bnbConfig.cvx,
+        daoMultisig,
+        bnbConfig.cvxLocker,
+        bnbConfig.penaltyForwarder,
+        [bnbConfig.crvDepositor, bnbConfig.womSwapDepositorAddress]
+    ];
+    fs.writeFileSync('./args/wmxRewardPoolFactory.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolFactoryArgs));
+    const wmxRewardPoolFactory = await deployContract<WmxRewardPoolFactory>(
+        hre,
+        new WmxRewardPoolFactory__factory(deployer),
+        "WmxRewardPoolFactory",
+        WmxRewardPoolFactoryArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxRewardPoolFactory', wmxRewardPoolFactory.address);
 });
