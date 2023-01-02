@@ -33,7 +33,11 @@ import {
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
     PoolDepositor__factory,
-    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory, WomStakingProxy, WomStakingProxy__factory, LpVestedEscrow__factory, LpVestedEscrow
+    Asset__factory,
+    WomSwapDepositor, WomSwapDepositor__factory,
+    WomStakingProxy, WomStakingProxy__factory,
+    LpVestedEscrow__factory, LpVestedEscrow,
+    LensUser, LensUser__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -42,8 +46,6 @@ import {
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
-import {LensUser} from "../../types/generated/LensUser";
-import {LensUser__factory} from "../../types/generated/factories/LensUser__factory";
 
 const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
