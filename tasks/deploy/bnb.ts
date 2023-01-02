@@ -33,15 +33,17 @@ import {
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
     PoolDepositor__factory,
-    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory, WomStakingProxy, WomStakingProxy__factory
+    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory, WomStakingProxy, WomStakingProxy__factory, LpVestedEscrow__factory, LpVestedEscrow
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
-    getAccountBalanceProof, impersonate, ONE_DAY,
-    ONE_WEEK,
+    getAccountBalanceProof,
+    ONE_DAY,
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
+import {LensUser} from "../../types/generated/LensUser";
+import {LensUser__factory} from "../../types/generated/factories/LensUser__factory";
 
 const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
@@ -279,6 +281,37 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
         waitForBlocks,
     );
     console.log('escrow', escrow.address);
+});
+
+task("deploy-lp-escrow:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+
+    const args = [
+        '0xe86eaAD81C32ffbb88B7ec9B325C8f75C8c9f1Ab',
+        treasuryMultisig,
+        '1687996800',
+        '1688083200'
+    ];
+    fs.writeFileSync('./args/lp-escrow.js', 'module.exports = ' + JSON.stringify(args));
+
+    const lpEscrow = await deployContract<LpVestedEscrow>(
+        hre,
+        new LpVestedEscrow__factory(deployer),
+        "LpVestedEscrow",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lp escrow', lpEscrow.address);
 });
 
 task("deploy-zap:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
@@ -553,6 +586,33 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
     console.log('poolDepositor', poolDepositor.address);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
+
+task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    // const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+    ];
+    fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
+
+    const lens = await deployContract<LensUser>(
+        hre,
+        new LensUser__factory(deployer),
+        "Lens",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lens', lens.address);
 });
 
 task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
