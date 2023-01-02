@@ -14,7 +14,7 @@ import {
 import { Signer} from "ethers";
 import {increaseTime} from "../test-utils/time";
 import {simpleToExactAmount} from "../test-utils/math";
-import {DEAD_ADDRESS, impersonateAccount, ZERO, ZERO_ADDRESS} from "../test-utils";
+import {impersonateAccount, ZERO, ZERO_ADDRESS} from "../test-utils";
 import {deployContract} from "../tasks/utils";
 
 type Pool = {
@@ -25,7 +25,7 @@ type Pool = {
     shutdown: boolean;
 };
 
-describe.only("WomStakingProxy", () => {
+describe("WomStakingProxy", () => {
     let accounts: Signer[];
     let booster: Booster;
     let crv, cvx, cvxCrv, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, crvDepositor;
@@ -88,8 +88,10 @@ describe.only("WomStakingProxy", () => {
             1,
         );
 
-        await cvxCrv.approve(wombatRouter.address, simpleToExactAmount(20000));
-        await wombatRouter.swapExactTokensForTokens([cvxCrv.address, crv.address], [mocks.pool.address], simpleToExactAmount(90000), '0', deployerAddress, new Date().getTime());
+        await wombatRouter.approveSpendingByPool([cvxCrv.address, crv.address], mocks.pool.address);
+
+        await cvxCrv.approve(wombatRouter.address, simpleToExactAmount(30000));
+        await wombatRouter.swapExactTokensForTokens([cvxCrv.address, crv.address], [mocks.pool.address], simpleToExactAmount(30000), '0', deployerAddress, new Date().getTime());
 
         womSwapDepositor = await deployContract<WomSwapDepositor>(
             hre,
@@ -102,9 +104,7 @@ describe.only("WomStakingProxy", () => {
         );
 
         await cvxStakingProxy.connect(daoSigner).setConfig(crvDepositor.address, cvxLocker.address);
-        await cvxStakingProxy.connect(daoSigner).setSwapConfig(womSwapDepositor.address, '5000');
-
-        console.log('quotePotentialSwap', await mocks.pool.quotePotentialSwap(crv.address, cvxCrv.address, simpleToExactAmount(1)));
+        await cvxStakingProxy.connect(daoSigner).setSwapConfig(womSwapDepositor.address, '4000');
 
         // transfer LP tokens to accounts
         const balance = await mocks.lptoken.balanceOf(deployerAddress);
@@ -123,25 +123,11 @@ describe.only("WomStakingProxy", () => {
         voteDelegateAddress = await voteDelegate.getAddress();
     };
 
-    function getMasterWombatReward(tx, toAddress, token = null) {
-        if (!token) {
-            token = crv;
-        }
-        const logs = tx.events.filter(e => e.address.toLowerCase() === token.address.toLowerCase());
+    function getWomStakingProxyEvents(tx) {
+        const logs = tx.events.filter(e => e.address.toLowerCase() === cvxStakingProxy.address.toLowerCase());
         return logs
-            .map(l => {
-                try { return crv.interface.decodeEventLog('Transfer', l.data, l.topics); } catch (e) {}
-            })
-            .filter(e => e && e.to.toLowerCase() === toAddress.toLowerCase())[0];
-    }
-
-    function getCrvEarmarkReward(tx, booster) {
-        const logs = tx.events.filter(e => e.address.toLowerCase() === booster.address.toLowerCase());
-        return logs
-            .map(l => {
-                try { return booster.interface.decodeEventLog('EarmarkRewards', l.data, l.topics); } catch (e) {}
-            })
-            .filter(e => e && e.rewardToken.toLowerCase() === crv.address.toLowerCase())[0];
+            .map(l => { try { return cvxStakingProxy.interface.decodeEventLog('RewardsSwapped', l.data, l.topics); } catch (e) {} })
+            .filter(e => e);
     }
 
     function equalWithSmallDiff(a, b) {
@@ -185,67 +171,59 @@ describe.only("WomStakingProxy", () => {
 
             await booster.connect(daoSigner).updateDistributionByTokens(
                 crv.address,
-                [DEAD_ADDRESS],
-                [0],
-                [false]
-            );
-            const p = await booster.poolInfo(0);
-            let tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
-
-            const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === crv.address.toLowerCase())[0].args;
-            const {value} = getMasterWombatReward(tx, p.crvRewards);
-            expect(amount.sub(amount.mul(await booster.earmarkIncentive()).div(10000))).eq(value);
-
-            await increaseTime(60 * 60 * 24);
-
-            await booster.connect(daoSigner).updateDistributionByTokens(
-                crv.address,
                 [cvxCrvRewards.address, cvxStakingProxy.address, treasuryAddress],
                 [2000, 400, 100],
                 [true, true, false]
             );
-            await booster.connect(daoSigner).updateDistributionByTokens(
-                mocks.weth.address,
-                [cvxCrvRewards.address, cvxLocker.address, treasuryAddress],
-                [2000, 400, 100],
-                [true, true, false]
-            );
-            await booster.connect(daoSigner).setEarmarkIncentive(50);
 
-            const tokens = [crv, mocks.weth];
-            for (let i = 0; i < tokens.length; i++) {
-                const token = tokens[i];
-                const lockerAddress = token.address === mocks.weth.address ? cvxLocker.address : veWom.address
-                // bals before
-                const balsBefore = await Promise.all([
-                    await token.balanceOf((await booster.poolInfo(0)).crvRewards), // reward pool
-                    await token.balanceOf(cvxCrvRewards.address), // cvxCrv
-                    await token.balanceOf(lockerAddress), // veWom
-                    await token.balanceOf(aliceAddress), // alice
-                    await token.balanceOf(treasuryAddress), // platform
-                ]);
+            let quotePotentialSwap = await mocks.pool.quotePotentialSwap(crv.address, cvxCrv.address, simpleToExactAmount(100));
+            expect(quotePotentialSwap.potentialOutcome).to.gt(simpleToExactAmount(100));
 
-                // collect the rewards
-                tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
+            // bal before
+            let balBefore = await crv.balanceOf(veWom.address);
+            // collect the rewards
+            let tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
+            let earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === crv.address.toLowerCase())[0].args;
 
-                const {amount} = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === token.address.toLowerCase())[0].args;
+            expect(await cvxStakingProxy.swapShare()).to.eq('4000');
+            // bals after
+            let balAfter = await crv.balanceOf(veWom.address);
+            let shareAmount = earmarkRewards.amount.mul(400).div(10000);
+            equalWithSmallDiff(balAfter.sub(balBefore), shareAmount.mul('6000').div('10000'));
 
-                // bals after
-                const balsAfter = await Promise.all([
-                    await token.balanceOf((await booster.poolInfo(0)).crvRewards), // reward pool
-                    await token.balanceOf(cvxCrvRewards.address), // cvxCrv
-                    await token.balanceOf(lockerAddress), // veWom
-                    await token.balanceOf(aliceAddress), // alice
-                    await token.balanceOf(treasuryAddress), // platform
-                ]);
-                let amountChecked = '0';
-                [100, 50, 400, 2000].forEach((share, index) => {
-                    let shareAmount = amount.mul(share).div(10000);
-                    amountChecked = shareAmount.add(amountChecked);
-                    expect(balsAfter[4 - index].sub(balsBefore[4 - index])).eq(shareAmount);
-                })
-                expect(balsAfter[0]).eq(balsBefore[0].add(amount.sub(amountChecked)));
-            }
+            let rewardsSwapped = getWomStakingProxyEvents(tx);
+            expect(rewardsSwapped.length).to.eq(2);
+            expect(rewardsSwapped[0].swapContract).to.eq(womSwapDepositor.address);
+            expect(rewardsSwapped[0].swapDepositor).to.eq(true);
+            equalWithSmallDiff(rewardsSwapped[0].amountIn, shareAmount.mul('4000').div('10000'));
+            expect(rewardsSwapped[0].amountOut).to.gt(rewardsSwapped[0].amountIn);
+            expect(rewardsSwapped[1].swapContract).to.eq(crvDepositor.address);
+            expect(rewardsSwapped[1].swapDepositor).to.eq(false);
+            equalWithSmallDiff(rewardsSwapped[1].amountIn, shareAmount.mul('6000').div('10000'));
+            expect(rewardsSwapped[1].amountOut).to.eq(rewardsSwapped[1].amountIn);
+
+            await crv.approve(wombatRouter.address, simpleToExactAmount(100000));
+            await wombatRouter.swapExactTokensForTokens([crv.address, cvxCrv.address], [mocks.pool.address], simpleToExactAmount(100000), '0', deployerAddress, new Date().getTime());
+
+            quotePotentialSwap = await mocks.pool.quotePotentialSwap(crv.address, cvxCrv.address, simpleToExactAmount(100));
+            expect(quotePotentialSwap.potentialOutcome).to.lt(simpleToExactAmount(100));
+            await increaseTime(60 * 60 * 24);
+
+            balBefore = await crv.balanceOf(veWom.address);
+
+            tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
+            earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === crv.address.toLowerCase())[0].args;
+
+            // bals after
+            balAfter = await crv.balanceOf(veWom.address);
+            shareAmount = earmarkRewards.amount.mul(400).div(10000);
+            equalWithSmallDiff(balAfter.sub(balBefore), shareAmount);
+
+            rewardsSwapped = getWomStakingProxyEvents(tx);
+            expect(rewardsSwapped[0].swapContract).to.eq(crvDepositor.address);
+            expect(rewardsSwapped[0].swapDepositor).to.eq(false);
+            expect(rewardsSwapped[0].amountIn).to.eq(shareAmount);
+            expect(rewardsSwapped[0].amountOut).to.eq(rewardsSwapped[0].amountIn);
         });
     });
 });
