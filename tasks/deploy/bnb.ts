@@ -42,6 +42,8 @@ import {
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
+import {LensUser} from "../../types/generated/LensUser";
+import {LensUser__factory} from "../../types/generated/factories/LensUser__factory";
 
 const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
@@ -585,3 +587,31 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 });
+
+task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    // const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+    ];
+    fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
+
+    const lens = await deployContract<LensUser>(
+        hre,
+        new LensUser__factory(deployer),
+        "Lens",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lens', lens.address);
+});
+
