@@ -220,6 +220,7 @@ describe("WomStakingProxy", () => {
             equalWithSmallDiff(balAfter.sub(balBefore), shareAmount);
 
             rewardsSwapped = getWomStakingProxyEvents(tx);
+            expect(rewardsSwapped.length).to.eq(1);
             expect(rewardsSwapped[0].swapContract).to.eq(crvDepositor.address);
             expect(rewardsSwapped[0].swapDepositor).to.eq(false);
             expect(rewardsSwapped[0].amountIn).to.eq(shareAmount);

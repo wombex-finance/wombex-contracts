@@ -33,7 +33,7 @@ import {
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
     PoolDepositor__factory,
-    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory
+    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory, WomStakingProxy, WomStakingProxy__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -553,4 +553,35 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
     console.log('poolDepositor', poolDepositor.address);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
+
+task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const wmxStakingProxyArgs = [
+        bnbConfig.wom,
+        bnbConfig.cvx,
+        bnbConfig.cvxCrv,
+        bnbConfig.crvDepositor,
+        bnbConfig.cvxLocker,
+    ];
+    fs.writeFileSync('./args/wmxStakingProxy.js', 'module.exports = ' + JSON.stringify(wmxStakingProxyArgs));
+    const wmxStakingProxy = await deployContract<WomStakingProxy>(
+        hre,
+        new WomStakingProxy__factory(deployer),
+        "WomStakingProxy",
+        wmxStakingProxyArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxStakingProxy', wmxStakingProxy.address);
+    await wmxStakingProxy.setSwapConfig(bnbConfig.womSwapDepositorAddress, 3000).then(tx => tx.wait(1));
+    await wmxStakingProxy.transferOwnership(treasuryMultisig).then(tx => tx.wait(1));
 });
