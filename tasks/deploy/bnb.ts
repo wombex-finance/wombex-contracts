@@ -33,7 +33,12 @@ import {
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
     PoolDepositor__factory,
-    Asset__factory, WomSwapDepositor, WomSwapDepositor__factory, WmxRewardPoolFactory__factory, WmxRewardPoolFactory
+    Asset__factory,
+    WomSwapDepositor,
+    WomSwapDepositor__factory,
+    WmxRewardPoolFactory__factory,
+    WmxRewardPoolFactory,
+    WmxRewardPoolLens__factory, WmxRewardPoolLens
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -583,4 +588,25 @@ task("wmx-reward-pool-factory:bnb").setAction(async function (taskArguments: Tas
         waitForBlocks,
     );
     console.log('wmxRewardPoolFactory', wmxRewardPoolFactory.address);
+});
+
+task("wmx-reward-pool-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const WmxRewardPoolLensArgs = ['0x062F2df081b93a12B23d892E7B10060283872792'];
+    fs.writeFileSync('./args/wmxRewardPoolLens.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolLensArgs));
+    const wmxRewardPoolLens = await deployContract<WmxRewardPoolLens>(
+        hre,
+        new WmxRewardPoolLens__factory(deployer),
+        "WmxRewardPoolLens",
+        WmxRewardPoolLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxRewardPoolLens', wmxRewardPoolLens.address);
 });
