@@ -2,9 +2,13 @@
 pragma solidity 0.8.11;
 
 import {WmxMath} from "./WmxMath.sol";
-import {IWmxLocker, IWomDepositorWrapper} from "./Interfaces.sol";
+import {IWmxLocker, IWomDepositorWrapper, IWomSwapDepositor} from "./Interfaces.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
+
+interface IExtraRewards {
+    function getReward(address _account, address _token) external;
+}
 
 interface IBasicRewards {
     function getReward(address _account, bool _lockWmx) external;
@@ -35,12 +39,14 @@ contract WmxClaimZap {
     using SafeERC20 for IERC20;
     using WmxMath for uint256;
 
-    address public immutable wom;
-    address public immutable wmx;
-    address public immutable womWmx;
-    address public immutable womDepositor;
-    address public immutable wmxWomRewards;
-    address public immutable locker;
+    IERC20 public immutable wom;
+    IERC20 public immutable wmx;
+    IERC20 public immutable womWmx;
+    IWomDepositorWrapper public immutable womDepositor;
+    IBasicRewards public immutable wmxWomRewards;
+    IExtraRewards public immutable extraRewardsDistributor;
+    IWomSwapDepositor public immutable womSwapDepositor;
+    IWmxLocker public immutable locker;
     address public immutable owner;
 
     enum Options {
@@ -50,36 +56,45 @@ contract WmxClaimZap {
         LockWomDeposit, //8
         UseAllWalletFunds, //16
         LockWmx, //32
-        LockWmxRewards //64
-    }
+        LockWmxRewards, //64
+        StakeWmxWom, //128
+        WomSwapDeposit //256
+}
 
     /**
-     * @param _wom                WOM token
-     * @param _wmx                WMX token
-     * @param _wmxWom             wmxWom token
-     * @param _womDepositor         womDepositor
-     * @param _wmxWomRewards      wmxWomRewards
-     * @param _locker             vlWMX
+     * @param _wom                      WOM token
+     * @param _wmx                      WMX token
+     * @param _wmxWom                   wmxWom token
+     * @param _womDepositor             womDepositor
+     * @param _wmxWomRewards            wmxWomRewards
+     * @param _extraRewardsDistributor  ExtraRewardsDistributor
+     * @param _locker                   vlWMX
      */
     constructor(
-        address _wom,
-        address _wmx,
-        address _wmxWom,
-        address _womDepositor,
-        address _wmxWomRewards,
-        address _locker
+        IERC20 _wom,
+        IERC20 _wmx,
+        IERC20 _wmxWom,
+        IWomDepositorWrapper _womDepositor,
+        IBasicRewards _wmxWomRewards,
+        IExtraRewards _extraRewardsDistributor,
+        IWomSwapDepositor _womSwapDepositor,
+        IWmxLocker _locker,
+        address _owner
     ) {
         wom = _wom;
         wmx = _wmx;
         womWmx = _wmxWom;
         womDepositor = _womDepositor;
         wmxWomRewards = _wmxWomRewards;
+        extraRewardsDistributor = _extraRewardsDistributor;
+        womSwapDepositor = _womSwapDepositor;
         locker = _locker;
-        owner = msg.sender;
+        owner = _owner;
+        _setApprovals();
     }
 
     function getName() external pure returns (string memory) {
-        return "ClaimZap V2.0";
+        return "ClaimZap V3.0";
     }
 
     /**
@@ -91,14 +106,21 @@ contract WmxClaimZap {
     function setApprovals() external {
         require(msg.sender == owner, "!auth");
 
-        IERC20(wom).safeApprove(womDepositor, 0);
-        IERC20(wom).safeApprove(womDepositor, type(uint256).max);
+        _setApprovals();
+    }
 
-        IERC20(womWmx).safeApprove(wmxWomRewards, 0);
-        IERC20(womWmx).safeApprove(wmxWomRewards, type(uint256).max);
+    function _setApprovals() internal {
+        wom.safeApprove(address(womDepositor), 0);
+        wom.safeApprove(address(womDepositor), type(uint256).max);
 
-        IERC20(wmx).safeApprove(locker, 0);
-        IERC20(wmx).safeApprove(locker, type(uint256).max);
+        wom.safeApprove(address(womSwapDepositor), 0);
+        wom.safeApprove(address(womSwapDepositor), type(uint256).max);
+
+        womWmx.safeApprove(address(wmxWomRewards), 0);
+        womWmx.safeApprove(address(wmxWomRewards), type(uint256).max);
+
+        wmx.safeApprove(address(locker), 0);
+        wmx.safeApprove(address(locker), type(uint256).max);
     }
 
     /**
@@ -111,37 +133,37 @@ contract WmxClaimZap {
     /**
      * @notice Claim all the rewards
      * @param rewardContracts       Array of addresses for LP token rewards
-     * @param extraRewardContracts  Array of addresses for extra rewards
+     * @param extraRewardTokens  Array of addresses for extra rewards
      * @param tokenRewardContracts  Array of addresses for token rewards e.g vlWmxExtraRewardDistribution
      * @param tokenRewardPids       Array of token staking ids to use with tokenRewardContracts
      * @param depositWomMaxAmount   The max amount of WOM to deposit if converting to womWmx
-     * @param minAmountOut          The min amount out for wom:wmxWom swaps if swapping. Set this to zero if you
+     * @param wmxWomMinOutAmount    The min amount out for wom:wmxWom swaps if swapping. Set this to zero if you
      *                              want to use WomDepositor instead of balancer swap
      * @param depositWmxMaxAmount   The max amount of WMX to deposit if locking WMX
      * @param options               Claim options
      */
     function claimRewards(
         address[] calldata rewardContracts,
-        address[] calldata extraRewardContracts,
+        address[] calldata extraRewardTokens,
         address[] calldata tokenRewardContracts,
         uint256[] calldata tokenRewardPids,
         uint256 depositWomMaxAmount,
-        uint256 minAmountOut,
+        uint256 wmxWomMinOutAmount,
         uint256 depositWmxMaxAmount,
         uint256 options
     ) external {
         require(tokenRewardContracts.length == tokenRewardPids.length, "!parity");
 
-        uint256 womBalance = IERC20(wom).balanceOf(msg.sender);
-        uint256 wmxBalance = IERC20(wmx).balanceOf(msg.sender);
+        uint256 womBalance = wom.balanceOf(msg.sender);
+        uint256 wmxBalance = wmx.balanceOf(msg.sender);
 
         //claim from main curve LP pools
         for (uint256 i = 0; i < rewardContracts.length; i++) {
             IBasicRewards(rewardContracts[i]).getReward(msg.sender, _checkOption(options, Options.LockWmxRewards));
         }
         //claim from extra rewards
-        for (uint256 i = 0; i < extraRewardContracts.length; i++) {
-            IBasicRewards(extraRewardContracts[i]).getReward(msg.sender);
+        for (uint256 i = 0; i < extraRewardTokens.length; i++) {
+            extraRewardsDistributor.getReward(msg.sender, extraRewardTokens[i]);
         }
         //claim from multi reward token contract
         for (uint256 i = 0; i < tokenRewardContracts.length; i++) {
@@ -149,7 +171,7 @@ contract WmxClaimZap {
         }
 
         // claim others/deposit/lock/stake
-        _claimExtras(depositWomMaxAmount, minAmountOut, depositWmxMaxAmount, womBalance, wmxBalance, options);
+        _claimExtras(depositWomMaxAmount, wmxWomMinOutAmount, depositWmxMaxAmount, womBalance, wmxBalance, options);
     }
 
     /**
@@ -157,7 +179,7 @@ contract WmxClaimZap {
      *          - wmxWomRewards
      *          - wmxLocker
      * @param depositWomMaxAmount see claimRewards
-     * @param minAmountOut        see claimRewards
+     * @param wmxWomMinOutAmount  see claimRewards
      * @param depositWmxMaxAmount see claimRewards
      * @param removeWomBalance    womBalance to ignore and not redeposit (starting Wom balance)
      * @param removeWmxBalance    wmxBalance to ignore and not redeposit (starting Wmx balance)
@@ -166,7 +188,7 @@ contract WmxClaimZap {
     // prettier-ignore
     function _claimExtras( // solhint-disable-line
         uint256 depositWomMaxAmount,
-        uint256 minAmountOut,
+        uint256 wmxWomMinOutAmount,
         uint256 depositWmxMaxAmount,
         uint256 removeWomBalance,
         uint256 removeWmxBalance,
@@ -174,12 +196,12 @@ contract WmxClaimZap {
     ) internal {
         //claim from wmxWom rewards
         if (_checkOption(options, Options.ClaimWmxWom)) {
-            IBasicRewards(wmxWomRewards).getReward(msg.sender, _checkOption(options, Options.LockWmxRewards));
+            wmxWomRewards.getReward(msg.sender, _checkOption(options, Options.LockWmxRewards));
         }
 
         //claim from locker
         if (_checkOption(options, Options.ClaimLockedWmx)) {
-            IWmxLocker(locker).getReward(msg.sender, _checkOption(options, Options.ClaimLockedWmxStake));
+            locker.getReward(msg.sender, _checkOption(options, Options.ClaimLockedWmxStake));
         }
 
         //reset remove balances if we want to also stake/lock funds already in our wallet
@@ -190,34 +212,47 @@ contract WmxClaimZap {
 
         //lock upto given amount of wom and stake
         if (depositWomMaxAmount > 0) {
-            uint256 womBalance = IERC20(wom).balanceOf(msg.sender).sub(removeWomBalance);
+            uint256 womBalance = wom.balanceOf(msg.sender).sub(removeWomBalance);
             womBalance = WmxMath.min(womBalance, depositWomMaxAmount);
 
             if (womBalance > 0) {
                 //pull wom
-                IERC20(wom).safeTransferFrom(msg.sender, address(this), womBalance);
+                wom.safeTransferFrom(msg.sender, address(this), womBalance);
                 //deposit
-                IWomDepositorWrapper(womDepositor).deposit(
-                    womBalance,
-                    minAmountOut,
-                    _checkOption(options, Options.LockWomDeposit),
-                    address(0)
-                );
+                if (_checkOption(options, Options.WomSwapDeposit)) {
+                    womSwapDepositor.deposit(
+                        womBalance,
+                        address(0),
+                        wmxWomMinOutAmount,
+                        type(uint256).max
+                    );
+                } else {
+                    womDepositor.deposit(
+                        womBalance,
+                        wmxWomMinOutAmount,
+                        _checkOption(options, Options.LockWomDeposit),
+                        address(0)
+                    );
+                }
 
-                uint256 wmxWomBalance = IERC20(womWmx).balanceOf(address(this));
-                //stake for msg.sender
-                IBasicRewards(wmxWomRewards).stakeFor(msg.sender, wmxWomBalance);
+                uint256 wmxWomBalance = womWmx.balanceOf(address(this));
+                if (_checkOption(options, Options.StakeWmxWom)) {
+                    //stake for msg.sender
+                    wmxWomRewards.stakeFor(msg.sender, wmxWomBalance);
+                } else {
+                    womWmx.safeTransfer(msg.sender, wmxWomBalance);
+                }
             }
         }
 
         //stake up to given amount of wmx
         if (depositWmxMaxAmount > 0 && _checkOption(options, Options.LockWmx)) {
-            uint256 wmxBalance = IERC20(wmx).balanceOf(msg.sender).sub(removeWmxBalance);
+            uint256 wmxBalance = wmx.balanceOf(msg.sender).sub(removeWmxBalance);
             wmxBalance = WmxMath.min(wmxBalance, depositWmxMaxAmount);
             if (wmxBalance > 0) {
                 //pull wmx
-                IERC20(wmx).safeTransferFrom(msg.sender, address(this), wmxBalance);
-                IWmxLocker(locker).lock(msg.sender, wmxBalance);
+                wmx.safeTransferFrom(msg.sender, address(this), wmxBalance);
+                locker.lock(msg.sender, wmxBalance);
             }
         }
     }

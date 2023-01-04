@@ -210,7 +210,7 @@ contract VoterProxy {
      * @dev     Called by the WomDepositor contract
      * @param _slot      Slot to release
      */
-    function releaseLock(uint256 _slot) external returns(bool){
+    function releaseLock(uint256 _slot) external returns(uint256){
         require(msg.sender == depositor, "!auth");
 
         uint256 balanceBefore = IERC20(wom).balanceOf(address(this));
@@ -220,7 +220,7 @@ contract VoterProxy {
         IERC20(wom).safeTransfer(msg.sender, amount);
 
         emit ReleaseLock(amount, _slot);
-        return true;
+        return amount;
     }
 
     /**

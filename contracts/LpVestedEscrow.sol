@@ -1,31 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
 
-import {IWmxLocker} from "./Interfaces.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts-0.8/security/ReentrancyGuard.sol";
 import {WmxMath} from "./WmxMath.sol";
 
 /**
- * @title   WmxVestedEscrow
+ * @title   LpVestedEscrow
  * @author  adapted from ConvexFinance (convex-platform/contracts/contracts/VestedEscrow)
- * @notice  Vests tokens over a given timeframe to an array of recipients. Allows locking of
- *          these tokens directly to staking contract.
+ * @notice  Vests tokens over a given timeframe to an array of recipients.
  * @dev     Adaptations:
  *           - One time initialisation
  *           - Consolidation of fundAdmin/admin
- *           - Only one way to lock in WmxLocker
  *           - Start and end time
  */
-contract WmxVestedEscrowLockOnly is ReentrancyGuard {
+contract LpVestedEscrow is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable rewardToken;
 
     address public admin;
     address public immutable funder;
-    IWmxLocker public wmxLocker;
 
     uint256 public immutable startTime;
     uint256 public immutable endTime;
@@ -39,20 +35,17 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
     event Funded(address indexed recipient, uint256 reward);
     event Cancelled(address indexed recipient);
     event Claim(address indexed user, uint256 amount);
-    event TransferVestedToken(address indexed user, address indexed recipient, uint256 lockedAmount, uint256 claimedAmount);
-    event TransferVestedTokenShare(address indexed user, address indexed recipient, uint256 amount, uint256 share, uint256 senderTotalLocked, uint256 recipientTotalLocked);
+    event SetAdmin(address indexed admin);
 
     /**
-     * @param rewardToken_    Reward token (WMX)
-     * @param admin_          Admin to cancel rewards (will be set to zero address after funds check)
-     * @param wmxLocker_     Contract where rewardToken can be staked
+     * @param rewardToken_    Reward token
+     * @param admin_          Admin to cancel rewards
      * @param starttime_      Timestamp when claim starts
      * @param endtime_        When vesting ends
      */
     constructor(
         address rewardToken_,
         address admin_,
-        address wmxLocker_,
         uint256 starttime_,
         uint256 endtime_
     ) {
@@ -62,12 +55,11 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
         rewardToken = IERC20(rewardToken_);
         admin = admin_;
         funder = admin_;
-        wmxLocker = IWmxLocker(wmxLocker_);
 
         startTime = starttime_;
         endTime = endtime_;
         totalTime = endTime - startTime;
-        require(totalTime >= 16 weeks, "!short");
+        require(totalTime >= 1 hours, "!short");
     }
 
     /***************************************
@@ -81,15 +73,7 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
     function setAdmin(address _admin) external {
         require(msg.sender == admin, "!auth");
         admin = _admin;
-    }
-
-    /**
-     * @notice Change locker contract address
-     * @param _wmxLocker Wmx Locker address
-     */
-    function setLocker(address _wmxLocker) external {
-        require(msg.sender == admin, "!auth");
-        wmxLocker = IWmxLocker(_wmxLocker);
+        emit SetAdmin(admin);
     }
 
     /**
@@ -174,12 +158,12 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
                     CLAIM
     ****************************************/
 
-    function claim() external nonReentrant {
-        _claim(msg.sender);
+    function claim(address _recipient) external nonReentrant {
+        _claim(_recipient);
     }
 
     /**
-     * @dev Claim reward token (Wmx) and lock it.
+     * @dev Claim reward token
      * @param _recipient  Address to receive rewards.
      */
     function _claim(address _recipient) internal {
@@ -187,77 +171,8 @@ contract WmxVestedEscrowLockOnly is ReentrancyGuard {
 
         totalClaimed[_recipient] += claimable;
 
-        require(address(wmxLocker) != address(0), "!wmxLocker");
-        rewardToken.safeApprove(address(wmxLocker), claimable);
-        wmxLocker.lock(_recipient, claimable);
+        rewardToken.safeTransfer(_recipient, claimable);
 
         emit Claim(_recipient, claimable);
-    }
-
-    /**
-     * @dev Transfer locked rewards to _recipient
-     * @param _recipient  Address to receive locked rewards.
-     */
-    function transferVestedTokens(address _recipient) external nonReentrant {
-        require(totalLocked[_recipient] == 0, "!zero_recipient");
-        totalLocked[_recipient] = totalLocked[msg.sender];
-        totalClaimed[_recipient] = totalClaimed[msg.sender];
-
-        totalLocked[msg.sender] = 0;
-        totalClaimed[msg.sender] = 0;
-
-        emit TransferVestedToken(msg.sender, _recipient, totalLocked[_recipient], totalClaimed[_recipient]);
-    }
-
-    /**
-     * @notice Total pending vested amount
-     * @param _recipient Recipient to lookup
-     */
-    function totalPending(address _recipient) public view returns (uint256) {
-        return totalLocked[_recipient] - totalClaimed[_recipient];
-    }
-
-    /**
-     * @dev Transfer locked rewards to _recipient
-     * @param _recipient  Address to receive locked rewards.
-     */
-    function transferVestedTokensShare(address _recipient, uint256 _share) external nonReentrant {
-        _transferVestedTokensShare(_recipient, _share);
-    }
-
-    /**
-     * @dev Transfer locked rewards to _recipient
-     * @param _recipient  Address to receive locked rewards.
-     */
-    function transferVestedTokensAmount(address _recipient, uint256 _amount) external nonReentrant {
-        uint256 timeDiff = endTime - block.timestamp;
-        uint256 share = (((_amount * totalTime) / timeDiff) * 1 ether) / totalLocked[msg.sender];
-
-        _transferVestedTokensShare(_recipient, share);
-    }
-
-    function _transferVestedTokensShare(address _recipient, uint256 _share) internal {
-        require(block.timestamp < endTime, "end");
-        require(_share > 0, "zero");
-        require(msg.sender != _recipient, "sender_recipient");
-
-        _claim(msg.sender);
-        if (totalLocked[_recipient] > 0) {
-            _claim(_recipient);
-        }
-
-        uint256 amount = (totalLocked[msg.sender] * _share) / 1 ether;
-        uint256 senderPending = totalLocked[msg.sender] - totalClaimed[msg.sender];
-        require(senderPending >= amount, ">pending");
-
-        uint256 claimedAmountToTransfer = (totalClaimed[msg.sender] * _share) / 1 ether;
-
-        totalLocked[msg.sender] = totalLocked[msg.sender] - amount;
-        totalClaimed[msg.sender] = totalClaimed[msg.sender] - claimedAmountToTransfer;
-
-        totalLocked[_recipient] = totalLocked[_recipient] + amount;
-        totalClaimed[_recipient] = totalClaimed[_recipient] + claimedAmountToTransfer;
-
-        emit TransferVestedTokenShare(msg.sender, _recipient, amount, _share, totalLocked[msg.sender], totalLocked[_recipient]);
     }
 }

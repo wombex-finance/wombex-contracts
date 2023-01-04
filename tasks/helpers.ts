@@ -28,7 +28,9 @@ async function approvePoolDepositor(masterWombat, poolDepositor, signer) {
     const booster = await poolDepositor.booster();
 
     for (let i = 0; i < pools.length; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 30e3))
         await poolDepositor.approveSpendingByPool(pools[i].tokens, pools[i].address);
+        await new Promise((resolve) => setTimeout(resolve, 30e3))
         await poolDepositor.approveSpendingByPool(pools[i].tokens, booster);
     }
 }
