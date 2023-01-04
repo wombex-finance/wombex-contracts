@@ -20,7 +20,6 @@ contract Booster{
     using SafeMath for uint256;
 
     uint256 public constant MAX_DISTRIBUTION = 2500;
-    uint256 public constant MAX_EARMARK_INCENTIVE = 100;
     uint256 public constant MAX_PENALTY_SHARE = 3000;
     uint256 public constant DENOMINATOR = 10000;
 
@@ -51,7 +50,6 @@ contract Booster{
     mapping(uint256 => uint256) public customMintRatio;
 
     mapping(address => TokenDistro[]) public distributionByTokens;
-    mapping(uint256 => mapping(address => TokenDistro[])) public customDistributionByTokens;
 
     struct TokenDistro {
         address distro;
@@ -97,8 +95,7 @@ contract Booster{
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
     event MintRatioUpdated(uint256 mintRatio);
     event CustomMintRatioUpdated(uint256 indexed pid, uint256 mintRatio);
-    event SetEarmarkIncentive(uint256 earmarkIncentive);
-    event SetEarmarkOnDeposit(bool earmarkOnDeposit);
+    event SetEarmarkConfig(uint256 earmarkIncentive, bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
     event FeeInfoChanged(address feeToken, bool active);
     event TokenDistributionUpdate(address indexed token, address indexed distro, uint256 share, bool callQueue);
@@ -345,26 +342,6 @@ contract Booster{
         emit DistributionUpdate(_token, _distros.length, _shares.length, _callQueue.length, totalShares);
     }
 
-    /**
-     * @notice Allows turning off or on for fee distro
-     */
-    function updateCustomDistributionByTokens(
-        uint256 _pid,
-        address _token,
-        address[] memory _distros,
-        uint256[] memory _shares,
-        bool[] memory _callQueue
-    ) external {
-        require(msg.sender==owner, "!auth");
-
-        uint256 totalShares = _updateDistributionByTokens(_token, customDistributionByTokens[_pid][_token], _distros, _shares, _callQueue);
-
-        IERC20(_token).safeApprove(poolInfo[_pid].crvRewards, 0);
-        IERC20(_token).safeApprove(poolInfo[_pid].crvRewards, type(uint256).max);
-
-        emit CustomDistributionUpdate(_pid, _token, _distros.length, _shares.length, _callQueue.length, totalShares);
-    }
-
     function _updateDistributionByTokens(
         address _token,
         TokenDistro[] storage _tds,
@@ -415,21 +392,12 @@ contract Booster{
      * @notice Fee manager can set all the relevant fees
      * @param _earmarkIncentive   % for whoever calls the claim where 1% == 100
      */
-    function setEarmarkIncentive(uint256 _earmarkIncentive) external{
+    function setEarmarkConfig(uint256 _earmarkIncentive, bool _earmarkOnDeposit) external{
         require(msg.sender==feeManager, "!auth");
-        require(_earmarkIncentive <= MAX_EARMARK_INCENTIVE, ">max");
+        require(_earmarkIncentive <= 100, ">max");
         earmarkIncentive = _earmarkIncentive;
-        emit SetEarmarkIncentive(_earmarkIncentive);
-    }
-
-    /**
-     * @notice Fee manager can set earmarkOnDeposit flag
-     * @param _earmarkOnDeposit   boolean that defines _earmarkRewards calling on pool deposit or withdraw
-     */
-    function setEarmarkOnDeposit(bool _earmarkOnDeposit) external{
-        require(msg.sender==feeManager, "!auth");
         earmarkOnDeposit = _earmarkOnDeposit;
-        emit SetEarmarkOnDeposit(_earmarkOnDeposit);
+        emit SetEarmarkConfig(_earmarkIncentive, _earmarkOnDeposit);
     }
 
     /// END SETTER SECTION ///
@@ -565,25 +533,6 @@ contract Booster{
         }
     }
 
-    function releaseToken(address _token, address _recipient) external {
-        require(msg.sender == owner, "!auth");
-
-        uint256 totalPendingRewards;
-        for (uint256 i = 0; i < poolInfo.length; i++) {
-            if (poolInfo[i].shutdown) {
-                if (_token == poolInfo[i].lptoken) {
-                    totalPendingRewards = totalPendingRewards.add(IERC20(poolInfo[i].token).totalSupply());
-                }
-            } else {
-                totalPendingRewards = totalPendingRewards.add(lpPendingRewards[poolInfo[i].lptoken][_token]);
-            }
-        }
-
-        uint256 amountToWithdraw = IERC20(_token).balanceOf(address(this)).sub(totalPendingRewards);
-        IERC20(_token).safeTransfer(_recipient, amountToWithdraw);
-        emit ReleaseToken(_token, amountToWithdraw, _recipient);
-    }
-
     /**
      * @notice  Deposits an "_amount" to a given gauge (specified by _pid), mints a `DepositToken`
      *          and subsequently stakes that on BaseRewardPool
@@ -599,7 +548,7 @@ contract Booster{
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) public returns(bool){
         require(!isShutdown,"shutdown");
         PoolInfo storage pool = poolInfo[_pid];
-        require(pool.shutdown == false, "pool is closed");
+        require(pool.shutdown == false, "closed");
 
         //send to proxy to stake
         address lptoken = pool.lptoken;
@@ -607,7 +556,7 @@ contract Booster{
 
         //stake
         address gauge = pool.gauge;
-        require(gauge != address(0),"!gauge setting");
+        require(gauge != address(0),"!gauge");
 
         uint256[] memory rewardBalancesBefore = getPendingRewards(lptoken);
         IStaker(voterProxy).deposit(lptoken, gauge);
@@ -628,17 +577,6 @@ contract Booster{
         }
 
         emit Deposited(_receiver, _pid, _amount);
-        return true;
-    }
-
-    /**
-     * @notice  Deposits all a senders balance to a given gauge (specified by _pid), mints a `DepositToken`
-     *          and subsequently stakes that on BaseRewardPool
-     */
-    function depositAll(uint256 _pid, bool _stake) external returns(bool){
-        address lptoken = poolInfo[_pid].lptoken;
-        uint256 balance = IERC20(lptoken).balanceOf(msg.sender);
-        deposit(_pid,balance,_stake);
         return true;
     }
 
@@ -681,16 +619,6 @@ contract Booster{
      */
     function withdraw(uint256 _pid, uint256 _amount) public returns(bool){
         _withdraw(_pid,_amount,msg.sender,msg.sender);
-        return true;
-    }
-
-    /**
-     * @notice  Withdraw all the senders LP tokens from a given gauge
-     */
-    function withdrawAll(uint256 _pid) public returns(bool){
-        address token = poolInfo[_pid].token;
-        uint256 userBal = IERC20(token).balanceOf(msg.sender);
-        withdraw(_pid, userBal);
         return true;
     }
 
@@ -768,7 +696,7 @@ contract Booster{
      */
     function _earmarkRewards(uint256 _pid) internal {
         PoolInfo storage pool = poolInfo[_pid];
-        require(pool.shutdown == false, "pool is closed");
+        require(pool.shutdown == false, "closed");
 
         //claim crv/wom and bonus tokens
         address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, pool.gauge);
@@ -828,9 +756,6 @@ contract Booster{
     }
 
     function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] memory) {
-        if (customDistributionByTokens[_pid][_rewardToken].length > 0) {
-            return customDistributionByTokens[_pid][_rewardToken];
-        }
         return distributionByTokens[_rewardToken];
     }
 
@@ -889,10 +814,6 @@ contract Booster{
 
     function distributionByTokenLength(address _token) external view returns (uint256) {
         return distributionByTokens[_token].length;
-    }
-
-    function customDistributionByTokenLength(uint256 _pid, address _token) external view returns (uint256) {
-        return customDistributionByTokens[_pid][_token].length;
     }
 
     function distributionTokenList() external view returns (address[] memory) {

@@ -554,8 +554,8 @@ async function deployFirstStage(
     tx = await booster.setVoteDelegate(multisigs.daoMultisig);
     await waitForTx(tx, debug, waitForBlocks);
 
-    console.log('booster.setEarmarkIncentive')
-    tx = await booster.setEarmarkIncentive(10);
+    console.log('booster.setEarmarkConfig')
+    tx = await booster.setEarmarkConfig(10, false);
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setExtraRewardsDistributor')

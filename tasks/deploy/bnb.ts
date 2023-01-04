@@ -508,20 +508,6 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     await newBooster.setOwner(boosterMigrator.address).then(tx => tx.wait(1));
     await newBooster.setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
 
-    console.log('deployContract DepositorMigrator');
-    const depositorMigratorArgs = [bnbConfig.crvDepositor, ['0xD684e0090bD4E11246c0F4d0aeFFEbd2aE252828'], [5]];
-    fs.writeFileSync('./args/depositorMigrator.js', 'module.exports = ' + JSON.stringify(depositorMigratorArgs));
-    const depositorMigrator = await deployContract<DepositorMigrator>(
-        hre,
-        new DepositorMigrator__factory(deployer),
-        "DepositorMigrator",
-        depositorMigratorArgs,
-        {},
-        true,
-        waitForBlocks,
-    );
-    console.log('depositorMigrator', depositorMigrator.address);
-
     const poolDepositorArgs = [bnbConfig.weth, newBooster.address, bnbConfig.masterWombat];
     fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
     const poolDepositor = await deployContract<PoolDepositor>(
