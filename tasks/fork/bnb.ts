@@ -197,7 +197,6 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     }
 
     await cvxStakingProxy.connect(daoSigner).setConfig(newDepositorAddress, bnbConfig.cvxLocker).then(tx => tx.wait(1));
-    await cvxStakingProxy.setApprovals().then(tx => tx.wait(1));
 
     const distributionTokenList = await booster.distributionTokenList();
     for (let i = 0; i < distributionTokenList.length; i++) {

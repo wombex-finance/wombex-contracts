@@ -323,6 +323,11 @@ describe("Booster", () => {
 
             await increaseTime(60 * 60 * 24 * 6);
 
+            await mocks.masterWombat.pendingTokens(await contracts.voterProxy.lpTokenToPid(pool.gauge, pool.lptoken), contracts.voterProxy.address);
+            await contracts.voterProxy.getGaugeRewardTokens(pool.lptoken, pool.gauge);
+            const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
+            await crvRewards.claimableRewards(bobAddress);
+
             let tx = await booster.earmarkRewards(0);
             await tx.wait();
 
@@ -334,8 +339,6 @@ describe("Booster", () => {
             await expect(booster.connect(daoSigner).setRewardClaimedPenalty(3001)).to.be.revertedWith(">max");
             tx = await booster.connect(daoSigner).setRewardClaimedPenalty(penaltyShare);
             await tx.wait();
-
-            const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
 
             await increaseTime(60 * 60 * 24 * 6);
 
@@ -1105,7 +1108,6 @@ describe("Booster", () => {
             await expect(newBoosterContract.earmarkRewards(lastPid)).to.be.revertedWith("!auth");
 
             await contracts.cvxStakingProxy.connect(daoSigner).setConfig(contracts.crvDepositor.address, contracts.cvxLocker.address).then(tx => tx.wait(1));
-            await contracts.cvxStakingProxy.setApprovals().then(tx => tx.wait(1));
 
             tx = await newBoosterContract.earmarkRewards(lastPid);
             await tx.wait();

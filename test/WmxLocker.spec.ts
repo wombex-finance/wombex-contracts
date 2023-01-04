@@ -256,9 +256,10 @@ describe("WmxLocker", () => {
     async function distributeRewardsFromBooster(): Promise<BN> {
         const tx = await (await booster.earmarkRewards(boosterPoolId)).wait(1);
         await increaseTime(ONE_DAY);
-        const log = tx.events.find(e => e.address.toLowerCase() === cvxStakingProxy.address.toLowerCase());
-        const args = cvxStakingProxy.interface.decodeEventLog('RewardsDistributed', log.data, log.topics);
-        return args[1];
+        const logs = tx.events.filter(e => e.address.toLowerCase() === cvxStakingProxy.address.toLowerCase());
+        return logs
+            .map(l => { try { return cvxStakingProxy.interface.decodeEventLog('RewardsDistributed', l.data, l.topics); } catch (e) {} })
+            .filter(e => e)[0].amount;
     }
     before(async () => {
         await hre.network.provider.send("hardhat_reset");
