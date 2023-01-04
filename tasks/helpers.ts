@@ -36,8 +36,11 @@ async function approvePoolDepositor(masterWombat, poolDepositor, signer) {
 async function getBoosterValues(booster: Booster) {
     const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
     for (let i = 0; i < poolLength; i++) {
-        await booster.earmarkRewards(i).then(tx => tx.wait(1));
         const pool = await booster.poolInfo(i);
+        if (pool.shutdown) {
+            continue;
+        }
+        await booster.earmarkRewards(i).then(tx => tx.wait(1));
         const lp = IERC20__factory.connect(pool.lptoken, booster.provider);
         await lp.balanceOf(booster.address);
     }
