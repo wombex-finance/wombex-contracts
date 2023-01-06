@@ -108,6 +108,7 @@ interface IStaker{
     function withdrawAllLp(address, address) external returns (bool);
     function lock(uint256 _lockDays) external;
     function releaseLock(uint256 _slot) external returns(uint256);
+    function getGaugeRewardTokens(address _lptoken, address _gauge) external returns (address[] memory tokens);
     function claimCrv(address, uint256) external returns (address[] memory tokens, uint256[] memory balances);
     function balanceOfPool(address, address) external view returns (uint256);
     function operator() external view returns (address);
@@ -158,12 +159,36 @@ interface IMasterWombatV2 {
 }
 
 interface IBooster {
+    struct PoolInfo {
+        address lptoken;
+        address token;
+        address gauge;
+        address crvRewards;
+        bool shutdown;
+    }
+
     function owner() external view returns (address);
+    function voterProxy() external view returns (address);
     function poolLength() external view returns (uint256);
-    function poolInfo(uint256 _pid) external view returns(address lptoken, address token, address gauge, address crvRewards, bool shutdown);
+    function poolInfo(uint256 _pid) external view returns (PoolInfo memory);
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
-    function earmarkRewards(uint256 _pid) external returns(bool);
     function setOwner(address _owner) external;
+    function setPoolManager(address _poolManager) external;
+    function voterProxyClaimRewards(uint256 _pid, address[] memory pendingTokens) external returns (uint256[] memory pendingRewards);
+    function addPool(address _lptoken, address _gauge) external returns (uint256);
+    function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) external returns (uint256);
+    function approveDistribution(address _distro, address[] memory _distributionTokens, uint256 _amount) external;
+    function approvePoolsCrvRewardsDistribution(address _token) external;
+    function distributeRewards(uint256 _pid, address _lpToken, address _rewardToken, address[] memory _transferTo, uint256[] memory _transferAmount, bool[] memory _callQueue) external;
+    function lpPendingRewards(address _lptoken, address _token) external returns (uint256);
+    function earmarkRewards(uint256 _pid) external returns (bool);
+}
+
+interface IBoosterEarmark {
+    function earmarkIncentive() external view returns (uint256);
+    function distributionByTokenLength(address _token) external view returns (uint256);
+    function distributionByTokens(address, uint256) external view returns (address, uint256, bool);
+    function distributionTokenList() external view returns (address[] memory);
 }
 
 interface ISwapRouter {

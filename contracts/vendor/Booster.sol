@@ -19,7 +19,6 @@ contract Booster{
     using Address for address;
     using SafeMath for uint256;
 
-    uint256 public constant MAX_DISTRIBUTION = 2500;
     uint256 public constant MAX_PENALTY_SHARE = 3000;
     uint256 public constant DENOMINATOR = 10000;
 
@@ -34,13 +33,13 @@ contract Booster{
     address public rewardFactory;
     address public tokenFactory;
     address public voteDelegate;
+    address public earmarkDelegate;
     address public crvLockRewards;
     address public cvxLocker;
 
     IExtraRewardsDistributor public extraRewardsDist;
 
     uint256 public penaltyShare = 0;
-    uint256 public earmarkIncentive;
     bool public earmarkOnDeposit;
 
     uint256 public minMintRatio;
@@ -48,15 +47,6 @@ contract Booster{
     uint256 public mintRatio;
 
     mapping(uint256 => uint256) public customMintRatio;
-
-    mapping(address => TokenDistro[]) public distributionByTokens;
-
-    struct TokenDistro {
-        address distro;
-        uint256 share;
-        bool callQueue;
-    }
-    address[] distributionTokens;
 
     bool public isShutdown;
 
@@ -88,20 +78,16 @@ contract Booster{
     event FactoriesUpdated(address rewardFactory, address tokenFactory);
     event ExtraRewardsDistributorUpdated(address newDist);
     event LpPendingRewardTokensUpdated(address indexed lpToken, address[] pendingRewardTokens);
-    event ReleaseToken(address indexed token, uint256 amount, address indexed recipient);
     event PenaltyShareUpdated(uint256 newPenalty);
     event VoteDelegateUpdated(address newVoteDelegate);
+    event EarmarkDelegateUpdated(address newEarmarkDelegate);
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
     event MintRatioUpdated(uint256 mintRatio);
     event CustomMintRatioUpdated(uint256 indexed pid, uint256 mintRatio);
-    event SetEarmarkConfig(uint256 earmarkIncentive, bool earmarkOnDeposit);
+    event SetEarmarkOnDeposit(bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
     event FeeInfoChanged(address feeToken, bool active);
-    event TokenDistributionUpdate(address indexed token, address indexed distro, uint256 share, bool callQueue);
-    event DistributionUpdate(address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
-    event CustomDistributionUpdate(uint256 indexed pid, address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
-    event ClearDistributionApproval(address indexed distro, address[] tokens);
 
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
     event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
@@ -247,6 +233,16 @@ contract Booster{
     }
 
     /**
+     * @notice Earmark Delegate has the rights to cast claim and distribute VoterProxy rewards
+     */
+    function setEarmarkDelegate(address _earmarkDelegate) external {
+        require(msg.sender==owner, "!auth");
+        earmarkDelegate = _earmarkDelegate;
+
+        emit EarmarkDelegateUpdated(_earmarkDelegate);
+    }
+
+    /**
      * @notice Set tokens to cache pending rewards
      */
     function setLpPendingRewardTokens(address _lpToken, address[] memory _addresses) external {
@@ -316,88 +312,13 @@ contract Booster{
     }
 
     /**
-     * @notice Allows turning off or on for fee distro
+     * @notice Owner can set earmarkOnDeposit
+     * @param _earmarkOnDeposit   Call earmark on deposit or not
      */
-    function updateDistributionByTokens(
-        address _token,
-        address[] memory _distros,
-        uint256[] memory _shares,
-        bool[] memory _callQueue
-    ) external {
-        require(msg.sender==owner, "!auth");
-        require(_distros.length > 0, "zero");
-
-        if (distributionByTokens[_token].length == 0) {
-            distributionTokens.push(_token);
-        }
-
-        uint256 totalShares = _updateDistributionByTokens(_token, distributionByTokens[_token], _distros, _shares, _callQueue);
-
-        uint256 poolLen = poolInfo.length;
-        for (uint256 i = 0; i < poolLen; i++) {
-            IERC20(_token).safeApprove(poolInfo[i].crvRewards, 0);
-            IERC20(_token).safeApprove(poolInfo[i].crvRewards, type(uint256).max);
-        }
-
-        emit DistributionUpdate(_token, _distros.length, _shares.length, _callQueue.length, totalShares);
-    }
-
-    function _updateDistributionByTokens(
-        address _token,
-        TokenDistro[] storage _tds,
-        address[] memory _distros,
-        uint256[] memory _shares,
-        bool[] memory _callQueue
-    ) internal returns(uint256) {
-        uint256 curLen = _tds.length;
-        for (uint256 i = 0; i < curLen; i++) {
-            address distro = _tds[_tds.length - 1].distro;
-            _tds.pop();
-        }
-
-        uint256 totalShares = 0;
-
-        uint256 len = _distros.length;
-        require(len==_shares.length && len==_callQueue.length, "!length");
-
-        for (uint256 i = 0; i < len; i++) {
-            require(_distros[i] != address(0), "!distro");
-            totalShares = totalShares.add(_shares[i]);
-            _tds.push(TokenDistro(_distros[i], _shares[i], _callQueue[i]));
-            emit TokenDistributionUpdate(_token, _distros[i], _shares[i], _callQueue[i]);
-
-            if (_callQueue[i]) {
-                IERC20(_token).safeApprove(_distros[i], 0);
-                IERC20(_token).safeApprove(_distros[i], type(uint256).max);
-            }
-        }
-        require(totalShares <= MAX_DISTRIBUTION, ">max");
-        return totalShares;
-    }
-
-    /**
-     * @notice Allows turning off or on for fee distro
-     */
-    function clearDistroApprovals(address distro) external {
-        require(msg.sender==owner, "!auth");
-
-        for (uint256 i = 0; i < distributionTokens.length; i++) {
-            IERC20(distributionTokens[i]).safeApprove(distro, 0);
-        }
-
-        emit ClearDistributionApproval(distro, distributionTokens);
-    }
-
-    /**
-     * @notice Fee manager can set all the relevant fees
-     * @param _earmarkIncentive   % for whoever calls the claim where 1% == 100
-     */
-    function setEarmarkConfig(uint256 _earmarkIncentive, bool _earmarkOnDeposit) external{
-        require(msg.sender==feeManager, "!auth");
-        require(_earmarkIncentive <= 100, ">max");
-        earmarkIncentive = _earmarkIncentive;
+    function setEarmarkOnDeposit(bool _earmarkOnDeposit) external{
+        require(msg.sender == owner, "!auth");
         earmarkOnDeposit = _earmarkOnDeposit;
-        emit SetEarmarkConfig(_earmarkIncentive, _earmarkOnDeposit);
+        emit SetEarmarkOnDeposit(_earmarkOnDeposit);
     }
 
     /// END SETTER SECTION ///
@@ -406,7 +327,7 @@ contract Booster{
      * @notice Called by the PoolManager (i.e. PoolManagerProxy) to add a new pool - creates all the required
      *         contracts (DepositToken, RewardPool) and then adds to the list!
      */
-    function addPool(address _lptoken, address _gauge) external returns(bool){
+    function addPool(address _lptoken, address _gauge) external returns (uint256) {
         //the next pool's pid
         uint256 pid = poolInfo.length;
 
@@ -423,8 +344,8 @@ contract Booster{
      * @notice Called by the PoolManager (i.e. PoolManagerProxy) to add a new pool - creates all the required
      *         contracts (DepositToken, RewardPool) and then adds to the list!
      */
-    function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) public returns(bool){
-        require(msg.sender==poolManager && !isShutdown, "!add");
+    function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) public returns (uint256){
+        require(msg.sender == poolManager && !isShutdown, "!add");
         require(_gauge != address(0) && _lptoken != address(0),"!param");
 
         //the next pool's pid
@@ -448,14 +369,8 @@ contract Booster{
             })
         );
 
-        uint256 distTokensLen = distributionTokens.length;
-        for (uint256 i = 0; i < distTokensLen; i++) {
-            IERC20(distributionTokens[i]).safeApprove(_crvRewards, 0);
-            IERC20(distributionTokens[i]).safeApprove(_crvRewards, type(uint256).max);
-        }
-
         emit PoolAdded(_lptoken, _gauge, _token, _crvRewards, pid);
-        return true;
+        return poolInfo.length.sub(1);
     }
 
     /**
@@ -563,7 +478,7 @@ contract Booster{
         _writePendingRewards(lptoken, rewardBalancesBefore);
 
         if (earmarkOnDeposit) {
-            _earmarkRewards(_pid);
+            IBoosterEarmark(earmarkDelegate).earmarkRewards(_pid);
         }
 
         address token = pool.token;
@@ -603,7 +518,7 @@ contract Booster{
             _writePendingRewards(lptoken, rewardBalancesBefore);
 
             if (earmarkOnDeposit) {
-                _earmarkRewards(_pid);
+                IBoosterEarmark(earmarkDelegate).earmarkRewards(_pid);
             }
         }
 
@@ -689,85 +604,71 @@ contract Booster{
         return true;
     }
 
-    /**
-     * @notice Basically a hugely pivotal function.
-     *         Responsible for collecting the crv/wom from gauge, and then redistributing to the correct place.
-     *         Pays the caller a fee to process this.
-     */
-    function _earmarkRewards(uint256 _pid) internal {
+    function voterProxyClaimRewards(uint256 _pid, address[] memory _pendingTokens) external returns (uint256[] memory pendingRewards) {
+        require(earmarkDelegate == msg.sender, "!auth");
+
         PoolInfo storage pool = poolInfo[_pid];
-        require(pool.shutdown == false, "closed");
+        address lptoken = pool.lptoken;
 
-        //claim crv/wom and bonus tokens
-        address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, pool.gauge);
-        uint256 tLen = tokens.length;
+        IStaker(voterProxy).claimCrv(lptoken, pool.gauge);
 
-        uint256[] memory balancesBefore = new uint256[](tLen);
-        for (uint256 i = 0; i < tLen; i++) {
-            balancesBefore[i] = IERC20(tokens[i]).balanceOf(address(this)).add(IERC20(tokens[i]).balanceOf(voterProxy));
-            if (tokens[i] == weth) {
-                balancesBefore[i] = balancesBefore[i].add(voterProxy.balance);
-            }
-        }
-
-        IStaker(voterProxy).claimCrv(pool.lptoken, pool.gauge);
+        uint256 tLen = _pendingTokens.length;
+        pendingRewards = new uint256[](tLen);
 
         for (uint256 i = 0; i < tLen; i++) {
-            IERC20 token = IERC20(tokens[i]);
-            uint256 balance = token.balanceOf(address(this)).sub(balancesBefore[i]);
-            if (lpPendingRewards[pool.lptoken][tokens[i]] > 0) {
-                balance = balance.add(lpPendingRewards[pool.lptoken][tokens[i]]);
-                lpPendingRewards[pool.lptoken][tokens[i]] = 0;
+            pendingRewards[i] = lpPendingRewards[lptoken][_pendingTokens[i]];
+            if (lpPendingRewards[lptoken][_pendingTokens[i]] > 0) {
+                lpPendingRewards[lptoken][_pendingTokens[i]] = 0;
             }
-
-            emit EarmarkRewards(_pid, pool.lptoken, address(token), balance);
-
-            if (balance == 0) {
-                continue;
-            }
-            uint256 dLen = _getDistributionByTokens(_pid, address(token)).length;
-            require(dLen > 0, "!dLen");
-
-            uint256 earmarkIncentiveAmount = balance.mul(earmarkIncentive).div(DENOMINATOR);
-            uint256 sentSum = earmarkIncentiveAmount;
-
-            for (uint256 j = 0; j < dLen; j++) {
-                TokenDistro memory tDistro = _getDistributionByTokens(_pid, address(token))[j];
-                if (tDistro.share == 0) {
-                   continue;
-                }
-                uint256 amount = balance.mul(tDistro.share).div(DENOMINATOR);
-                if (tDistro.callQueue) {
-                    IRewards(tDistro.distro).queueNewRewards(address(token), amount);
-                } else {
-                    token.safeTransfer(tDistro.distro, amount);
-                }
-                emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), amount, tDistro.distro, tDistro.callQueue);
-                sentSum = sentSum.add(amount);
-            }
-            if (earmarkIncentiveAmount > 0) {
-                token.safeTransfer(msg.sender, earmarkIncentiveAmount);
-                emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), earmarkIncentiveAmount, msg.sender, false);
-            }
-            //send crv to lp provider reward contract
-            IRewards(pool.crvRewards).queueNewRewards(address(token), balance.sub(sentSum));
-            emit EarmarkRewardsTransfer(_pid, pool.lptoken, address(token), balance.sub(sentSum), pool.crvRewards, true);
         }
     }
 
-    function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] memory) {
-        return distributionByTokens[_rewardToken];
+    function distributeRewards(
+        uint256 _pid,
+        address _lpToken,
+        address _rewardToken,
+        address[] memory _transferTo,
+        uint256[] memory _transferAmount,
+        bool[] memory _callQueue
+    ) external {
+        require(earmarkDelegate == msg.sender, "!auth");
+
+        uint256 tLen = _transferTo.length;
+        require(tLen == _transferAmount.length && tLen == _callQueue.length, "!len");
+
+        uint256 sum = 0;
+        for (uint256 i = 0; i < tLen; i++) {
+            sum = sum.add(_transferAmount[i]);
+            if (_callQueue[i]) {
+                IRewards(_transferTo[i]).queueNewRewards(_rewardToken, _transferAmount[i]);
+            } else {
+                IERC20(_rewardToken).safeTransfer(_transferTo[i], _transferAmount[i]);
+            }
+            emit EarmarkRewardsTransfer(_pid, _lpToken, _rewardToken, _transferAmount[i], _transferTo[i], _callQueue[i]);
+        }
+        emit EarmarkRewards(_pid, _lpToken, _rewardToken, sum);
     }
 
-    /**
-     * @notice Basically a hugely pivotal function.
-     *         Responsible for collecting the crv/wom from gauge, and then redistributing to the correct place.
-     *         Pays the caller a fee to process this.
-     */
-    function earmarkRewards(uint256 _pid) external returns(bool){
-        require(!isShutdown,"shutdown");
-        _earmarkRewards(_pid);
-        return true;
+    function approveDistribution(address _distro, address[] memory _distributionTokens, uint256 _amount) external {
+        require(earmarkDelegate == msg.sender, "!auth");
+
+        uint256 distTokensLen = _distributionTokens.length;
+        for (uint256 i = 0; i < distTokensLen; i++) {
+            IERC20(_distributionTokens[i]).safeApprove(_distro, 0);
+            if (_amount > 0) {
+                IERC20(_distributionTokens[i]).safeApprove(_distro, _amount);
+            }
+        }
+    }
+
+    function approvePoolsCrvRewardsDistribution(address _token) external {
+        require(earmarkDelegate == msg.sender, "!auth");
+
+        uint256 poolLen = poolInfo.length;
+        for (uint256 i = 0; i < poolLen; i++) {
+            IERC20(_token).safeApprove(poolInfo[i].crvRewards, 0);
+            IERC20(_token).safeApprove(poolInfo[i].crvRewards, type(uint256).max);
+        }
     }
 
     /**
@@ -807,16 +708,7 @@ contract Booster{
         return true;
     }
 
-
     function poolLength() external view returns (uint256) {
         return poolInfo.length;
-    }
-
-    function distributionByTokenLength(address _token) external view returns (uint256) {
-        return distributionByTokens[_token].length;
-    }
-
-    function distributionTokenList() external view returns (address[] memory) {
-        return distributionTokens;
     }
 }
