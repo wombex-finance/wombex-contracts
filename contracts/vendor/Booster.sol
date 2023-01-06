@@ -377,8 +377,8 @@ contract Booster{
      * @notice Shuts down the pool by withdrawing everything from the gauge to here (can later be
      *         claimed from depositors by using the withdraw fn) and marking it as shut down
      */
-    function shutdownPool(uint256 _pid) external returns(bool){
-        require(msg.sender==poolManager, "!auth");
+    function shutdownPool(uint256 _pid) external returns(bool) {
+        require(msg.sender == poolManager, "!auth");
         PoolInfo storage pool = poolInfo[_pid];
 
         //withdraw from gauge

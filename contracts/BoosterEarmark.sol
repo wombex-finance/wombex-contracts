@@ -89,6 +89,14 @@ contract BoosterEarmark is Ownable {
         return pid;
     }
 
+    function shutdownPool(uint256 _pid) external returns (bool) {
+        return booster.shutdownPool(_pid);
+    }
+
+    function forceShutdownPool(uint256 _pid) external returns (bool) {
+        return booster.forceShutdownPool(_pid);
+    }
+
     /**
      * @notice Call approveDistributionTokens on booster
      */
