@@ -6,7 +6,7 @@ import {
     Asset, Asset__factory,
     BaseRewardPool4626__factory,
     BaseRewardPool__factory,
-    Booster, MockERC20, MockERC20__factory, Pool, Pool__factory,
+    Booster, BoosterEarmark, MockERC20, MockERC20__factory, Pool, Pool__factory,
     PoolDepositor,
 } from "../types/generated";
 import { Signer, BigNumber} from "ethers";
@@ -23,7 +23,7 @@ type PoolInfo = {
 
 describe("PoolDepositor", () => {
     let accounts: Signer[];
-    let booster: Booster, poolDepositor: PoolDepositor;
+    let booster: Booster, boosterEarmark: BoosterEarmark, poolDepositor: PoolDepositor;
     let cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy;
     let mocks: any;
     let poolInfo: PoolInfo;
@@ -46,7 +46,7 @@ describe("PoolDepositor", () => {
 
         contracts = await deploy(hre, deployer, daoSigner, mocks, distro, multisigs, mocks.namingConfig, mocks);
 
-        ({ cvx, booster, booster, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom, poolDepositor } = contracts);
+        ({ cvx, booster, booster, boosterEarmark, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom, poolDepositor } = contracts);
 
         poolInfo = await booster.poolInfo(0);
 
@@ -155,7 +155,7 @@ describe("PoolDepositor", () => {
             await waitForTx(tx, true, 1);
 
             const poolLen = await booster.poolLength();
-            tx = await booster.connect(daoSigner).addPool(nativeLptoken.address, mocks.masterWombat.address);
+            tx = await boosterEarmark.connect(daoSigner).addPool(nativeLptoken.address, mocks.masterWombat.address);
             await waitForTx(tx, true, 1);
             const nativePoolInfo = await booster.poolInfo(poolLen);
             nativeCrvRewards = BaseRewardPool4626__factory.connect(nativePoolInfo.crvRewards, alice);

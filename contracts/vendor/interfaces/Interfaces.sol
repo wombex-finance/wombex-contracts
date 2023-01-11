@@ -55,7 +55,7 @@ interface IStaker{
 }
 
 interface IBoosterEarmark {
-    function earmarkRewards(uint256 _pid) external returns (bool);
+    function earmarkRewards(uint256 _pid) external;
     function earmarkIncentive() external view returns (uint256);
     function distributionByTokenLength(address _token) external view returns (uint256);
     function distributionByTokens(address, uint256) external view returns (address, uint256, bool);
@@ -63,6 +63,8 @@ interface IBoosterEarmark {
     function updateDistributionByTokens(address _token, address[] memory _distros, uint256[] memory _shares, bool[] memory _callQueue) external;
     function setEarmarkConfig(uint256 _earmarkIncentive) external;
     function transferOwnership(address newOwner) external;
+    function addPool(address _lptoken, address _gauge) external returns (uint256);
+    function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) external returns (uint256);
 }
 
 interface IRewards{

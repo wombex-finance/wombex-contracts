@@ -4,6 +4,7 @@ pragma solidity 0.8.11;
 import "./Interfaces.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
+import "hardhat/console.sol";
 
 contract BoosterEarmark is Ownable {
     uint256 public constant MAX_DISTRIBUTION = 2500;
@@ -89,11 +90,11 @@ contract BoosterEarmark is Ownable {
         return pid;
     }
 
-    function shutdownPool(uint256 _pid) external returns (bool) {
+    function shutdownPool(uint256 _pid) external onlyOwner returns (bool) {
         return booster.shutdownPool(_pid);
     }
 
-    function forceShutdownPool(uint256 _pid) external returns (bool) {
+    function forceShutdownPool(uint256 _pid) external onlyOwner returns (bool) {
         return booster.forceShutdownPool(_pid);
     }
 
@@ -197,7 +198,7 @@ contract BoosterEarmark is Ownable {
 
         uint256[] memory balancesBefore = new uint256[](tLen);
         for (uint256 i = 0; i < tLen; i++) {
-            balancesBefore[i] = IERC20(_tokens[i]).balanceOf(address(this)) + IERC20(_tokens[i]).balanceOf(voterProxy);
+            balancesBefore[i] = IERC20(_tokens[i]).balanceOf(address(booster)) + IERC20(_tokens[i]).balanceOf(voterProxy);
             if (_tokens[i] == weth) {
                 balancesBefore[i] = balancesBefore[i] + voterProxy.balance;
             }
@@ -207,7 +208,7 @@ contract BoosterEarmark is Ownable {
 
         balances = new uint256[](tLen);
         for (uint256 i = 0; i < tLen; i++) {
-            balances[i] = IERC20(_tokens[i]).balanceOf(address(this)) + balancesBefore[i] + pendingRewards[i];
+            balances[i] = IERC20(_tokens[i]).balanceOf(address(booster)) - balancesBefore[i] + pendingRewards[i];
         }
     }
 
@@ -217,12 +218,14 @@ contract BoosterEarmark is Ownable {
 
         //claim crv/wom and bonus tokens
         address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(p.lptoken, p.gauge);
+        console.log("tokens.length", tokens.length);
         uint256[] memory balances = _rewardTokenBalances(_pid, tokens);
 
         for (uint256 i = 0; i < tokens.length; i++) {
             EarmarkState memory s;
             s.token = IERC20(tokens[i]);
             s.balance = balances[i];
+            console.log("s.balance", s.balance);
 
             emit EarmarkRewards(_pid, p.lptoken, address(s.token), s.balance);
 
@@ -246,9 +249,10 @@ contract BoosterEarmark is Ownable {
                     continue;
                 }
                 uint256 amount = s.balance * tDistro.share / DENOMINATOR;
-                s.sentSum = s.sentSum + amount;
+                s.sentSum += amount;
 
                 _transferAmount[j] = amount;
+                console.log("_transferAmount[j]", _transferAmount[j]);
                 _transferTo[j] = tDistro.distro;
                 _callQueue[j] = tDistro.callQueue;
 
@@ -262,9 +266,13 @@ contract BoosterEarmark is Ownable {
                 emit EarmarkRewardsTransfer(_pid, p.lptoken, address(s.token), s.earmarkIncentiveAmount, msg.sender, false);
             }
 
+            console.log("s.sentSum", s.sentSum);
+
             _transferAmount[s.totalDLen - 1] = s.balance - s.sentSum;
             _transferTo[s.totalDLen - 1] = p.crvRewards;
             _callQueue[s.totalDLen - 1] = true;
+
+            booster.distributeRewards(_pid, p.lptoken, tokens[i], _transferTo, _transferAmount, _callQueue);
 
             emit EarmarkRewardsTransfer(_pid, p.lptoken, address(s.token), _transferAmount[s.totalDLen - 1], p.crvRewards, true);
         }
@@ -291,7 +299,7 @@ contract BoosterEarmark is Ownable {
             }
         }
 
-        uint256 amountToWithdraw = IERC20(_token).balanceOf(address(this)) - totalPendingRewards;
+        uint256 amountToWithdraw = IERC20(_token).balanceOf(address(booster)) - totalPendingRewards;
 
         address[] memory transferTo = new address[](1);
         transferTo[0] = _token;
