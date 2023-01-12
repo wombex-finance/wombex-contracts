@@ -397,7 +397,8 @@ contract Booster{
         PoolInfo storage pool = poolInfo[_pid];
 
         //withdraw from gauge
-        try IStaker(voterProxy).withdrawAllLp(pool.lptoken, pool.gauge){} catch {}
+        uint128 amount = getLpBalance(pool.gauge, pool.lptoken);
+        try IStaker(voterProxy).withdrawLp(pool.lptoken, pool.gauge, amount) {} catch {}
 
         pool.shutdown = true;
 
@@ -417,11 +418,9 @@ contract Booster{
             PoolInfo storage pool = poolInfo[i];
             if (pool.shutdown) continue;
 
-            address token = pool.lptoken;
-            address gauge = pool.gauge;
-
             //withdraw from gauge
-            try IStaker(voterProxy).withdrawAllLp(token,gauge){
+            uint128 amount = getLpBalance(pool.gauge, pool.lptoken);
+            try IStaker(voterProxy).withdrawLp(pool.lptoken, pool.gauge, amount) {
                 pool.shutdown = true;
             }catch{}
         }
@@ -718,13 +717,22 @@ contract Booster{
 
         for (uint i = 0; i < migratePids.length; i++) {
             uint256 pid = migratePids[i];
-            migratePids[i] = IStaker(voterProxy).lpTokenToPid(poolInfo[pid].gauge, poolInfo[pid].lptoken);
+            require(poolInfo[pid].gauge == oldGauge, "!gauge");
+            address lptoken = poolInfo[pid].lptoken;
+
+            uint128 amount = getLpBalance(oldGauge, lptoken);
+            IStaker(voterProxy).withdrawLp(lptoken, oldGauge, amount);
+
+            IERC20(lptoken).safeTransfer(voterProxy, amount);
+            IStaker(voterProxy).deposit(lptoken, newGauge);
+
             poolInfo[pid].gauge = newGauge;
         }
+    }
 
-        bytes memory data = abi.encodeWithSelector(IMasterWombat.migrate.selector, migratePids);
-        (bool success, ) = IStaker(voterProxy).execute(oldGauge, 0, data);
-        require(success, "!success");
+    function getLpBalance(address _gauge, address _lptoken) public returns (uint128 amount) {
+        uint256 mwPid = IStaker(voterProxy).lpTokenToPid(_gauge, _lptoken);
+        (amount, , ,) = IMasterWombat(_gauge).userInfo(mwPid, voterProxy);
     }
 
     function poolLength() external view returns (uint256) {

@@ -24,7 +24,12 @@ import {
     DepositorMigrator__factory,
     WomDepositor__factory,
     RewardFactory,
-    RewardFactory__factory, TokenFactory, TokenFactory__factory, BoosterEarmark, BoosterEarmark__factory,
+    RewardFactory__factory,
+    TokenFactory,
+    TokenFactory__factory,
+    BoosterEarmark,
+    BoosterEarmark__factory,
+    MasterWombatV2, MasterWombatV2__factory,
 } from "../types/generated";
 import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
@@ -1474,6 +1479,61 @@ describe("Booster", () => {
             await cvxCrvRewards["getReward(address,bool)"](bobAddress, false).then(tx => tx.wait(1));
             expect(await crv.balanceOf(bobAddress)).gt(womBalanceBefore);
             expect(await contracts.cvx.balanceOf(bobAddress)).gt(wmxBalanceBefore);
+            booster = newBoosterContract;
         });
     });
+
+    describe("migration to new gauge", () => {
+        it("should migrate active pools successfully", async () => {
+            const newMasterWombat = await deployContract<MasterWombatV2>(
+                hre,
+                new MasterWombatV2__factory(deployer),
+                "MasterWombatV2",
+                [
+                    mocks.crv.address,
+                    ZERO_ADDRESS,
+                    152207000000000,
+                    375,
+                    Math.round(new Date().getTime() / 1000)
+                ],
+                {},
+                true,
+            );
+
+            await mocks.crv.transfer(newMasterWombat.address, BN.from(10).pow(18).mul(10000)).then(tx => tx.wait());
+            await newMasterWombat.setVeWom(veWom.address).then(tx => tx.wait());
+
+            const oldMW = mocks.masterWombat;
+            const voterProxy = contracts.voterProxy;
+
+            await oldMW.setNewMasterWombat(newMasterWombat.address).then(tx => tx.wait());
+
+            const poolLen = await booster.poolLength().then(len => parseInt(len.toString()));
+            const pids = Array.from(Array(poolLen).keys());
+
+            const lpTokenBalance = {};
+
+            const mwLen = await oldMW.poolLength().then(len => parseInt(len.toString()));
+            for (let i = 0; i < mwLen; i++) {
+                const pool = await oldMW.poolInfo(i);
+                if (pool.rewarder !== ZERO_ADDRESS) {
+                    await underlying.transfer(pool.rewarder, simpleToExactAmount(10000, 9)).then(tx => tx.wait());
+                }
+                lpTokenBalance[pool.lpToken] = await oldMW.userInfo(await voterProxy.lpTokenToPid(oldMW.address, pool.lpToken), voterProxy.address).then(u => u.amount);
+                await newMasterWombat.add(pool.allocPoint, pool.lpToken, pool.rewarder).then(tx => tx.wait());
+            }
+
+            await voterProxy.connect(daoSigner).setLpTokensPid(newMasterWombat.address);
+
+            await boosterEarmark.connect(daoSigner).gaugeMigrate(pids).then(tx => tx.wait());
+
+            for (let i = 0; i < mwLen; i++) {
+                const pool = await oldMW.poolInfo(i);
+                const olBalance = await oldMW.userInfo(await voterProxy.lpTokenToPid(oldMW.address, pool.lpToken), voterProxy.address).then(u => u.amount);
+                expect(olBalance).eq(0);
+                const newBalance = await newMasterWombat.userInfo(await voterProxy.lpTokenToPid(newMasterWombat.address, pool.lpToken), voterProxy.address).then(u => u.amount);
+                expect(newBalance).eq(lpTokenBalance[pool.lpToken]);
+            }
+        })
+    })
 });

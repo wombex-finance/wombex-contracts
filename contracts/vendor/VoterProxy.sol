@@ -314,8 +314,8 @@ contract VoterProxy {
         }
     }
 
-    function balanceOfPool(address _token, address _gauge) public view returns (uint256 amount) {
-        (amount, , ) = IMasterWombat(_gauge).userInfo(lpTokenToPid[_gauge][_token], address(this));
+    function balanceOfPool(address _token, address _gauge) public view returns (uint128 amount) {
+        (amount, , , ) = IMasterWombat(_gauge).userInfo(lpTokenToPid[_gauge][_token], address(this));
     }
 
     function execute(

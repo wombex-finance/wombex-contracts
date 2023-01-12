@@ -4,7 +4,7 @@ pragma solidity 0.6.12;
 interface IMasterWombat {
     function deposit(uint256 _pid, uint256 _amount) external;
     function balanceOf(address) external view returns(uint256);
-    function userInfo(uint256, address) external view returns (uint256 amount, uint256 rewardDebt, uint256 factor);
+    function userInfo(uint256, address) external view returns (uint128 amount, uint128 factor, uint128 rewardDebt, uint128 pendingWom);
     function withdraw(uint256 _pid, uint256 _amount) external;
     function poolLength() external view returns(uint256);
     function poolInfo(uint256 _pid) external view returns (address lpToken, uint96 allocPoint, IMasterWombatRewarder rewarder, uint256 sumOfFactors, uint104 accWomPerShare, uint104 accWomPerFactorShare, uint40 lastRewardTimestamp);
