@@ -6,7 +6,6 @@ import "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
-import "hardhat/console.sol";
 
 /**
  * @title   Booster
@@ -643,8 +642,6 @@ contract Booster{
                 continue;
             }
             sum = sum.add(_transferAmount[i]);
-            console.log("_transferAmount[i]", _transferAmount[i]);
-            console.log("balanceOf         ", IERC20(_rewardToken).balanceOf(address(this)));
             if (_callQueue[i]) {
                 IRewards(_transferTo[i]).queueNewRewards(_rewardToken, _transferAmount[i]);
             } else {
