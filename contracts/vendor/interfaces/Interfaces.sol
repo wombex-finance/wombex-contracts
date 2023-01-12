@@ -8,6 +8,8 @@ interface IMasterWombat {
     function withdraw(uint256 _pid, uint256 _amount) external;
     function poolLength() external view returns(uint256);
     function poolInfo(uint256 _pid) external view returns (address lpToken, uint96 allocPoint, IMasterWombatRewarder rewarder, uint256 sumOfFactors, uint104 accWomPerShare, uint104 accWomPerFactorShare, uint40 lastRewardTimestamp);
+    function migrate(uint256[] calldata _pids) external view;
+    function newMasterWombat() external view returns (address);
 }
 
 interface IMasterWombatRewarder {
@@ -52,6 +54,7 @@ interface IStaker{
     function setOperator(address _operator) external;
     function setOwner(address _owner) external;
     function setDepositor(address _depositor) external;
+    function lpTokenToPid(address _gauge, address _lptoken) external view returns (uint256);
 }
 
 interface IBoosterEarmark {

@@ -184,6 +184,7 @@ interface IBooster {
     function earmarkRewards(uint256 _pid) external;
     function shutdownPool(uint256 _pid) external returns (bool);
     function forceShutdownPool(uint256 _pid) external returns (bool);
+    function gaugeMigrate(uint256[] memory migratePids) external;
 }
 
 interface IBoosterEarmark {

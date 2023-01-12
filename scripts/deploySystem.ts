@@ -572,7 +572,7 @@ async function deployFirstStage(
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setVoteDelegate')
-    tx = await booster.setVoteDelegate(multisigs.daoMultisig);
+    tx = await booster.setVoteDelegate(multisigs.daoMultisig, true);
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setEarmarkConfig')

@@ -97,6 +97,10 @@ contract BoosterEarmark is Ownable {
         return booster.forceShutdownPool(_pid);
     }
 
+    function gaugeMigrate(uint256[] calldata migratePids) external {
+        return booster.gaugeMigrate(migratePids);
+    }
+
     /**
      * @notice Call approveDistributionTokens on booster
      */

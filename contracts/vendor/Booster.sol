@@ -32,10 +32,11 @@ contract Booster{
     address public poolManager;
     address public rewardFactory;
     address public tokenFactory;
-    address public voteDelegate;
     address public earmarkDelegate;
     address public crvLockRewards;
     address public cvxLocker;
+
+    mapping(address => bool) public voteDelegate;
 
     IExtraRewardsDistributor public extraRewardsDist;
 
@@ -79,7 +80,7 @@ contract Booster{
     event ExtraRewardsDistributorUpdated(address newDist);
     event LpPendingRewardTokensUpdated(address indexed lpToken, address[] pendingRewardTokens);
     event PenaltyShareUpdated(uint256 newPenalty);
-    event VoteDelegateUpdated(address newVoteDelegate);
+    event VoteDelegateUpdated(address voteDelegate, bool enabled);
     event EarmarkDelegateUpdated(address newEarmarkDelegate);
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
@@ -121,12 +122,10 @@ contract Booster{
         maxMintRatio = _maxMintRatio;
 
         owner = msg.sender;
-        voteDelegate = msg.sender;
         feeManager = msg.sender;
         poolManager = msg.sender;
 
         emit OwnerUpdated(msg.sender);
-        emit VoteDelegateUpdated(msg.sender);
         emit FeeManagerUpdated(msg.sender);
         emit PoolManagerUpdated(msg.sender);
     }
@@ -215,11 +214,11 @@ contract Booster{
     /**
      * @notice Vote Delegate has the rights to cast votes on the VoterProxy via the Booster
      */
-    function setVoteDelegate(address _voteDelegate) external {
+    function setVoteDelegate(address _voteDelegate, bool _enabled) external {
         require(msg.sender==owner, "!auth");
-        voteDelegate = _voteDelegate;
+        voteDelegate[_voteDelegate] = _enabled;
 
-        emit VoteDelegateUpdated(_voteDelegate);
+        emit VoteDelegateUpdated(_voteDelegate, _enabled);
     }
 
     /**
@@ -587,7 +586,7 @@ contract Booster{
      * @notice set valid vote hash on VoterProxy
      */
     function setVote(bytes32 _hash, bool valid) external returns(bool){
-        require(msg.sender == voteDelegate, "!auth");
+        require(voteDelegate[msg.sender], "!auth");
 
         IStaker(voterProxy).setVote(_hash, valid);
         return true;
@@ -597,7 +596,7 @@ contract Booster{
      * @notice Delegate address votes on gauge weight via VoterProxy
      */
     function voteExecute(address _voting, uint256 _value, bytes calldata _data) external payable returns(bool) {
-        require(msg.sender == voteDelegate, "!auth");
+        require(voteDelegate[msg.sender], "!auth");
         require(votingMap[_voting], "!voting");
 
         IStaker(voterProxy).execute{value:_value}(_voting, _value, _data);
@@ -709,6 +708,23 @@ contract Booster{
         }
         emit RewardClaimed(_pid, _address, _amount, _lock, mintAmount, penalty);
         return true;
+    }
+
+    function gaugeMigrate(uint256[] memory migratePids) external {
+        require(msg.sender == poolManager, "!auth");
+
+        address oldGauge = poolInfo[migratePids[0]].gauge;
+        address newGauge = IMasterWombat(oldGauge).newMasterWombat();
+
+        for (uint i = 0; i < migratePids.length; i++) {
+            uint256 pid = migratePids[i];
+            migratePids[i] = IStaker(voterProxy).lpTokenToPid(poolInfo[pid].gauge, poolInfo[pid].lptoken);
+            poolInfo[pid].gauge = newGauge;
+        }
+
+        bytes memory data = abi.encodeWithSelector(IMasterWombat.migrate.selector, migratePids);
+        (bool success, ) = IStaker(voterProxy).execute(oldGauge, 0, data);
+        require(success, "!success");
     }
 
     function poolLength() external view returns (uint256) {

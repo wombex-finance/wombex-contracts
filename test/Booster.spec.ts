@@ -757,11 +757,12 @@ describe("Booster", () => {
             await expect(booster.voteExecute(mockVoting.address, 0, voteData)).to.be.revertedWith("!auth");
             await expect(booster.connect(voteDelegate).voteExecute(mockVoting.address, 0, voteData)).to.be.revertedWith("!auth");
 
-            await expect(booster.setVoteDelegate(voteDelegateAddress)).to.be.revertedWith("!auth");
-            await expect(booster.connect(voteDelegate).setVoteDelegate(voteDelegateAddress)).to.be.revertedWith("!auth");
+            await expect(booster.setVoteDelegate(voteDelegateAddress, true)).to.be.revertedWith("!auth");
+            await expect(booster.connect(voteDelegate).setVoteDelegate(voteDelegateAddress, true)).to.be.revertedWith("!auth");
 
-            await booster.connect(daoSigner).setVoteDelegate(voteDelegateAddress).then(tx => tx.wait(1));
-            expect(await booster.voteDelegate(), 'voting delegate').eq(voteDelegateAddress);
+            expect(await booster.voteDelegate(voteDelegateAddress), 'voting delegate').eq(false);
+            await booster.connect(daoSigner).setVoteDelegate(voteDelegateAddress, true).then(tx => tx.wait(1));
+            expect(await booster.voteDelegate(voteDelegateAddress), 'voting delegate').eq(true);
 
             await expect(booster.connect(voteDelegate).voteExecute(mockVoting.address, 0, voteData)).to.be.revertedWith("!voting");
             await expect(booster.setVotingValid(mockVoting.address, true)).to.be.revertedWith("!auth");
