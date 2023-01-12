@@ -71,6 +71,7 @@ contract BoosterMigrator is Ownable {
 
         newBooster.setFeeManager(address(this));
 
+        uint256 pid;
         for (uint256 i = 0; i < poolLen; i++) {
             (address lptoken, address token, address gauge, address rewards, bool shutdown) = oldBooster.poolInfo(i);
             if (shutdown) {
@@ -78,6 +79,8 @@ contract BoosterMigrator is Ownable {
             }
 
             newBooster.addCreatedPool(lptoken, gauge, token, rewards);
+            newBooster.updateLpPendingRewardTokensByGauge(pid);
+            pid++;
         }
 
         require(newBooster.poolLength() == activePoolLen, "active_pool_len");
@@ -104,7 +107,7 @@ contract BoosterMigrator is Ownable {
         newBooster.setExtraRewardsDistributor(address(oldBooster.extraRewardsDist()));
         newBooster.setLockRewardContracts(oldBooster.crvLockRewards(), oldBooster.cvxLocker());
         newBooster.setVoteDelegate(oldBooster.voteDelegate());
-        newBooster.setEarmarkIncentive(oldBooster.earmarkIncentive());
+        newBooster.setEarmarkConfig(oldBooster.earmarkIncentive(), false);
         newBooster.setFeeManager(oldBooster.feeManager());
 
         IMinter(oldBooster.cvx()).updateOperator();

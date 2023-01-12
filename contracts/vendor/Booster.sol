@@ -20,7 +20,6 @@ contract Booster{
     using SafeMath for uint256;
 
     uint256 public constant MAX_DISTRIBUTION = 2500;
-    uint256 public constant MAX_EARMARK_INCENTIVE = 100;
     uint256 public constant MAX_PENALTY_SHARE = 3000;
     uint256 public constant DENOMINATOR = 10000;
 
@@ -48,7 +47,10 @@ contract Booster{
     uint256 public maxMintRatio;
     uint256 public mintRatio;
 
+    mapping(uint256 => uint256) public customMintRatio;
+
     mapping(address => TokenDistro[]) public distributionByTokens;
+
     struct TokenDistro {
         address distro;
         uint256 share;
@@ -86,17 +88,20 @@ contract Booster{
     event FactoriesUpdated(address rewardFactory, address tokenFactory);
     event ExtraRewardsDistributorUpdated(address newDist);
     event LpPendingRewardTokensUpdated(address indexed lpToken, address[] pendingRewardTokens);
+    event ReleaseToken(address indexed token, uint256 amount, address indexed recipient);
     event PenaltyShareUpdated(uint256 newPenalty);
     event VoteDelegateUpdated(address newVoteDelegate);
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
     event MintRatioUpdated(uint256 mintRatio);
-    event SetEarmarkIncentive(uint256 earmarkIncentive);
-    event SetEarmarkOnDeposit(bool earmarkOnDeposit);
+    event CustomMintRatioUpdated(uint256 indexed pid, uint256 mintRatio);
+    event SetEarmarkConfig(uint256 earmarkIncentive, bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
     event FeeInfoChanged(address feeToken, bool active);
     event TokenDistributionUpdate(address indexed token, address indexed distro, uint256 share, bool callQueue);
     event DistributionUpdate(address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
+    event CustomDistributionUpdate(uint256 indexed pid, address indexed token, uint256 distrosLength, uint256 sharesLength, uint256 callQueueLength, uint256 totalShares);
+    event ClearDistributionApproval(address indexed distro, address[] tokens);
 
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
     event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
@@ -292,38 +297,41 @@ contract Booster{
     }
 
     /**
+     * @notice Change mint ratio for pool
+     */
+    function setCustomMintRatioMultiple(uint256[] memory _pids, uint256[] memory _mintRatios) external {
+        require(msg.sender == owner, "!auth");
+
+        uint256 len = _pids.length;
+        require(len == _mintRatios.length, "!len");
+
+        for(uint256 i = 0; i < len; i++) {
+            if (_mintRatios[i] != 0) {
+                require(_mintRatios[i] >= minMintRatio && _mintRatios[i] <= maxMintRatio, "!boundaries");
+            }
+
+            customMintRatio[_pids[i]] = _mintRatios[i];
+            emit CustomMintRatioUpdated(_pids[i], _mintRatios[i]);
+        }
+    }
+
+    /**
      * @notice Allows turning off or on for fee distro
      */
-    function updateDistributionByTokens(address _token, address[] memory _distros, uint256[] memory _shares, bool[] memory _callQueue) external {
+    function updateDistributionByTokens(
+        address _token,
+        address[] memory _distros,
+        uint256[] memory _shares,
+        bool[] memory _callQueue
+    ) external {
         require(msg.sender==owner, "!auth");
-        uint256 len = _distros.length;
-        require(len > 0, "zero");
-        require(len==_shares.length && len==_callQueue.length, "!length");
+        require(_distros.length > 0, "zero");
 
         if (distributionByTokens[_token].length == 0) {
             distributionTokens.push(_token);
         }
 
-        uint256 curLen = distributionByTokens[_token].length;
-        for (uint256 i = 0; i < curLen; i++) {
-            address distro = distributionByTokens[_token][distributionByTokens[_token].length - 1].distro;
-            IERC20(_token).safeApprove(distro, 0);
-            distributionByTokens[_token].pop();
-        }
-
-        uint256 totalShares = 0;
-        for (uint256 i = 0; i < len; i++) {
-            require(_distros[i] != address(0), "!distro");
-            totalShares = totalShares.add(_shares[i]);
-            distributionByTokens[_token].push(TokenDistro(_distros[i], _shares[i], _callQueue[i]));
-            emit TokenDistributionUpdate(_token, _distros[i], _shares[i], _callQueue[i]);
-
-            if (_callQueue[i]) {
-                IERC20(_token).safeApprove(_distros[i], 0);
-                IERC20(_token).safeApprove(_distros[i], type(uint256).max);
-            }
-        }
-        require(totalShares <= MAX_DISTRIBUTION, ">max");
+        uint256 totalShares = _updateDistributionByTokens(_token, distributionByTokens[_token], _distros, _shares, _callQueue);
 
         uint256 poolLen = poolInfo.length;
         for (uint256 i = 0; i < poolLen; i++) {
@@ -334,25 +342,62 @@ contract Booster{
         emit DistributionUpdate(_token, _distros.length, _shares.length, _callQueue.length, totalShares);
     }
 
+    function _updateDistributionByTokens(
+        address _token,
+        TokenDistro[] storage _tds,
+        address[] memory _distros,
+        uint256[] memory _shares,
+        bool[] memory _callQueue
+    ) internal returns(uint256) {
+        uint256 curLen = _tds.length;
+        for (uint256 i = 0; i < curLen; i++) {
+            address distro = _tds[_tds.length - 1].distro;
+            _tds.pop();
+        }
+
+        uint256 totalShares = 0;
+
+        uint256 len = _distros.length;
+        require(len==_shares.length && len==_callQueue.length, "!length");
+
+        for (uint256 i = 0; i < len; i++) {
+            require(_distros[i] != address(0), "!distro");
+            totalShares = totalShares.add(_shares[i]);
+            _tds.push(TokenDistro(_distros[i], _shares[i], _callQueue[i]));
+            emit TokenDistributionUpdate(_token, _distros[i], _shares[i], _callQueue[i]);
+
+            if (_callQueue[i]) {
+                IERC20(_token).safeApprove(_distros[i], 0);
+                IERC20(_token).safeApprove(_distros[i], type(uint256).max);
+            }
+        }
+        require(totalShares <= MAX_DISTRIBUTION, ">max");
+        return totalShares;
+    }
+
+    /**
+     * @notice Allows turning off or on for fee distro
+     */
+    function clearDistroApprovals(address distro) external {
+        require(msg.sender==owner, "!auth");
+
+        for (uint256 i = 0; i < distributionTokens.length; i++) {
+            IERC20(distributionTokens[i]).safeApprove(distro, 0);
+        }
+
+        emit ClearDistributionApproval(distro, distributionTokens);
+    }
+
     /**
      * @notice Fee manager can set all the relevant fees
      * @param _earmarkIncentive   % for whoever calls the claim where 1% == 100
      */
-    function setEarmarkIncentive(uint256 _earmarkIncentive) external{
+    function setEarmarkConfig(uint256 _earmarkIncentive, bool _earmarkOnDeposit) external{
         require(msg.sender==feeManager, "!auth");
-        require(_earmarkIncentive <= MAX_EARMARK_INCENTIVE, ">max");
+        require(_earmarkIncentive <= 100, ">max");
         earmarkIncentive = _earmarkIncentive;
-        emit SetEarmarkIncentive(_earmarkIncentive);
-    }
-
-    /**
-     * @notice Fee manager can set earmarkOnDeposit flag
-     * @param _earmarkOnDeposit   boolean that defines _earmarkRewards calling on pool deposit or withdraw
-     */
-    function setEarmarkOnDeposit(bool _earmarkOnDeposit) external{
-        require(msg.sender==feeManager, "!auth");
         earmarkOnDeposit = _earmarkOnDeposit;
-        emit SetEarmarkOnDeposit(_earmarkOnDeposit);
+        emit SetEarmarkConfig(_earmarkIncentive, _earmarkOnDeposit);
     }
 
     /// END SETTER SECTION ///
@@ -503,7 +548,7 @@ contract Booster{
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) public returns(bool){
         require(!isShutdown,"shutdown");
         PoolInfo storage pool = poolInfo[_pid];
-        require(pool.shutdown == false, "pool is closed");
+        require(pool.shutdown == false, "closed");
 
         //send to proxy to stake
         address lptoken = pool.lptoken;
@@ -511,7 +556,7 @@ contract Booster{
 
         //stake
         address gauge = pool.gauge;
-        require(gauge != address(0),"!gauge setting");
+        require(gauge != address(0),"!gauge");
 
         uint256[] memory rewardBalancesBefore = getPendingRewards(lptoken);
         IStaker(voterProxy).deposit(lptoken, gauge);
@@ -532,17 +577,6 @@ contract Booster{
         }
 
         emit Deposited(_receiver, _pid, _amount);
-        return true;
-    }
-
-    /**
-     * @notice  Deposits all a senders balance to a given gauge (specified by _pid), mints a `DepositToken`
-     *          and subsequently stakes that on BaseRewardPool
-     */
-    function depositAll(uint256 _pid, bool _stake) external returns(bool){
-        address lptoken = poolInfo[_pid].lptoken;
-        uint256 balance = IERC20(lptoken).balanceOf(msg.sender);
-        deposit(_pid,balance,_stake);
         return true;
     }
 
@@ -585,16 +619,6 @@ contract Booster{
      */
     function withdraw(uint256 _pid, uint256 _amount) public returns(bool){
         _withdraw(_pid,_amount,msg.sender,msg.sender);
-        return true;
-    }
-
-    /**
-     * @notice  Withdraw all the senders LP tokens from a given gauge
-     */
-    function withdrawAll(uint256 _pid) public returns(bool){
-        address token = poolInfo[_pid].token;
-        uint256 userBal = IERC20(token).balanceOf(msg.sender);
-        withdraw(_pid, userBal);
         return true;
     }
 
@@ -672,18 +696,17 @@ contract Booster{
      */
     function _earmarkRewards(uint256 _pid) internal {
         PoolInfo storage pool = poolInfo[_pid];
-        require(pool.shutdown == false, "pool is closed");
+        require(pool.shutdown == false, "closed");
 
         //claim crv/wom and bonus tokens
         address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(pool.lptoken, pool.gauge);
         uint256 tLen = tokens.length;
-        uint256[] memory totalPendingRewards = new uint256[](tLen);
-        for (uint256 i = 0; i < poolInfo.length; i++) {
-            if (poolInfo[i].shutdown) {
-                continue;
-            }
-            for (uint256 j = 0; j < tLen; j++) {
-                totalPendingRewards[j] = totalPendingRewards[j].add(lpPendingRewards[poolInfo[i].lptoken][tokens[j]]);
+
+        uint256[] memory balancesBefore = new uint256[](tLen);
+        for (uint256 i = 0; i < tLen; i++) {
+            balancesBefore[i] = IERC20(tokens[i]).balanceOf(address(this)).add(IERC20(tokens[i]).balanceOf(voterProxy));
+            if (tokens[i] == weth) {
+                balancesBefore[i] = balancesBefore[i].add(voterProxy.balance);
             }
         }
 
@@ -691,7 +714,7 @@ contract Booster{
 
         for (uint256 i = 0; i < tLen; i++) {
             IERC20 token = IERC20(tokens[i]);
-            uint256 balance = token.balanceOf(address(this)).sub(totalPendingRewards[i]);
+            uint256 balance = token.balanceOf(address(this)).sub(balancesBefore[i]);
             if (lpPendingRewards[pool.lptoken][tokens[i]] > 0) {
                 balance = balance.add(lpPendingRewards[pool.lptoken][tokens[i]]);
                 lpPendingRewards[pool.lptoken][tokens[i]] = 0;
@@ -702,14 +725,14 @@ contract Booster{
             if (balance == 0) {
                 continue;
             }
-            uint256 dLen = distributionByTokens[address(token)].length;
+            uint256 dLen = _getDistributionByTokens(_pid, address(token)).length;
             require(dLen > 0, "!dLen");
 
             uint256 earmarkIncentiveAmount = balance.mul(earmarkIncentive).div(DENOMINATOR);
             uint256 sentSum = earmarkIncentiveAmount;
 
             for (uint256 j = 0; j < dLen; j++) {
-                TokenDistro memory tDistro = distributionByTokens[address(token)][j];
+                TokenDistro memory tDistro = _getDistributionByTokens(_pid, address(token))[j];
                 if (tDistro.share == 0) {
                    continue;
                 }
@@ -732,6 +755,10 @@ contract Booster{
         }
     }
 
+    function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] memory) {
+        return distributionByTokens[_rewardToken];
+    }
+
     /**
      * @notice Basically a hugely pivotal function.
      *         Responsible for collecting the crv/wom from gauge, and then redistributing to the correct place.
@@ -752,8 +779,12 @@ contract Booster{
         require(msg.sender == rewardContract || msg.sender == crvLockRewards, "!auth");
 
         uint256 mintAmount = _amount;
-        if (mintRatio > 0) {
-            mintAmount = mintAmount.mul(mintRatio).div(DENOMINATOR);
+        uint256 poolMintRatio = customMintRatio[_pid];
+        if (poolMintRatio == 0) {
+            poolMintRatio = mintRatio;
+        }
+        if (poolMintRatio > 0) {
+            mintAmount = mintAmount.mul(poolMintRatio).div(DENOMINATOR);
         }
 
         uint256 penalty;
