@@ -62,6 +62,12 @@ interface IWmxLocker {
     function getReward(address _account) external;
 
     function balanceOf(address _account) external view returns (uint256 amount);
+
+    function getPastVotes(address account, uint256 timestamp) external view returns (uint256 votes);
+}
+
+interface IBribeVoter {
+    function vote(IERC20[] calldata _lpVote, int256[] calldata _deltas) external returns (uint256[][] memory bribeRewards);
 }
 
 interface IExtraRewardsDistributor {
@@ -261,6 +267,7 @@ interface IBooster {
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
     function earmarkRewards(uint256 _pid) external returns(bool);
     function setOwner(address _owner) external;
+    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external;
 }
 
 interface ISwapRouter {
