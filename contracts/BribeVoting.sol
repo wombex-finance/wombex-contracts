@@ -50,6 +50,7 @@ contract BribeVoting {
     }
 
     function execute(address[] memory _lpTokens) public {
+        require(cutTotalVotes >= threshold, "!threshold");
         uint256 len = _lpTokens.length;
         int256[] memory _deltas = new int256[](len);
 
