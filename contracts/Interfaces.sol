@@ -267,7 +267,7 @@ interface IBooster {
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
     function earmarkRewards(uint256 _pid) external returns(bool);
     function setOwner(address _owner) external;
-    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external;
+    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external returns (bytes memory);
 }
 
 interface ISwapRouter {

@@ -657,12 +657,12 @@ contract Booster{
     /**
      * @notice Delegate address votes on gauge weight via VoterProxy
      */
-    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external payable returns(bool) {
+    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external payable returns (bytes memory data) {
         require(msg.sender == voteDelegate, "!auth");
         require(votingMap[_voting], "!voting");
 
-        IStaker(voterProxy).execute{value:_value}(_voting, _value, _data);
-        return true;
+        (, data) = IStaker(voterProxy).execute{value:_value}(_voting, _value, _data);
+        return data;
     }
 
     /**
