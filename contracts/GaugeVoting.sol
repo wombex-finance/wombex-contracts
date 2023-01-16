@@ -16,6 +16,11 @@ contract GaugeVoting is Ownable {
     IWmxLocker public wmxLocker;
     IBooster public booster;
     IBribeVoter public bribeVoter;
+    address public voterProxy;
+    IERC20 public veWom;
+
+    ITokenFactory tokenFactory;
+    IBribesRewardFactory bribeRewardsFactory;
 
     mapping(address => uint256) votedForLpToken;
     mapping(address => uint256) userVotes;
@@ -23,10 +28,9 @@ contract GaugeVoting is Ownable {
     mapping(address => mapping(address => uint256)) userLpVotes;
 
     struct LpTokenData {
-        address stakingToken;
         address rewards;
     }
-    mapping(uint256 => LpTokenData) lpTokenData;
+    mapping(address => LpTokenData) lpTokenData;
 
     enum LpTokenStatus {
         NOT_EXISTS,
@@ -35,6 +39,8 @@ contract GaugeVoting is Ownable {
     }
     mapping(address => LpTokenStatus) lpTokenStatus;
     address[] lpTokensAdded;
+
+    ITokenMinter stakingToken;
 
     event SetEarmarkConfig(uint256 earmarkPeriod);
     event AddLpToken(address lpToken);
@@ -47,6 +53,8 @@ contract GaugeVoting is Ownable {
     ) public {
         wmxLocker = _wmxLocker;
         booster = _booster;
+        voterProxy = _booster.voterProxy();
+        veWom = IERC20(IStaker(voterProxy).veWom);
         bribeVoter = _bribeVoter;
     }
 
@@ -56,8 +64,12 @@ contract GaugeVoting is Ownable {
     }
 
     function setFactories(address _tokenFactory, address _rewardFactory) public onlyOwner {
-        tokenFactory = _tokenFactory;
-        rewardFactory = _rewardFactory;
+        require(tokenFactory == address(0), "!zero");
+        tokenFactory = ITokenFactory(_tokenFactory);
+        bribeRewardsFactory = BribesRewardFactory(_rewardFactory);
+
+        stakingToken = ITokenMinter(tokenFactory.CreateDepositToken(_lpToken));
+
         emit SetEarmarkConfig(_earmarkPeriod);
     }
 
@@ -66,10 +78,9 @@ contract GaugeVoting is Ownable {
         lpTokenStatus[_lpToken] = LpTokenStatus.ACTIVE;
         lpTokensAdded.push(_lpToken);
 
-        address stakingToken = ITokenFactory(tokenFactory).CreateDepositToken(_lpToken);
-        address rewards = IRewardFactory(rewardFactory).CreateCrvRewards(0, stakingToken, _lpToken);
+        address rewards = IRewardFactory(rewardFactory).CreateBribesRewards(stakingToken, _lpToken);
 
-        lpTokenData[_lpToken] = LpTokenData()
+        lpTokenData[_lpToken] = LpTokenData(rewards);
 
         emit AddLpToken(_lpToken);
     }
@@ -81,58 +92,57 @@ contract GaugeVoting is Ownable {
     }
 
     function vote(address[] memory _lpTokens, int256[] memory _deltas) public {
-        require(userVotes[curVotesTimestamp][msg.sender] == 0, "already voted");
-
         uint256 len = _lpTokens.length;
         require(len == _deltas.length, "!len");
         uint256 votes = wmxLocker.getVotes(msg.sender);
         require(votes != 0, "no votes");
 
-        int256 deltaSum = 0;
+        uint256 userLockerVotes = wmxLocker.getVotes(msg.sender) * nftLocker.voteBoost(msg.sender) / 1 ether;
+        int256 lastDelta = 0;
+        uint256 totalVotedByUser = 0;
+
         for (uint256 i = 0; i < len; i++) {
-            address lpToken = _lpTokens[i];
-            uint256 delta = _deltas[i];
-            uint256 totalLpVotes = votedForLpToken[lpToken];
-            deltaSum += delta;
-            if (delta > 0) {
-                userLpVotes[msg.sender][lpToken] += uint256(delta);
-                votedForLpToken[lpToken] = totalLpVotes + uint256(delta);
-            } else {
-                require(userLpVotes[msg.sender][lpToken] >= uint256(-delta), 'voter: vote underflow');
-                userLpVotes[msg.sender][lpToken] -= uint256(-delta);
-                weights[lpToken].voteWeight = totalLpVotes - uint256(-delta);
+            require(i == 0 || _deltas[i] > lastDelta, "< lastDelta");
+            lastDelta = _deltas[i];
+
+            IBribeRewardsPool rewardsPool = IBribeRewardsPool(lpTokenData[lpToken].rewards);
+            if (_deltas[i] < 0) {
+                userVotes[msg.sender] -= uint256(-_deltas[i]);
+                rewardsPool.withdrawAndUnwrapFrom(msg.sender, uint256(_deltas[i]), msg.sender);
+                stakingToken.burn(address(rewardsPool), uint256(_deltas[i]));
+            } else if (_deltas[i] > 0) {
+                userVotes[msg.sender] += uint256(_deltas[i]);
+                ITokenMinter(token).mint(address(this), _amount);
+                IRewards(pool.crvRewards).stakeFor(_receiver, _amount);
             }
-
-            userLpVotes[msg.sender][lpToken] =
-            votedForLpToken[lpToken] += votes * uint256(_deltas[i] / deltaSum);
         }
-        require(deltaSum == votes, "!deltaSum");
 
-        if (userVotes[curVotesTimestamp][msg.sender] == 0) {
-            userVotes[curVotesTimestamp][msg.sender] = votes;
-            totalVotes[curVotesTimestamp] += votes;
-        }
+        require(userVotes[msg.sender] <= userLockerVotes, "votes overflow");
+
+        _execute();
     }
 
-    function execute(address[] memory _lpTokens) public {
-        uint256 cutTotalVotes = totalVotes[curVotesTimestamp];
-        require(cutTotalVotes >= threshold, "!threshold");
-        require(curVotesTimestamp + period < block.timestamp, "!period");
+    function _execute() internal {
+        uint256 totalLpVotes = totalVotes();
+        uint256 veWomTotalSupply = veWom.totalSupply();
+        uint256 ratio = veWomTotalSupply * 1 ether / totalLpVotes;
 
-        uint256 len = _lpTokens.length;
+        uint256 len = lpTokensAdded.length;
         int256[] memory _deltas = new int256[](len);
-
         for (uint256 i = 0; i < len; i++) {
-            address lpToken = _lpTokens[i];
-            _deltas[i] = int256(votedForLpToken[curVotesTimestamp][lpToken] * 1 ether / cutTotalVotes);
+            address lpToken = lpTokensAdded[i];
+            address rewardsPool = lpTokenData[lpToken].rewards;
+            uint256 lpVotes = int256(IERC20(rewardsPool).totalSupply() * ratio);
+            uint256 bribeVotes = bribeVoter.votes(voterProxy, lpToken);
+            _deltas[i] = lpVotes - bribeVotes;
         }
 
         bytes memory rewardsData = booster.voteExecute(
             address(bribeVoter),
             0,
-            abi.encodeWithSelector(IBribeVoter.vote.selector, _lpTokens, _deltas)
+            abi.encodeWithSelector(IBribeVoter.vote.selector, lpTokensAdded, _deltas)
         );
-        //TODO: encode rewards and write to rewardTokens and rewards mapping for distribution
+        //TODO: encode rewards and distribute to rewards contract(queueRewards)
 
         curVotesTimestamp = block.timestamp;
         emit VotingStarted(curVotesTimestamp);
@@ -142,7 +152,8 @@ contract GaugeVoting is Ownable {
         uint256 len = lpTokensAdded.length;
         uint256 sum = 0;
         for (uint256 i = 0; i < len; i++) {
-            sum += votedForLpToken[lpTokensAdded[i]];
+            address lpToken = _lpTokens[i];
+            sum += IERC20(lpTokenData[lpToken].stakingToken).totalSupply();
         }
         return sum;
     }

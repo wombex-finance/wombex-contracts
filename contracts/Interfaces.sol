@@ -70,6 +70,7 @@ interface IWmxLocker {
 
 interface IBribeVoter {
     function vote(IERC20[] calldata _lpVote, int256[] calldata _deltas) external returns (uint256[][] memory bribeRewards);
+    function votes(address _user, address _lpToken) external returns (uint256);
 }
 
 interface IExtraRewardsDistributor {
@@ -85,6 +86,18 @@ interface IWomDepositorWrapper {
         bool,
         address _stakeAddress
     ) external;
+}
+
+interface ITokenFactory{
+    function CreateDepositToken(address) external returns(address);
+}
+
+interface IBribesRewardFactory {
+    function CreateBribesRewards(address _stakingToken, address _lptoken) external returns (address);
+}
+
+interface IBribeRewardsPool {
+    function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) public returns(bool);
 }
 
 interface IRewards{
@@ -120,6 +133,7 @@ interface IStaker{
     function balanceOfPool(address, address) external view returns (uint256);
     function operator() external view returns (address);
     function depositor() external view returns (address);
+    function veWom() external view returns (address);
     function execute(address _to, uint256 _value, bytes calldata _data) external returns (bool, bytes memory);
     function setVote(bytes32 hash, bool valid) external;
     function setDepositor(address _depositor) external;
@@ -263,6 +277,7 @@ interface IMasterWombatV2 {
 }
 
 interface IBooster {
+    function voterProxy() external view returns (address);
     function owner() external view returns (address);
     function poolLength() external view returns (uint256);
     function poolInfo(uint256 _pid) external view returns(address lptoken, address token, address gauge, address crvRewards, bool shutdown);
