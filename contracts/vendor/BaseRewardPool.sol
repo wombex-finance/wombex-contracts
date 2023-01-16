@@ -262,7 +262,8 @@ contract BaseRewardPool {
      * @param _account     Account for which to claim
      * @param _lockCvx     Get the child rewards too?
      */
-    function getReward(address _account, bool _lockCvx) public updateReward(_account) returns(bool){
+    //TODO: claim for specific tokens
+    function getReward(address _account, bool _lockCvx) public virtual updateReward(_account) returns(bool){
         uint256 len = allRewardTokens.length;
         for (uint256 i = 0; i < len; i++) {
             RewardState storage rState = tokenRewards[allRewardTokens[i]];
