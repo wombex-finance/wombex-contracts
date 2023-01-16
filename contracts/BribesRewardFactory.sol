@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.6.12;
 
-import "./interfaces/Interfaces.sol";
-import "./BaseRewardPool4626.sol";
 import "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
 import "./BribesRewardPool.sol";
-
 
 /**
  * @title   BribesRewardFactory
@@ -23,7 +20,6 @@ contract BribesRewardFactory {
 
     /**
      * @param _operator   Contract operator is Booster
-     * @param _crv        CRV/WOM token address
      */
     constructor(address _operator) public {
         operator = _operator;

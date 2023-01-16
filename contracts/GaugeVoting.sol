@@ -41,8 +41,10 @@ contract GaugeVoting is Ownable {
     address[] lpTokensAdded;
 
     ITokenMinter stakingToken;
+    uint256 earmarkPeriod;
 
     event SetEarmarkConfig(uint256 earmarkPeriod);
+    event SetFactories(address tokenFactory, address rewardFactory);
     event AddLpToken(address lpToken);
     event SetLpTokenStatus(address lpToken, LpTokenStatus status);
 
@@ -66,11 +68,11 @@ contract GaugeVoting is Ownable {
     function setFactories(address _tokenFactory, address _rewardFactory) public onlyOwner {
         require(tokenFactory == address(0), "!zero");
         tokenFactory = ITokenFactory(_tokenFactory);
-        bribeRewardsFactory = BribesRewardFactory(_rewardFactory);
+        bribeRewardsFactory = IBribesRewardFactory(_rewardFactory);
 
-        stakingToken = ITokenMinter(tokenFactory.CreateDepositToken(_lpToken));
+        stakingToken = ITokenMinter(tokenFactory.CreateDepositToken(address(wmxLocker)));
 
-        emit SetEarmarkConfig(_earmarkPeriod);
+        emit SetFactories(_tokenFactory, _rewardFactory);
     }
 
     function addLpToken(address _lpToken) public onlyOwner {
@@ -78,7 +80,7 @@ contract GaugeVoting is Ownable {
         lpTokenStatus[_lpToken] = LpTokenStatus.ACTIVE;
         lpTokensAdded.push(_lpToken);
 
-        address rewards = IRewardFactory(rewardFactory).CreateBribesRewards(stakingToken, _lpToken);
+        address rewards = bribeRewardsFactory.CreateBribesRewards(stakingToken, _lpToken);
 
         lpTokenData[_lpToken] = LpTokenData(rewards);
 
@@ -104,16 +106,18 @@ contract GaugeVoting is Ownable {
         for (uint256 i = 0; i < len; i++) {
             require(i == 0 || _deltas[i] > lastDelta, "< lastDelta");
             lastDelta = _deltas[i];
+            address rewards = lpTokenData[_lpTokens[i]].rewards;
 
-            IBribeRewardsPool rewardsPool = IBribeRewardsPool(lpTokenData[lpToken].rewards);
+            IBribeRewardsPool rewardsPool = IBribeRewardsPool(rewards);
+            uint256 amount = _deltas[i] < 0 ? int256(-_deltas[i]) : int256(-_deltas[i]);
             if (_deltas[i] < 0) {
-                userVotes[msg.sender] -= uint256(-_deltas[i]);
-                rewardsPool.withdrawAndUnwrapFrom(msg.sender, uint256(_deltas[i]), msg.sender);
-                stakingToken.burn(address(rewardsPool), uint256(_deltas[i]));
+                userVotes[msg.sender] -= amount;
+                IRewards(rewards).withdrawAndUnwrapFrom(msg.sender, amount, msg.sender);
+                stakingToken.burn(address(rewardsPool), amount);
             } else if (_deltas[i] > 0) {
-                userVotes[msg.sender] += uint256(_deltas[i]);
-                ITokenMinter(token).mint(address(this), _amount);
-                IRewards(pool.crvRewards).stakeFor(_receiver, _amount);
+                userVotes[msg.sender] += amount;
+                stakingToken.mint(address(this), amount);
+                IRewards(rewards).stakeFor(msg.sender, amount);
             }
         }
 
@@ -144,17 +148,9 @@ contract GaugeVoting is Ownable {
         );
         //TODO: encode rewards and distribute to rewards contract(queueRewards)
 
-        curVotesTimestamp = block.timestamp;
-        emit VotingStarted(curVotesTimestamp);
     }
 
     function totalVotes() public returns (uint256) {
-        uint256 len = lpTokensAdded.length;
-        uint256 sum = 0;
-        for (uint256 i = 0; i < len; i++) {
-            address lpToken = _lpTokens[i];
-            sum += IERC20(lpTokenData[lpToken].stakingToken).totalSupply();
-        }
-        return sum;
+        return IERC20(lpTokenData[lpToken].stakingToken).totalSupply();
     }
 }

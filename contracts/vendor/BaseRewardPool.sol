@@ -67,8 +67,8 @@ contract BaseRewardPool {
     address public operator;
     uint256 public pid;
 
-    mapping(address => uint256) private _balances;
-    uint256 private _totalSupply;
+    mapping(address => uint256) internal _balances;
+    uint256 internal _totalSupply;
 
     struct RewardState {
         address token;
@@ -174,10 +174,7 @@ contract BaseRewardPool {
         }
     }
 
-    function stake(uint256 _amount)
-        public
-        returns(bool)
-    {
+    function stake(uint256 _amount) public virtual returns(bool) {
         _processStake(_amount, msg.sender);
 
         stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
@@ -186,16 +183,13 @@ contract BaseRewardPool {
         return true;
     }
 
-    function stakeAll() external returns(bool){
+    function stakeAll() external returns(bool) {
         uint256 balance = stakingToken.balanceOf(msg.sender);
         stake(balance);
         return true;
     }
 
-    function stakeFor(address _for, uint256 _amount)
-        public
-        returns(bool)
-    {
+    function stakeFor(address _for, uint256 _amount) public virtual returns(bool) {
         _processStake(_amount, _for);
 
         //take away from sender
@@ -220,6 +214,7 @@ contract BaseRewardPool {
 
     function withdraw(uint256 amount, bool claim)
         public
+        virtual
         updateReward(msg.sender)
         returns(bool)
     {
@@ -238,11 +233,7 @@ contract BaseRewardPool {
         return true;
     }
 
-    function withdrawAll(bool claim) external{
-        withdraw(_balances[msg.sender],claim);
-    }
-
-    function withdrawAndUnwrap(uint256 amount, bool claim) public returns(bool){
+    function withdrawAndUnwrap(uint256 amount, bool claim) public virtual returns(bool) {
         _withdrawAndUnwrapTo(amount, msg.sender, msg.sender);
         //get rewards too
         if(claim){

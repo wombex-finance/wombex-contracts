@@ -93,7 +93,7 @@ interface ITokenFactory{
 }
 
 interface IBribesRewardFactory {
-    function CreateBribesRewards(address _stakingToken, address _lptoken) external returns (address);
+    function IRewardFactory(address _stakingToken, address _lptoken) external returns (address);
 }
 
 interface IBribeRewardsPool {

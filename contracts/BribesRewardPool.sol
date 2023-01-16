@@ -12,36 +12,27 @@ contract BribesRewardPool is BaseRewardPool4626 {
         IERC20(asset).safeApprove(operator_, type(uint256).max);
     }
 
-    function stake(uint256 _amount) public returns(bool) {
+    function stake(uint256 _amount) public override returns(bool) {
         require(false, "disabled");
         return true;
     }
 
-    function stakeAll() external returns(bool){
-        require(false, "disabled");
-        return true;
-    }
-
-    function stakeFor(address _for, uint256 _amount) public returns(bool) {
+    function stakeFor(address _for, uint256 _amount) public override returns(bool) {
         require(msg.sender == operator, "!operator");
-        return BaseRewardPool4626.stakeFor(_for, _amount);
+        return BaseRewardPool.stakeFor(_for, _amount);
     }
 
-    function withdraw(uint256 amount, bool claim) public returns(bool) {
+    function withdraw(uint256 amount, bool claim) public override returns(bool) {
         require(false, "disabled");
         return true;
     }
 
-    function withdrawAll(bool claim) external{
-        require(false, "disabled");
-    }
-
-    function withdrawAndUnwrap(uint256 amount, bool claim) public returns(bool){
+    function withdrawAndUnwrap(uint256 amount, bool claim) public override returns(bool) {
         require(false, "disabled");
         return true;
     }
 
-    function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) public returns(bool){
+    function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) public returns(bool) {
         require(msg.sender == operator, "!operator");
         _totalSupply = _totalSupply.sub(_amount);
         _balances[_from] = _balances[_from].sub(_amount);
