@@ -1542,7 +1542,7 @@ describe("Booster", () => {
 
             await voterProxy.connect(daoSigner).setLpTokensPid(newMasterWombat.address);
 
-            await boosterEarmark.connect(daoSigner).gaugeMigrate(pids).then(tx => tx.wait());
+            await boosterEarmark.connect(daoSigner).gaugeMigrate(newMasterWombat.address, pids).then(tx => tx.wait());
 
             for (let i = 0; i < mwLen; i++) {
                 const pool = await oldMW.poolInfo(i);
