@@ -55,6 +55,7 @@ interface IStaker{
     function setOwner(address _owner) external;
     function setDepositor(address _depositor) external;
     function lpTokenToPid(address _gauge, address _lptoken) external view returns (uint256);
+    function lpTokenPidSet(address _gauge, address _lptoken) external view returns (bool);
 }
 
 interface IBoosterEarmark {

@@ -17,14 +17,21 @@ import {
     BaseRewardPool__factory,
     RewardFactory,
     RewardFactory__factory,
-    TokenFactory, TokenFactory__factory, WomSwapDepositor, WomSwapDepositor__factory, WmxClaimZap, WmxClaimZap__factory
+    TokenFactory,
+    TokenFactory__factory,
+    WomSwapDepositor,
+    WomSwapDepositor__factory,
+    WmxClaimZap,
+    WmxClaimZap__factory,
+    BoosterEarmark__factory, BoosterEarmark
 } from "../../types/generated";
-import {BN, impersonate, simpleToExactAmount} from "../../test-utils";
+import {BN, impersonate, simpleToExactAmount, ZERO_ADDRESS} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
 import {BoosterMigrator__factory} from "../../types/generated/factories/BoosterMigrator__factory";
 import {DepositorMigrator} from "../../types/generated/DepositorMigrator";
 import {DepositorMigrator__factory} from "../../types/generated/factories/DepositorMigrator__factory";
 import assert from "assert";
+import {expect} from "chai";
 
 const fs = require('fs');
 const ethers = require('ethers');
@@ -88,7 +95,8 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
         console.log('customLockSlot', i, customLockSlots[i].amount.toString());
     }
 
-    await getBoosterValues(booster);
+    const oldBoosterEarmark = BoosterEarmark__factory.connect(bnbConfig.booster, deployer);
+    await getBoosterValues(booster, oldBoosterEarmark);
 
     const newBooster = await deployContract<Booster>(
         hre,
@@ -98,6 +106,17 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
         {},
         true,
     );
+
+    const newBoosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        [newBooster.address, bnbConfig.weth],
+        {},
+        true,
+    );
+
+    await newBooster.setEarmarkDelegate(newBoosterEarmark.address);
 
     const rewardFactory = await deployContract<RewardFactory>(
         hre,
@@ -132,7 +151,8 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
     console.log('boosterMigrator', boosterMigrator.address);
 
     await newBooster.setOwner(boosterMigrator.address).then(tx => tx.wait(1));
-    await newBooster.setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
+    await newBooster.setPoolManager(newBoosterEarmark.address).then(tx => tx.wait(1));
+    await newBoosterEarmark.transferOwnership(boosterMigrator.address).then(tx => tx.wait(1));
 
     console.log('deployContract DepositorMigrator');
     const depositorMigrator = await deployContract<DepositorMigrator>(
@@ -198,7 +218,7 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
     await cvxStakingProxy.connect(daoSigner).setConfig(newDepositorAddress, bnbConfig.cvxLocker).then(tx => tx.wait(1));
     await cvxStakingProxy.setApprovals().then(tx => tx.wait(1));
 
-    const distributionTokenList = await booster.distributionTokenList();
+    const distributionTokenList = await oldBoosterEarmark.distributionTokenList();
     for (let i = 0; i < distributionTokenList.length; i++) {
         await cvxLocker.connect(daoSigner).approveRewardDistributor(distributionTokenList[i], newBoosterAddress, true).then(tx => tx.wait(1)).catch(e => {});
     }
@@ -287,7 +307,7 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
     console.log('crvRewards operator', await crvRewards.operator());
     console.log('crvRewards balance', await crvRewards.balanceOf(busdHolderAddress));
 
-    await newBooster.earmarkRewards(0).then(tx => tx.wait(1));
+    await newBoosterEarmark.earmarkRewards(0).then(tx => tx.wait(1));
 
     console.log('1 wom before', await wom.balanceOf(womHolderAddress));
     console.log('1 wmx before', await wmx.balanceOf(womHolderAddress));
@@ -320,6 +340,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     const cvxLocker = WmxLocker__factory.connect(bnbConfig.cvxLocker, deployer);
     const womDepositor = WomDepositor__factory.connect(bnbConfig.crvDepositor, deployer);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
+    const oldBoosterEarmark = BoosterEarmark__factory.connect(bnbConfig.booster, deployer);
 
     const mwPoolLength = await masterWombat.poolLength().then(pl => parseInt(pl.toString()));
     const userInfoList = [];
@@ -342,7 +363,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     const oldVoterPoxyOwner = await voterProxy.owner();
     console.log('oldVoterPoxyOwner', oldVoterPoxyOwner);
 
-    await getBoosterValues(booster);
+    await getBoosterValues(booster, oldBoosterEarmark);
 
     console.log('const newBooster = await deployContract<Booster>');
     const newBooster = await deployContract<Booster>(
@@ -353,6 +374,17 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         {},
         true,
     );
+
+    const newBoosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        [newBooster.address, bnbConfig.weth],
+        {},
+        true,
+    );
+
+    await newBooster.setEarmarkDelegate(newBoosterEarmark.address);
 
     const rewardFactory = await deployContract<RewardFactory>(
         hre,
@@ -379,7 +411,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         hre,
         new BoosterMigrator__factory(deployer),
         "BoosterMigrator",
-        [booster.address, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth],
+        [booster.address, ZERO_ADDRESS, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth],
         {},
         true,
         waitForBlocks,
@@ -387,7 +419,8 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     console.log('boosterMigrator', boosterMigrator.address);
 
     await newBooster.setOwner(boosterMigrator.address).then(tx => tx.wait(1));
-    await newBooster.setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
+    await newBooster.setPoolManager(newBoosterEarmark.address).then(tx => tx.wait(1));
+    await newBoosterEarmark.transferOwnership(boosterMigrator.address).then(tx => tx.wait(1));
 
     const poolDepositor = await deployContract<PoolDepositor>(
         hre,
@@ -402,6 +435,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     const daoSigner = await impersonate(await booster.owner(), true);
 
+    await booster.connect(daoSigner).setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
     await booster.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
     await voterProxy.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
 
@@ -415,9 +449,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 
-    console.log('migration...');
-
-    const distributionTokenList = await booster.distributionTokenList();
+    const distributionTokenList = await oldBoosterEarmark.distributionTokenList();
     for (let i = 0; i < distributionTokenList.length; i++) {
         await cvxLocker.connect(daoSigner).approveRewardDistributor(distributionTokenList[i], newBooster.address, true).then(tx => tx.wait(1)).catch(e => {});
     }
@@ -463,6 +495,44 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     await busd.connect(busdHolder).approve(poolDepositor.address, await busd.balanceOf(busdHolderAddress));
 
+    const oldMW = MasterWombatV2__factory.connect(await newBooster.poolInfo('0').then(p => p.gauge), deployer);
+    await voterProxy.connect(daoSigner).setLpTokensPid(oldMW.address).then(tx => tx.wait());
+    const lpTokenBalance = {};
+    const mwLen = await oldMW.poolLength().then(len => parseInt(len.toString()));
+    for (let i = 0; i < mwLen; i++) {
+        const pool = await oldMW.poolInfo(i);
+        const pid = await voterProxy.lpTokenToPid(oldMW.address, pool.lpToken).then(p => p.toString());
+        const pidSet = await voterProxy.lpTokenPidSet(oldMW.address, pool.lpToken);
+        lpTokenBalance[pool.lpToken] = {
+            pid,
+            pidSet,
+            balance: await oldMW.userInfo(pid, voterProxy.address).then(u => u.amount.toString()),
+        };
+        // await newMasterWombat.add(pool.allocPoint, pool.lpToken, pool.rewarder).then(tx => tx.wait());
+    }
+    console.log('lpTokenBalance', lpTokenBalance);
+
+    const newMasterWombat = MasterWombatV2__factory.connect('0x489833311676B566f888119c29bd997Dc6C95830', deployer);
+    const newMasterWombatOwner = await impersonate(await newMasterWombat.owner(), true);
+    await voterProxy.connect(daoSigner).setLpTokensPid(newMasterWombat.address).then(tx => tx.wait());
+    await newMasterWombat.connect(newMasterWombatOwner).unpause();
+    const pids = Array.from(Array(await newBooster.poolLength().then(pl => parseInt(pl.toString()))).keys());
+    await newBoosterEarmark.connect(daoSigner).gaugeMigrate(newMasterWombat.address, pids).then(tx => tx.wait());
+
+    for (let i = 0; i < mwLen; i++) {
+        const pool = await oldMW.poolInfo(i);
+        const olBalance = await oldMW.userInfo(await voterProxy.lpTokenToPid(oldMW.address, pool.lpToken), voterProxy.address).then(u => u.amount);
+        expect(olBalance).eq(0);
+        const pid = await voterProxy.lpTokenToPid(newMasterWombat.address, pool.lpToken);
+        const pidSet = await voterProxy.lpTokenPidSet(newMasterWombat.address, pool.lpToken);
+        const newBalance = await newMasterWombat.userInfo(pid, voterProxy.address).then(u => u.amount);
+        const rewardTokens = pidSet ? await voterProxy.getGaugeRewardTokens(pool.lpToken, newMasterWombat.address) : null;
+        console.log('pool.lpToken', pid.toString(), pidSet, pool.lpToken, newBalance.toString(), 'rewardTokens', rewardTokens);
+        if (pidSet) {
+            expect(newBalance).eq(lpTokenBalance[pool.lpToken].balance);
+        }
+    }
+
     console.log('poolDepositor.deposit');
     await poolDepositor.connect(busdHolder).deposit(busdLpAddress, simpleToExactAmount(1), 0, true).then(tx => tx.wait(1));
 
@@ -475,7 +545,13 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     console.log('crvRewards balance', await crvRewards.balanceOf(busdHolderAddress));
 
     for(let i = 0; i < newPoolLength; i++) {
-        await newBooster.earmarkRewards(i).then(tx => tx.wait(1));
+        const res = await newBoosterEarmark.earmarkRewards(i).then(tx => tx.wait(1));
+        console.log('earmarkRewards events', res.events.filter(e => e.event === 'EarmarkRewardsTransfer').map(e => ({
+            pid: e.args.pid.toString(),
+            lpToken: e.args.lpToken,
+            rewardToken: e.args.rewardToken,
+            amount: e.args.amount.toString(),
+        })));
     }
 
     console.log('1 wom before', await wom.balanceOf(womHolderAddress));

@@ -161,6 +161,8 @@ contract MasterWombatV2 {
         uint40 lastRewardTimestamp; // Last timestamp that WOMs distribution occurs.
     }
 
+    address public owner;
+
     // Wom token
     IERC20 public wom;
     // Venom does not seem to hurt the Wombat, it only makes it stronger.
@@ -375,6 +377,10 @@ contract MasterWombatV2 {
                 bonusTokenSymbols[i] = IERC20Metadata(address(bonusTokenAddresses[i])).symbol();
             }
         }
+    }
+
+    function unpause() public {
+
     }
 
     /// @notice Update reward variables for all pools.

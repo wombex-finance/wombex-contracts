@@ -97,8 +97,8 @@ contract BoosterEarmark is Ownable {
         return booster.forceShutdownPool(_pid);
     }
 
-    function gaugeMigrate(uint256[] calldata migratePids) external {
-        return booster.gaugeMigrate(migratePids);
+    function gaugeMigrate(address _newGauge, uint256[] calldata migratePids) external {
+        return booster.gaugeMigrate(_newGauge, migratePids);
     }
 
     /**
