@@ -122,10 +122,7 @@ contract GaugeVoting is Ownable {
         uint256 votes = wmxLocker.getVotes(msg.sender);
         require(votes != 0, "no votes");
 
-        uint256 userLockerVotes = wmxLocker.getVotes(msg.sender);
-        if (address(nftLocker) != address(0)) {
-            userLockerVotes = userLockerVotes * nftLocker.voteBoost(msg.sender) / 1 ether;
-        }
+        uint256 userLockerVotes = userVotes(msg.sender);
         int256 lastDelta = 0;
         uint256 totalVotedByUser = 0;
 
@@ -137,21 +134,29 @@ contract GaugeVoting is Ownable {
             IBribeRewardsPool rewardsPool = IBribeRewardsPool(rewards);
             uint256 amount = _deltas[i] < 0 ? uint256(-_deltas[i]) : uint256(_deltas[i]);
             if (_deltas[i] < 0) {
-                userVotes[msg.sender] -= amount;
-                IRewards(rewards).withdrawAndUnwrapFrom(msg.sender, amount, msg.sender);
-                stakingToken.burn(address(rewardsPool), amount);
+                _rewardPoolWithdraw(rewardsPool, msg.sender, amount, msg.sender);
             } else if (_deltas[i] > 0) {
-                userVotes[msg.sender] += amount;
-                stakingToken.mint(address(this), amount);
-                IRewards(rewards).stakeFor(msg.sender, amount);
+                _rewardPoolDeposit(rewardsPool, msg.sender, amount);
             }
         }
 
         require(userVotes[msg.sender] <= userLockerVotes, "votes overflow");
 
-        if (executeOnVote && stakingToken.totalSupply() >= voteThreshold && isPeriodReady()) {
+        if (executeOnVote && isVoteExecuteReady()) {
             _execute();
         }
+    }
+
+    function _rewardPoolWithdraw(IBribeRewardsPool _rewardsPool, address _user, uint256 _amount, address _claimFor) internal {
+        userVotes[_user] -= _amount;
+        rewardsPool.withdrawAndUnwrapFrom(_user, amount, _claimFor);
+        stakingToken.burn(address(rewardsPool), amount);
+    }
+
+    function _rewardPoolDeposit(IBribeRewardsPool _rewardsPool, address _user, uint256 _amount, address _claimFor) internal {
+        userVotes[_user] += amount;
+        stakingToken.mint(address(this), amount);
+        rewardsPool.stakeFor(msg.sender, amount);
     }
 
     function voteExecute() public {
@@ -198,7 +203,7 @@ contract GaugeVoting is Ownable {
                 );
                 uint256 incentiveAmount = amount * voteIncentive / DENOMINATOR;
                 IERC20(token).safeTransfer(msg.sender, incentiveAmount);
-                IRewards(rewardsPool).queueNewRewards(token, amount - incentiveAmount);
+                IBribeRewardsPool(rewardsPool).queueNewRewards(token, amount - incentiveAmount);
             }
         }
         //TODO: callbacks
@@ -237,6 +242,15 @@ contract GaugeVoting is Ownable {
     }
 
     function onVotesChanged(address _user, address _incentiveRecipient) public {
+        uint256 userLockerVotes = userVotes(_user);
+        if (userLockerVotes >= userVotes[_user]) {
+            return;
+        }
+
+        for (uint256 i = 0; i < len; i++) {
+            IBribeRewardsPool rewardsPool = IBribeRewardsPool(lpTokenRewards[_lpTokens[i]]);
+            _rewardPoolWithdraw(rewardsPool, _user, userVotes[_user], msg.sender);
+        }
         //TODO: check user votes and slash rewards
     }
 
@@ -250,5 +264,12 @@ contract GaugeVoting is Ownable {
 
     function totalVotes() public returns (uint256) {
         return stakingToken.totalSupply();
+    }
+
+    function userVotes(address _user) public returns (uint256 userLockerVotes) {
+        userLockerVotes = wmxLocker.getVotes(msg.sender);
+        if (address(nftLocker) != address(0)) {
+            userLockerVotes = userLockerVotes * nftLocker.voteBoost(msg.sender) / 1 ether;
+        }
     }
 }

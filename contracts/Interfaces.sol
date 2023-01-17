@@ -101,11 +101,6 @@ interface IBribesRewardFactory {
     function IRewardFactory(address _stakingToken, address _lptoken) external returns (address);
 }
 
-interface IBribeRewardsPool {
-    function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) public returns(bool);
-    function updateBribesConfig(bool _callOperatorOnGetReward) external;
-}
-
 interface IRewards{
     function stake(address, uint256) external;
     function stakeFor(address, uint256) external;
@@ -120,6 +115,11 @@ interface IRewards{
     function stakingToken() external view returns (address);
     function rewardToken() external view returns(address);
     function earned(address account) external view returns (uint256);
+}
+
+interface IBribeRewardsPool is IRewards {
+    function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) public returns(bool);
+    function updateBribesConfig(bool _callOperatorOnGetReward) external;
 }
 
 interface ITokenMinter{
