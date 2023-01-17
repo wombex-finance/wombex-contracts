@@ -46,6 +46,7 @@ contract Booster{
     uint256 public minMintRatio;
     uint256 public maxMintRatio;
     uint256 public mintRatio;
+    bool public paused;
 
     mapping(uint256 => uint256) public customMintRatio;
 
@@ -85,6 +86,7 @@ contract Booster{
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
     event MintRatioUpdated(uint256 mintRatio);
+    event SetPaused(bool paused);
     event CustomMintRatioUpdated(uint256 indexed pid, uint256 mintRatio);
     event SetEarmarkOnDeposit(bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
@@ -292,6 +294,15 @@ contract Booster{
     }
 
     /**
+     * @notice Change mint ratio in boundaries
+     */
+    function setPaused(bool _paused) external {
+        require(msg.sender == owner, "!auth");
+        paused = _paused;
+        emit SetPaused(_paused);
+    }
+
+    /**
      * @notice Change mint ratio for pool
      */
     function setCustomMintRatioMultiple(uint256[] memory _pids, uint256[] memory _mintRatios) external {
@@ -460,6 +471,7 @@ contract Booster{
      */
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) public returns(bool){
         require(!isShutdown,"shutdown");
+        require(!paused, "paused");
         PoolInfo storage pool = poolInfo[_pid];
         require(pool.shutdown == false, "closed");
 
@@ -500,6 +512,7 @@ contract Booster{
      *          3. Transfer out the LP tokens
      */
     function _withdraw(uint256 _pid, uint256 _amount, address _from, address _to) internal {
+        require(!paused, "paused");
         PoolInfo storage pool = poolInfo[_pid];
         address lptoken = pool.lptoken;
         address gauge = pool.gauge;
@@ -629,6 +642,7 @@ contract Booster{
         uint256[] memory _transferAmount,
         bool[] memory _callQueue
     ) external {
+        require(!paused, "paused");
         require(earmarkDelegate == msg.sender, "!auth");
 
         uint256 tLen = _transferTo.length;
@@ -677,6 +691,7 @@ contract Booster{
      * @dev    Goes off and mints a relative amount of CVX/WMX based on the distribution schedule.
      */
     function rewardClaimed(uint256 _pid, address _address, uint256 _amount, bool _lock) external returns(bool){
+        require(!paused, "paused");
         address rewardContract = poolInfo[_pid].crvRewards;
         require(msg.sender == rewardContract || msg.sender == crvLockRewards, "!auth");
 

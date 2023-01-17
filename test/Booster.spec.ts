@@ -232,11 +232,28 @@ describe("Booster", () => {
             expect(queuedRewardsAfter).eq(0);
         });
 
+        it("@method setPaused()", async () => {
+            const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
+
+            await increaseTime(60 * 60 * 12);
+            await boosterEarmark.earmarkRewards(0).then(tx => tx.wait());
+            await expect(booster.setPaused(true)).to.be.revertedWith("!auth");
+            await booster.connect(daoSigner).setPaused(true).then(tx => tx.wait());
+
+            await increaseTime(60 * 60 * 12);
+
+            await expect(boosterEarmark.earmarkRewards(0)).to.be.revertedWith("paused");
+            await expect(booster.connect(bob).deposit(0, simpleToExactAmount(1), true)).to.be.revertedWith("paused");
+            await expect(crvRewards["getReward(address,bool)"](bobAddress, false)).to.be.revertedWith("paused");
+            await expect(crvRewards.withdraw(simpleToExactAmount(1), true)).to.be.revertedWith("paused");
+            await booster.connect(daoSigner).setPaused(false).then(tx => tx.wait());
+        });
+
         it("@method BaseRewardPool.getReward with lock ", async () => {
             expect(await booster.extraRewardsDist()).eq(contracts.extraRewardsDistributor.address);
             expect(await booster.cvxLocker()).eq(contracts.cvxLocker.address);
 
-            await increaseTime(60 * 60 * 24 * 6);
+            await increaseTime(60 * 60 * 24 * 5);
 
             await boosterEarmark.earmarkRewards(0).then(tx => tx.wait());
 
