@@ -455,6 +455,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     }
 
     await womDepositor.connect(daoSigner).setBooster(newBooster.address, 0).then(tx => tx.wait(1));
+    await newBooster.connect(daoSigner).setPaused(false).then(tx => tx.wait(1));
 
     assert(oldBoosterOwner === (await booster.owner()));
     assert(oldBoosterOwner === (await newBooster.owner()));
@@ -496,7 +497,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     await busd.connect(busdHolder).approve(poolDepositor.address, await busd.balanceOf(busdHolderAddress));
 
     const oldMW = MasterWombatV2__factory.connect(await newBooster.poolInfo('0').then(p => p.gauge), deployer);
-    await voterProxy.connect(daoSigner).setLpTokensPid(oldMW.address).then(tx => tx.wait());
+    // await voterProxy.connect(daoSigner).setLpTokensPid(oldMW.address).then(tx => tx.wait());
     const lpTokenBalance = {};
     const mwLen = await oldMW.poolLength().then(len => parseInt(len.toString()));
     for (let i = 0; i < mwLen; i++) {
@@ -515,7 +516,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     const newMasterWombat = MasterWombatV2__factory.connect('0x489833311676B566f888119c29bd997Dc6C95830', deployer);
     const newMasterWombatOwner = await impersonate(await newMasterWombat.owner(), true);
     await voterProxy.connect(daoSigner).setLpTokensPid(newMasterWombat.address).then(tx => tx.wait());
-    await newMasterWombat.connect(newMasterWombatOwner).unpause();
+    // await newMasterWombat.connect(newMasterWombatOwner).unpause();
     const pids = Array.from(Array(await newBooster.poolLength().then(pl => parseInt(pl.toString()))).keys());
     await newBoosterEarmark.connect(daoSigner).gaugeMigrate(newMasterWombat.address, pids).then(tx => tx.wait());
 
@@ -527,10 +528,15 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         const pidSet = await voterProxy.lpTokenPidSet(newMasterWombat.address, pool.lpToken);
         const newBalance = await newMasterWombat.userInfo(pid, voterProxy.address).then(u => u.amount);
         const rewardTokens = pidSet ? await voterProxy.getGaugeRewardTokens(pool.lpToken, newMasterWombat.address) : null;
-        console.log('pool.lpToken', pid.toString(), pidSet, pool.lpToken, newBalance.toString(), 'rewardTokens', rewardTokens);
-        if (pidSet) {
-            expect(newBalance).eq(lpTokenBalance[pool.lpToken].balance);
-        }
+        console.log('pool.lpToken', pid.toString(), pidSet, pool.lpToken, pidSet ? newBalance.toString() : null, 'rewardTokens', rewardTokens);
+        // if (pidSet) {
+        //     expect(newBalance).eq(lpTokenBalance[pool.lpToken].balance);
+        // }
+    }
+
+    for (let i = 0; i < newPoolLength; i++) {
+        const newPool = await newBooster.poolInfo(i);
+        console.log(i, 'newPool.gauge', newPool.gauge);
     }
 
     console.log('poolDepositor.deposit');

@@ -1119,6 +1119,12 @@ describe("Booster", () => {
 
             await newBoosterContract.connect(daoSigner).setPaused(false).then(tx => tx.wait(1));
 
+            await expect(boosterEarmark.connect(alice).setBoosterPoolManager(aliceAddress)).to.revertedWith("Ownable: caller is not the owner");
+            await boosterEarmark.connect(daoSigner).setBoosterPoolManager(aliceAddress).then(tx => tx.wait());
+            expect(await newBoosterContract.poolManager()).to.equal(aliceAddress);
+            await newBoosterContract.connect(alice).setPoolManager(boosterEarmark.address).then(tx => tx.wait());
+            expect(await newBoosterContract.poolManager()).to.equal(boosterEarmark.address);
+
             await newBoosterContract.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
             expect(await newBoosterContract.owner()).to.equal(boosterMigrator.address);
             await expect(boosterMigrator.callContract(newBoosterContract.address, newBoosterContract.interface.encodeFunctionData('setOwner', [await daoSigner.getAddress()])).then(tx => tx.wait(1))).to.be.revertedWith("!auth");
@@ -1545,6 +1551,7 @@ describe("Booster", () => {
 
             await voterProxy.connect(daoSigner).setLpTokensPid(newMasterWombat.address);
 
+            await expect(boosterEarmark.gaugeMigrate(newMasterWombat.address, pids)).to.revertedWith("Ownable: caller is not the owner");
             await boosterEarmark.connect(daoSigner).gaugeMigrate(newMasterWombat.address, pids).then(tx => tx.wait());
 
             for (let i = 0; i < mwLen; i++) {
