@@ -1108,6 +1108,7 @@ describe("Booster", () => {
             await cvxLocker.connect(daoSigner).approveRewardDistributor(underlying.address, newBooster, true);
             await cvxLocker.connect(daoSigner).approveRewardDistributor(mocks.weth.address, newBooster, true);
 
+            expect(await newBoosterContract.paused()).to.equal(true);
             expect(await newBoosterContract.owner()).to.equal(await daoSigner.getAddress());
             expect(await newBoosterContract.poolLength()).to.equal(poolLength);
             expect(await newBoosterContract.poolLength()).to.lt(await booster.poolLength());
@@ -1115,6 +1116,8 @@ describe("Booster", () => {
             expect(await newBoosterContract.maxMintRatio()).to.equal(15000);
             expect(await crvRewards.operator()).eq(newBooster);
             expect(await depositToken.operator()).eq(newBooster);
+
+            await newBoosterContract.connect(daoSigner).setPaused(false).then(tx => tx.wait(1));
 
             await newBoosterContract.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
             expect(await newBoosterContract.owner()).to.equal(boosterMigrator.address);
