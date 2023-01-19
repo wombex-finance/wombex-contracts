@@ -60,8 +60,8 @@ contract PoolDepositor is Ownable {
         uint256 poolLength = IBooster(booster).poolLength();
 
         for (uint256 i = 0; i < poolLength; i++) {
-            (address lptoken, , , , ) = IBooster(booster).poolInfo(i);
-            lpTokenToPid[lptoken] = i;
+            IBooster.PoolInfo memory p = IBooster(booster).poolInfo(i);
+            lpTokenToPid[p.lptoken] = i;
         }
     }
 
@@ -100,9 +100,9 @@ contract PoolDepositor is Ownable {
 
     function withdraw(address _lptoken, uint256 _amount, uint256 _minOut, address _recipient) public {
         address pool = IAsset(_lptoken).pool();
-        (, , , address crvRewards, ) = IBooster(booster).poolInfo(lpTokenToPid[_lptoken]);
+        IBooster.PoolInfo memory p = IBooster(booster).poolInfo(lpTokenToPid[_lptoken]);
 
-        IRewards(crvRewards).withdraw(_amount, address(this), msg.sender);
+        IRewards(p.crvRewards).withdraw(_amount, address(this), msg.sender);
 
         address underlying = IAsset(_lptoken).underlyingToken();
         IPool(pool).withdraw(underlying, _amount, _minOut, _recipient, block.timestamp + 1);

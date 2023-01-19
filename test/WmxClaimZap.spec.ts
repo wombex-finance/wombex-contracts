@@ -93,7 +93,7 @@ describe("WmxClaimZap", () => {
 
         await increaseTime(ONE_WEEK.mul("4"));
 
-        await contracts.booster.earmarkRewards(0);
+        await contracts.boosterEarmark.earmarkRewards(0);
 
         await contracts.extraRewardsDistributor.modifyWhitelist(await deployer.getAddress(), true).then(tx => tx.wait(1));
         await contracts.cvx.approve(contracts.extraRewardsDistributor.address, ethers.utils.parseEther("1000"));
@@ -131,7 +131,7 @@ describe("WmxClaimZap", () => {
 
         await increaseTime(ONE_WEEK.mul("4"));
 
-        await contracts.booster.earmarkRewards(0);
+        await contracts.boosterEarmark.earmarkRewards(0);
         option = 1 + 16 + 8 + 128;
         await contracts.claimZap
             .connect(alice)
@@ -148,7 +148,7 @@ describe("WmxClaimZap", () => {
         await mocks.lptoken.connect(alice).approve(contracts.booster.address, amount);
         await contracts.booster.connect(alice).deposit(0, amount, stake);
 
-        await contracts.booster.earmarkRewards(0);
+        await contracts.boosterEarmark.earmarkRewards(0);
         const pool = await contracts.booster.poolInfo(0);
         const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, deployer);
         await increaseTime(ONE_WEEK.mul("2"));
@@ -173,7 +173,7 @@ describe("WmxClaimZap", () => {
         await mocks.lptoken.connect(alice).approve(contracts.booster.address, amount);
         await contracts.booster.connect(alice).deposit(0, amount, stake);
 
-        await contracts.booster.earmarkRewards(0);
+        await contracts.boosterEarmark.earmarkRewards(0);
         const pool = await contracts.booster.poolInfo(0);
         const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, deployer);
         await increaseTime(ONE_WEEK.mul("2"));
