@@ -67,6 +67,7 @@ contract BoosterEarmark is Ownable {
      * @notice Call setPoolManager on booster
      */
     function setBoosterPoolManager(address _poolManager) external onlyOwner {
+        require(_poolManager != address(0), "zero");
         booster.setPoolManager(_poolManager);
         emit SetPoolManager(_poolManager);
     }
@@ -84,6 +85,7 @@ contract BoosterEarmark is Ownable {
      * @notice Call addCreatedPool on booster
      */
     function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) external onlyOwner returns (uint256) {
+        require(_lptoken != address(0) && _gauge != address(0) && _token != address(0) && _crvRewards != address(0), "zero");
         uint256 pid = booster.addCreatedPool(_lptoken, _gauge, _token, _crvRewards);
         approvePoolDistributionTokens(pid);
         return pid;
@@ -98,6 +100,7 @@ contract BoosterEarmark is Ownable {
     }
 
     function gaugeMigrate(address _newGauge, uint256[] calldata migratePids) external onlyOwner {
+        require(_newGauge != address(0), "zero");
         return booster.gaugeMigrate(_newGauge, migratePids);
     }
 
