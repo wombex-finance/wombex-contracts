@@ -5,7 +5,7 @@
     "scripts": {
         "clean": "shx rm -rf ./artifacts ./cache ./coverage ./types/generated ./coverage.json",
         "reset": "yarn clean && yarn compile",
-        "compile": "yarn compile:cvx && yarn compile:aura",
+        "compile": "yarn compile:cvx && yarn compile:aura && yarn run hardhat size-contracts",
         "compile:aura": "yarn hardhat compile --config hardhat.config.ts",
         "compile:cvx": "yarn hardhat compile --config hardhat-cvx.config.ts",
         "compile:ts": "npx tsc",
