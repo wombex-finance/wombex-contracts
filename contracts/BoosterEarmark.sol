@@ -233,7 +233,8 @@ contract BoosterEarmark is Ownable {
             if (s.balance == 0) {
                 continue;
             }
-            s.dLen = _getDistributionByTokens(_pid, address(s.token)).length;
+            TokenDistro[] storage tDistros = _getDistributionByTokens(_pid, address(s.token));
+            s.dLen = tDistros.length;
             require(s.dLen > 0, "!dLen");
 
             s.earmarkIncentiveAmount = s.balance * earmarkIncentive / DENOMINATOR;
@@ -245,7 +246,7 @@ contract BoosterEarmark is Ownable {
             bool[] memory _callQueue = new bool[](s.totalDLen);
 
             for (uint256 j = 0; j < s.dLen; j++) {
-                TokenDistro memory tDistro = _getDistributionByTokens(_pid, address(s.token))[j];
+                TokenDistro memory tDistro = tDistros[j];
                 if (tDistro.share == 0) {
                     continue;
                 }
@@ -276,7 +277,7 @@ contract BoosterEarmark is Ownable {
         }
     }
 
-    function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] memory) {
+    function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] storage) {
         if (customDistributionByTokens[_pid][_rewardToken].length > 0) {
             return customDistributionByTokens[_pid][_rewardToken];
         }
