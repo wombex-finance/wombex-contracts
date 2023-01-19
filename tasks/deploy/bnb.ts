@@ -1,7 +1,7 @@
 import {task} from "hardhat/config";
-import {HardhatRuntimeEnvironment, TaskArguments} from "hardhat/types";
+import {TaskArguments} from "hardhat/types";
 import {getSigner} from "../utils";
-import {deployContract, logContracts, waitForTx} from "./../utils/deploy-utils";
+import {deployContract} from "./../utils/deploy-utils";
 import {deployFirstStage} from "../../scripts/deploySystem";
 import {
     VoterProxy__factory,
@@ -34,24 +34,22 @@ import {
     PoolDepositor,
     PoolDepositor__factory,
     Asset__factory,
-    WomSwapDepositor,
-    WomSwapDepositor__factory,
-    LpVestedEscrow__factory,
-    LpVestedEscrow,
+    WomSwapDepositor, WomSwapDepositor__factory,
+    WomStakingProxy, WomStakingProxy__factory,
+    LpVestedEscrow__factory, LpVestedEscrow,
+    LensUser, LensUser__factory,
     BoosterEarmark,
     BoosterEarmark__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
-    getAccountBalanceProof, impersonate, ONE_DAY,
-    ONE_WEEK,
+    getAccountBalanceProof,
+    ONE_DAY,
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
-import {LensUser} from "../../types/generated/LensUser";
-import {LensUser__factory} from "../../types/generated/factories/LensUser__factory";
 
-const {approvePoolDepositor, getBoosterValues} = require('../helpers');
+const {approvePoolDepositor} = require('../helpers');
 
 const fs = require('fs');
 const ethers = require('ethers');
@@ -623,3 +621,33 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     console.log('lens', lens.address);
 });
 
+task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const wmxStakingProxyArgs = [
+        bnbConfig.wom,
+        bnbConfig.cvx,
+        bnbConfig.cvxCrv,
+        bnbConfig.crvDepositor,
+        bnbConfig.cvxLocker,
+    ];
+    fs.writeFileSync('./args/wmxStakingProxy.js', 'module.exports = ' + JSON.stringify(wmxStakingProxyArgs));
+    const wmxStakingProxy = await deployContract<WomStakingProxy>(
+        hre,
+        new WomStakingProxy__factory(deployer),
+        "WomStakingProxy",
+        wmxStakingProxyArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxStakingProxy', wmxStakingProxy.address);
+    await wmxStakingProxy.setSwapConfig(bnbConfig.womSwapDepositorAddress, 3000).then(tx => tx.wait(1));
+    await wmxStakingProxy.transferOwnership(treasuryMultisig).then(tx => tx.wait(1));
+});

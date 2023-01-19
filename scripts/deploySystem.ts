@@ -548,9 +548,6 @@ async function deployFirstStage(
     tx = await wmxLocker.setApprovals();
     await waitForTx(tx, debug, waitForBlocks);
 
-    tx = await wmxStakingProxy.setApprovals();
-    await waitForTx(tx, debug, waitForBlocks);
-
     console.log('voterProxy.setOperator')
     tx = await voterProxy.setOperator(booster.address);
     await waitForTx(tx, debug, waitForBlocks);

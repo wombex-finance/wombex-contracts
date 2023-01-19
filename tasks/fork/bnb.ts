@@ -216,7 +216,6 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
     }
 
     await cvxStakingProxy.connect(daoSigner).setConfig(newDepositorAddress, bnbConfig.cvxLocker).then(tx => tx.wait(1));
-    await cvxStakingProxy.setApprovals().then(tx => tx.wait(1));
 
     const distributionTokenList = await oldBoosterEarmark.distributionTokenList();
     for (let i = 0; i < distributionTokenList.length; i++) {
