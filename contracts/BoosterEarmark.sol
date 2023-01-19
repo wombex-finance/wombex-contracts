@@ -178,7 +178,7 @@ contract BoosterEarmark is Ownable {
         uint256 totalShares = 0;
 
         uint256 len = _distros.length;
-        require(len == _shares.length && len == _callQueue.length, "!length");
+        require(len > 0 && len == _shares.length && len == _callQueue.length, "!length");
 
         for (uint256 i = 0; i < len; i++) {
             require(_distros[i] != address(0), "!distro");
