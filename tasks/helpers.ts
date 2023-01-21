@@ -14,7 +14,12 @@ async function approvePoolDepositor(masterWombat, poolDepositor, signer) {
         if (!tokensByPool[pool]) {
             tokensByPool[pool] = [];
         }
-        tokensByPool[pool] =  tokensByPool[pool].concat([underlying, lpToken]);
+        const lpContract = IERC20__factory.connect(lpToken, masterWombat.provider);
+        const allowance = await lpContract.allowance(poolDepositor.address, pool).then(r => r.toString());
+
+        if (allowance === '0') {
+            tokensByPool[pool] = tokensByPool[pool].concat([underlying, lpToken]);
+        }
     }
 
     const pools = []
@@ -28,6 +33,9 @@ async function approvePoolDepositor(masterWombat, poolDepositor, signer) {
     const booster = await poolDepositor.booster();
 
     for (let i = 0; i < pools.length; i++) {
+        if (!pools[i].tokens.length) {
+            continue;
+        }
         await new Promise((resolve) => setTimeout(resolve, 30e3))
         await poolDepositor.approveSpendingByPool(pools[i].tokens, pools[i].address);
         await new Promise((resolve) => setTimeout(resolve, 30e3))

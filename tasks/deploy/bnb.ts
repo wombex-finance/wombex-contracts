@@ -27,8 +27,6 @@ import {
     TokenFactory__factory,
     BoosterMigrator,
     BoosterMigrator__factory,
-    DepositorMigrator,
-    DepositorMigrator__factory,
     ExtraRewardsDistributorProxy,
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
@@ -37,7 +35,7 @@ import {
     WomSwapDepositor, WomSwapDepositor__factory,
     WomStakingProxy, WomStakingProxy__factory,
     LpVestedEscrow__factory, LpVestedEscrow,
-    LensUser, LensUser__factory,
+    // LensUser, LensUser__factory,
     BoosterEarmark,
     BoosterEarmark__factory
 } from "../../types/generated";
@@ -459,32 +457,32 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
 
     // const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
 
-    // const newBoosterArgs = [bnbConfig.voterProxy, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 1500, 15000];
-    // fs.writeFileSync('./args/booster.js', 'module.exports = ' + JSON.stringify(newBoosterArgs));
+    const newBoosterArgs = [bnbConfig.voterProxy, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 1500, 15000];
+    fs.writeFileSync('./args/booster.js', 'module.exports = ' + JSON.stringify(newBoosterArgs));
 
-    // const newBooster = await deployContract<Booster>(
-    //     hre,
-    //     new Booster__factory(deployer),
-    //     "Booster",
-    //     newBoosterArgs,
-    //     {},
-    //     true,
-    // );
-    //
-    // const newBoosterEarmarkArgs = [newBooster.address, bnbConfig.weth];
-    // fs.writeFileSync('./args/boosterEarmark.js', 'module.exports = ' + JSON.stringify(newBoosterEarmarkArgs));
-    // const newBoosterEarmark = await deployContract<BoosterEarmark>(
-    //     hre,
-    //     new BoosterEarmark__factory(deployer),
-    //     "BoosterEarmark",
-    //     newBoosterEarmarkArgs,
-    //     {},
-    //     true,
-    // );
-    //
-    // await newBooster.setEarmarkDelegate(newBoosterEarmark.address).then(tx => tx.wait());
-    const newBooster = Booster__factory.connect('0x561050ffb188420d2605714f84eda714da58da69', deployer);
-    const newBoosterEarmark = BoosterEarmark__factory.connect('0x9bdcb245234b4d0dfa998d0f8da72e5ccd0f9df4', deployer);
+    const newBooster = await deployContract<Booster>(
+        hre,
+        new Booster__factory(deployer),
+        "Booster",
+        newBoosterArgs,
+        {},
+        true,
+    );
+
+    const newBoosterEarmarkArgs = [newBooster.address, bnbConfig.weth];
+    fs.writeFileSync('./args/boosterEarmark.js', 'module.exports = ' + JSON.stringify(newBoosterEarmarkArgs));
+    const newBoosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        newBoosterEarmarkArgs,
+        {},
+        true,
+    );
+
+    await newBooster.setEarmarkDelegate(newBoosterEarmark.address).then(tx => tx.wait());
+    // const newBooster = Booster__factory.connect('0x561050ffb188420d2605714f84eda714da58da69', deployer);
+    // const newBoosterEarmark = BoosterEarmark__factory.connect('0x9bdcb245234b4d0dfa998d0f8da72e5ccd0f9df4', deployer);
 
     const rewardFactoryArgs = [newBooster.address, bnbConfig.wom];
     fs.writeFileSync('./args/rewardFactory.js', 'module.exports = ' + JSON.stringify(rewardFactoryArgs));
@@ -538,7 +536,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         {},
         true,
         waitForBlocks,
-    );//booster: 0x561050FFB188420D2605714F84EdA714DA58da69 //boosterEarmark: 0x9BdcB245234B4D0dfA998d0f8dA72E5Ccd0F9Df4 //boosterMigrator: 0x9C8156b1BF4105C4Ce500e4326C088C0F431fD2b
+    );
     console.log('poolDepositor', poolDepositor.address);
 
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
@@ -580,6 +578,7 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
 
     const poolDepositorArgs = [bnbConfig.weth, bnbConfig.booster, bnbConfig.masterWombat];
     fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
+    // const poolDepositor = PoolDepositor__factory.connect(bnbConfig.poolDepositor, deployer);
     const poolDepositor = await deployContract<PoolDepositor>(
         hre,
         new PoolDepositor__factory(deployer),
@@ -609,16 +608,16 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     ];
     fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
 
-    const lens = await deployContract<LensUser>(
-        hre,
-        new LensUser__factory(deployer),
-        "Lens",
-        args,
-        {},
-        true,
-        waitForBlocks,
-    );
-    console.log('lens', lens.address);
+    // const lens = await deployContract<LensUser>(
+    //     hre,
+    //     new LensUser__factory(deployer),
+    //     "Lens",
+    //     args,
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // console.log('lens', lens.address);
 });
 
 task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
