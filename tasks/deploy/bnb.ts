@@ -574,8 +574,7 @@ task("wmx-reward-pool-factory:bnb").setAction(async function (taskArguments: Tas
         bnbConfig.cvx,
         daoMultisig,
         bnbConfig.cvxLocker,
-        bnbConfig.penaltyForwarder,
-        [bnbConfig.crvDepositor, bnbConfig.womSwapDepositorAddress]
+        [bnbConfig.crvDepositor]
     ];
     fs.writeFileSync('./args/wmxRewardPoolFactory.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolFactoryArgs));
     const wmxRewardPoolFactory = await deployContract<WmxRewardPoolFactory>(
