@@ -15,11 +15,12 @@ contract WmxRewardPoolV2 is WmxRewardPool {
         address _rewardManager,
         address _wmxLocker,
         address _penaltyForwarder,
+        uint256 _penaltyShare,
         uint256 _startDelay,
         uint256 _duration,
         uint256 _maxCap,
         address[] memory _depositors
-    ) WmxRewardPool(_stakingToken, _rewardToken, _rewardManager, _wmxLocker, _penaltyForwarder, _startDelay) public {
+    ) WmxRewardPool(_stakingToken, _rewardToken, _rewardManager, _wmxLocker, _penaltyForwarder, _penaltyShare, _startDelay) public {
         duration = _duration;
         maxCap = _maxCap;
         for (uint256 i = 0; i < _depositors.length; i++) {

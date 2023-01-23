@@ -20,7 +20,7 @@ import { BN, simpleToExactAmount } from "../test-utils/math";
 import { assertBNClose, assertBNClosePercent } from "../test-utils/assertions";
 import {deployContract} from "../tasks/utils";
 
-describe.only("WmxRewardPool", () => {
+describe("WmxRewardPool", () => {
     let accounts: Signer[];
 
     let contracts: SystemDeployed;
@@ -248,6 +248,7 @@ describe.only("WmxRewardPool", () => {
                 await deployer.getAddress(),
                 contracts.cvxLocker.address,
                 contracts.penaltyForwarder.address,
+                3000,
                 ONE_WEEK,
             );
             await expect(rewardPool.connect(deployer).initialiseRewards()).to.be.revertedWith("!balance");
@@ -266,28 +267,30 @@ describe.only("WmxRewardPool", () => {
                 hre,
                 new WmxRewardPoolFactory__factory(deployer),
                 "WmxRewardPoolFactory",
-                [cvxCrv.address, contracts.cvx.address, multisigs.treasuryMultisig, contracts.cvxLocker.address, contracts.penaltyForwarder.address, [contracts.crvDepositor.address]],
+                [cvxCrv.address, contracts.cvx.address, multisigs.treasuryMultisig, contracts.cvxLocker.address, [contracts.crvDepositor.address]],
                 {},
                 true,
                 1,
             );
         });
         it("wrong creation by wmxRewardPoolFactory", async () => {
-            await expect(wmxRewardPoolFactory.connect(bob).CreateWmxRewardPoolV2(0, ONE_WEEK, simpleToExactAmount(100))).to.be.revertedWith("Ownable: caller is not the owner");
-            await expect(wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.mul(2), ONE_WEEK, simpleToExactAmount(100))).to.be.revertedWith("!delay");
+            await expect(wmxRewardPoolFactory.connect(bob).CreateWmxRewardPoolV2(0, ONE_WEEK, simpleToExactAmount(100), ZERO_ADDRESS, 0)).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.mul(2), ONE_WEEK, simpleToExactAmount(100), await treasurySigner.getAddress(), 0)).to.be.revertedWith("!delay");
+            await expect(wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.mul(2), ONE_WEEK, simpleToExactAmount(100), ZERO_ADDRESS, 0)).to.be.revertedWith("!forwarder");
         });
         it("allows admin to update wmxLocker address", async () => {
             expect(await wmxRewardPoolFactory.depositors(0)).eq(contracts.crvDepositor.address);
 
             expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools.length)).eq(0);
 
-            const tx = await wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.div(2), ONE_WEEK, simpleToExactAmount(100)).then(tx => tx.wait(1));
+            const tx = await wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.div(2), ONE_WEEK, simpleToExactAmount(100), await treasurySigner.getAddress(), 4000).then(tx => tx.wait(1));
             const [RewardPoolCreated] = tx.events.filter(e => e.event === 'RewardPoolCreated');
             wmxRewardPoolV2 = WmxRewardPoolV2__factory.connect(RewardPoolCreated.args.rewardPool, deployer);
 
             expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools.length)).eq(1);
             expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools[0])).eq(RewardPoolCreated.args.rewardPool);
 
+            expect(await wmxRewardPoolV2.penaltyShare()).eq(4000);
             expect(await wmxRewardPoolV2.duration()).eq(ONE_WEEK);
             expect(await wmxRewardPoolV2.maxCap()).eq(simpleToExactAmount(100));
             expect(await wmxRewardPoolV2.canStake(contracts.crvDepositor.address)).eq(true);
@@ -344,7 +347,8 @@ describe.only("WmxRewardPool", () => {
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK.mul(2),
                 ),
                 "Wrong startDelay >= 2 weeks",
@@ -355,7 +359,8 @@ describe.only("WmxRewardPool", () => {
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _stakingToken",
@@ -366,7 +371,8 @@ describe.only("WmxRewardPool", () => {
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _stakingToken",
@@ -377,7 +383,8 @@ describe.only("WmxRewardPool", () => {
                     contracts.cvx.address,
                     ZERO_ADDRESS,
                     contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _rewardManager",
@@ -388,7 +395,8 @@ describe.only("WmxRewardPool", () => {
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     ZERO_ADDRESS,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _wmxLocker",
@@ -400,6 +408,7 @@ describe.only("WmxRewardPool", () => {
                     await deployer.getAddress(),
                     contracts.cvxLocker.address,
                     ZERO_ADDRESS,
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _penaltyForwarder",

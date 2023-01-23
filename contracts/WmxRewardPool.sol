@@ -4,7 +4,6 @@ pragma solidity 0.8.11;
 import {WmxMath} from "./WmxMath.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-
 import {IWmxLocker} from "./Interfaces.sol";
 
 /**
@@ -20,6 +19,8 @@ contract WmxRewardPool {
     using WmxMath for uint256;
     using SafeERC20 for IERC20;
 
+    uint256 public constant DENOMINATOR = 10000;
+
     IERC20 public immutable rewardToken;
     IERC20 public immutable stakingToken;
     uint256 public duration;
@@ -28,6 +29,7 @@ contract WmxRewardPool {
 
     IWmxLocker public wmxLocker;
     address public immutable penaltyForwarder;
+    uint256 public immutable penaltyShare;
     uint256 public pendingPenalty = 0;
     uint256 public immutable startTime;
 
@@ -63,6 +65,7 @@ contract WmxRewardPool {
         address _rewardManager,
         address _wmxLocker,
         address _penaltyForwarder,
+        uint256 _penaltyShare,
         uint256 _startDelay
     ) {
         require(_stakingToken != _rewardToken && _stakingToken != address(0), "!tokens");
@@ -74,6 +77,7 @@ contract WmxRewardPool {
         wmxLocker = IWmxLocker(_wmxLocker);
         require(_penaltyForwarder != address(0), "!forwarder");
         penaltyForwarder = _penaltyForwarder;
+        penaltyShare = _penaltyShare;
 
         require(_startDelay < 2 weeks, "!delay");
         startTime = block.timestamp + _startDelay;
@@ -186,7 +190,7 @@ contract WmxRewardPool {
                 rewardToken.safeIncreaseAllowance(address(wmxLocker), reward);
                 wmxLocker.lock(msg.sender, reward);
             } else {
-                uint256 penalty = (reward * 3) / 10;
+                uint256 penalty = (reward * penaltyShare) / DENOMINATOR;
                 pendingPenalty += penalty;
                 rewardToken.safeTransfer(msg.sender, reward - penalty);
             }
