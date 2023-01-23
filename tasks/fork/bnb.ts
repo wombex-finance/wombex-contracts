@@ -686,8 +686,9 @@ task("test-fork:wom-swap-depositor").setAction(async function (taskArguments: Ta
 });
 
 task("test-fork:booster-earmark").setAction(async function (taskArguments: TaskArguments, hre) {
-    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
-    const deployerAddress = await deployer.getAddress();
+    const deployer = await getSigner(hre);
+    // const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
+    // const deployerAddress = await deployer.getAddress();
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
@@ -695,7 +696,7 @@ task("test-fork:booster-earmark").setAction(async function (taskArguments: TaskA
         gasPrice: ethers.BigNumber.from(5000000000),
     })) as any;
 
-    console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
+    // console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
     const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
 
     const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
