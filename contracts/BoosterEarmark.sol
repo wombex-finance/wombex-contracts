@@ -11,6 +11,7 @@ contract BoosterEarmark is Ownable {
 
     IBooster public booster;
     address public voterProxy;
+    address public mainRewardToken;
     address public weth;
 
     uint256 public earmarkIncentive;
@@ -49,6 +50,7 @@ contract BoosterEarmark is Ownable {
 
     constructor(address _booster, address _weth) {
         booster = IBooster(_booster);
+        mainRewardToken = booster.crv();
         voterProxy = IBooster(_booster).voterProxy();
         weth = _weth;
     }
@@ -129,7 +131,7 @@ contract BoosterEarmark is Ownable {
         address[] memory _distros,
         uint256[] memory _shares,
         bool[] memory _callQueue
-    ) external onlyOwner {
+    ) public onlyOwner {
         require(_distros.length > 0, "zero");
 
         if (distributionByTokens[_token].length == 0) {
@@ -141,6 +143,21 @@ contract BoosterEarmark is Ownable {
         booster.approvePoolsCrvRewardsDistribution(_token);
 
         emit DistributionUpdate(_token, _distros.length, _shares.length, _callQueue.length, totalShares);
+    }
+
+    function migrateDistribution(BoosterEarmark _oldBoosterEarmark) external {
+        address[] memory tokenList = _oldBoosterEarmark.distributionTokenList();
+        for (uint256 i = 0; i < tokenList.length; i++) {
+            uint256 distroLen = _oldBoosterEarmark.distributionByTokenLength(tokenList[i]);
+            address[] memory _distros = new address[](distroLen);
+            uint256[] memory _shares = new uint256[](distroLen);
+            bool[] memory _callQueue = new bool[](distroLen);
+
+            for (uint256 j = 0; j < distroLen; j++) {
+                (_distros[j], _shares[j], _callQueue[j]) = _oldBoosterEarmark.distributionByTokens(tokenList[i], j);
+            }
+            updateDistributionByTokens(tokenList[i], _distros, _shares, _callQueue);
+        }
     }
 
     /**
@@ -238,6 +255,12 @@ contract BoosterEarmark is Ownable {
         uint256[] memory balances = _rewardTokenBalances(_pid, tokens);
 
         for (uint256 i = 0; i < tokens.length; ) {
+            if (i != 0 && tokens[i] == mainRewardToken) {
+                unchecked {
+                    ++i;
+                }
+                continue;
+            }
             EarmarkState memory s;
             s.token = IERC20(tokens[i]);
             s.balance = balances[i];

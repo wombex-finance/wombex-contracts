@@ -1158,6 +1158,28 @@ describe("Booster", () => {
 
             await increaseTime(60 * 60 * 24 * 6);
 
+            const prevOldEarmark = boosterEarmark;
+            boosterEarmark = await deployContract<BoosterEarmark>(
+                hre,
+                new BoosterEarmark__factory(deployer),
+                "BoosterEarmark",
+                [newBoosterContract.address, mocks.weth.address],
+                {},
+                true,
+            );
+            await boosterEarmark.transferOwnership(await daoSigner.getAddress()).then(tx => tx.wait());
+
+            await expect(boosterEarmark.connect(daoSigner).migrateDistribution(prevOldEarmark.address)).to.revertedWith("!auth");
+
+            await expect(newBoosterContract.connect(alice).setEarmarkDelegate(boosterEarmark.address)).to.revertedWith("!auth");
+            await newBoosterContract.connect(daoSigner).setEarmarkDelegate(boosterEarmark.address).then(tx => tx.wait());
+            expect(await newBoosterContract.earmarkDelegate()).to.equal(boosterEarmark.address);
+
+            await expect(boosterEarmark.connect(alice).migrateDistribution(prevOldEarmark.address)).to.revertedWith("Ownable: caller is not the owner");
+            await boosterEarmark.connect(daoSigner).migrateDistribution(prevOldEarmark.address).then(tx => tx.wait());
+            expect(await newBoosterContract.earmarkDelegate()).to.equal(boosterEarmark.address);
+            await prevOldEarmark.connect(daoSigner).setBoosterPoolManager(boosterEarmark.address).then(tx => tx.wait());
+
             const oldDistroTokens = await oldBoosterEarmark.distributionTokenList();
             const newDistroTokens = await boosterEarmark.distributionTokenList();
 

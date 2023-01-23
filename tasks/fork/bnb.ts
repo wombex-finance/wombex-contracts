@@ -685,3 +685,49 @@ task("test-fork:wom-swap-depositor").setAction(async function (taskArguments: Ta
     console.log('wmxWom received', await wmxWom.balanceOf(pendingRewardsUserAddress).then(b => b.sub(wmxWomBalanceBefore)));
 });
 
+task("test-fork:booster-earmark").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
+    const deployerAddress = await deployer.getAddress();
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+
+    const boosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        [bnbConfig.booster, bnbConfig.weth],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('boosterEarmark', boosterEarmark.address);
+
+    await boosterEarmark.transferOwnership(daoMultisig).then(tx => tx.wait());
+
+    const dao = await impersonate(daoMultisig, true);
+
+    const booster = Booster__factory.connect(bnbConfig.booster, dao);
+    const oldBoosterEarmark = BoosterEarmark__factory.connect(await booster.earmarkDelegate(), deployer);
+    await booster.connect(dao).setEarmarkDelegate(boosterEarmark.address).then(tx => tx.wait());
+    await oldBoosterEarmark.connect(dao).setBoosterPoolManager(boosterEarmark.address).then(tx => tx.wait());
+
+    console.log('migrateDistribution');
+    await boosterEarmark.connect(dao).migrateDistribution(oldBoosterEarmark.address).then(tx => tx.wait());
+
+    await getBoosterValues(booster, boosterEarmark);
+
+    console.log('earmarkRewards 10');
+    await boosterEarmark.earmarkRewards(10).then(tx => tx.wait());
+    console.log('earmarkRewards success');
+});
+
+

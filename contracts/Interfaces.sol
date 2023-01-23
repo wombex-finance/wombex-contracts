@@ -260,6 +260,7 @@ interface IBooster {
         bool shutdown;
     }
 
+    function crv() external view returns (address);
     function owner() external view returns (address);
     function voterProxy() external view returns (address);
     function poolLength() external view returns (uint256);
