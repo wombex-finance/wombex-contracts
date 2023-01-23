@@ -291,6 +291,7 @@ describe("WmxRewardPool", () => {
             expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools[0])).eq(RewardPoolCreated.args.rewardPool);
 
             expect(await wmxRewardPoolV2.penaltyShare()).eq(4000);
+            expect(await wmxRewardPoolV2.penaltyForwarder()).eq(await treasurySigner.getAddress());
             expect(await wmxRewardPoolV2.duration()).eq(ONE_WEEK);
             expect(await wmxRewardPoolV2.maxCap()).eq(simpleToExactAmount(100));
             expect(await wmxRewardPoolV2.canStake(contracts.crvDepositor.address)).eq(true);
