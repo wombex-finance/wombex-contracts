@@ -159,7 +159,7 @@ contract GaugeVoting is Ownable {
         rewardsPool.stakeFor(msg.sender, amount);
     }
 
-    function voteExecute() public {
+    function voteExecute(address _incentiveRecipient) public {
         require(isVoteExecuteReady(), "!ready");
 
         uint256 totalLpVotes = totalVotes();
@@ -202,7 +202,7 @@ contract GaugeVoting is Ownable {
                     abi.encodeWithSelector(IERC20.transfer.selector, address(this), amount)
                 );
                 uint256 incentiveAmount = amount * voteIncentive / DENOMINATOR;
-                IERC20(token).safeTransfer(msg.sender, incentiveAmount);
+                IERC20(token).safeTransfer(_incentiveRecipient, incentiveAmount);
                 IBribeRewardsPool(rewardsPool).queueNewRewards(token, amount - incentiveAmount);
             }
         }
@@ -235,9 +235,9 @@ contract GaugeVoting is Ownable {
         }
     }
 
-    function rewardClaimed(uint256, address, uint256, bool) external {
+    function rewardClaimed(uint256, address _account, uint256, bool) external {
         if (isVoteExecuteReady()) {
-            voteExecute();
+            voteExecute(_account);
         }
     }
 
