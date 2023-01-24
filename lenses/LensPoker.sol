@@ -57,9 +57,9 @@ interface IBaseRewardPool4626 {
 
 contract LensPoker {
     address internal constant WOM_TOKEN = 0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1;
-    address internal constant WMX_BOOSTER = 0x9Ac0a3E8864Ea370Bf1A661444f6610dd041Ba1c;
+    address internal constant WMX_BOOSTER = 0x561050FFB188420D2605714F84EdA714DA58da69;
     address internal constant WMX_VOTING_PROXY = 0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569;
-    address internal constant WOM_MASTER_WOMBAT = 0xE2C07d20AF0Fb50CAE6cDD615CA44AbaAA31F9c8;
+    address internal constant WOM_MASTER_WOMBAT = 0x489833311676B566f888119c29bd997Dc6C95830;
 
     function getPoolsToPoke1() public view returns(uint256[] memory) {
         return getPokeRequiredPoolIds(false);
@@ -78,13 +78,6 @@ contract LensPoker {
 
             // 0. Ignore if the pool is shut down
             if (poolInfo.shutdown) {
-                continue;
-            }
-
-            // 1. Ignore if reward distribution paused
-            uint256 womPid = IVotingProxy(WMX_VOTING_PROXY).lpTokenToPid(poolInfo.gauge, poolInfo.lptoken);
-            IMasterWombat.PoolInfo memory womPoolInfo = IMasterWombat(WOM_MASTER_WOMBAT).poolInfo(womPid);
-            if (womPoolInfo.allocPoint == 0) {
                 continue;
             }
 
