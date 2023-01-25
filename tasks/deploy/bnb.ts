@@ -596,7 +596,7 @@ task("wmx-reward-pool-lens:bnb").setAction(async function (taskArguments: TaskAr
         maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
     })) as any;
 
-    const WmxRewardPoolLensArgs = ['0x062F2df081b93a12B23d892E7B10060283872792'];
+    const WmxRewardPoolLensArgs = ['0x2B37c10224c8d5432e0C5f7f0ea92b70F82E877c'];
     fs.writeFileSync('./args/wmxRewardPoolLens.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolLensArgs));
     const wmxRewardPoolLens = await deployContract<WmxRewardPoolLens>(
         hre,
