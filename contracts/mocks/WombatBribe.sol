@@ -6,6 +6,7 @@ import { Address } from "@openzeppelin/contracts-0.8/utils/Address.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import './WombatVoter.sol';
 import './MultiRewarderPerSec.sol';
+import "hardhat/console.sol";
 
 interface IVoter {
     struct GaugeWeight {
@@ -41,7 +42,9 @@ contract WombatBribe is IBribe, MultiRewarderPerSec {
         uint256 newVote,
         uint256 originalTotalVotes
     ) external override returns (uint256[] memory rewards) {
+        console.log("_updateReward", originalTotalVotes);
         _updateReward(originalTotalVotes);
+        console.log("_onReward", newVote);
         return _onReward(user, newVote);
     }
 

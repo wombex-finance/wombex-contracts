@@ -45,6 +45,7 @@ import "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
+import "hardhat/console.sol";
 
 /**
  * @title   BaseRewardPool
@@ -260,37 +261,50 @@ contract BaseRewardPool {
     }
 
     /**
+     * @dev Called by a staker to get their allocated rewards
+     */
+    function getReward() external returns(bool){
+        return _getReward(msg.sender, msg.sender, false, allRewardTokens);
+    }
+
+    /**
      * @dev Gives a staker their rewards, with the option of claiming extra rewards
      * @param _account     Account for which to claim
      * @param _lockCvx     Get the child rewards too?
      */
-    //TODO: claim for specific tokens
-    function getReward(address _account, bool _lockCvx) public virtual updateReward(_account) returns(bool){
-        uint256 len = allRewardTokens.length;
+    function getReward(address _account, bool _lockCvx) public virtual returns(bool){
+        return _getReward(_account, _account, _lockCvx, allRewardTokens);
+    }
+
+    /**
+     * @dev Gives a staker their rewards, with the option of claiming extra rewards
+     * @param _account     Account for which to claim
+     * @param _lockCvx     Get the child rewards too?
+     */
+    function getReward(address _account, bool _lockCvx, address[] memory _claimTokens) public virtual returns(bool){
+        return _getReward(_account, _account, _lockCvx, _claimTokens);
+    }
+
+    function _getReward(address _account, address _claimTo, bool _lockCvx, address[] memory _claimTokens) internal virtual updateReward(_account) returns(bool) {
+        uint256 len = _claimTokens.length;
         for (uint256 i = 0; i < len; i++) {
-            RewardState storage rState = tokenRewards[allRewardTokens[i]];
-            if (rState.paused) {
+            RewardState storage rState = tokenRewards[_claimTokens[i]];
+            console.log("_getReward", _claimTokens[i]);
+            if (rState.paused || rState.lastUpdateTime == 0) {
                 continue;
             }
 
             uint256 reward = _earned(rState, _account);
+            console.log("_getReward reward", reward);
             if (reward > 0) {
                 rewards[rState.token][_account] = 0;
-                IERC20(rState.token).safeTransfer(_account, reward);
+                IERC20(rState.token).safeTransfer(_claimTo, reward);
                 if (rState.token == address(boosterRewardToken)) {
                     IDeposit(operator).rewardClaimed(pid, _account, reward, _lockCvx);
                 }
                 emit RewardPaid(rState.token, _account, reward);
             }
         }
-        return true;
-    }
-
-    /**
-     * @dev Called by a staker to get their allocated rewards
-     */
-    function getReward() external returns(bool){
-        getReward(msg.sender, false);
         return true;
     }
 

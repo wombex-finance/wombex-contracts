@@ -117,6 +117,7 @@ interface IRewards{
     function earned(address account) external view returns (uint256);
     function updateOperatorData(address operator_, uint256 pid_) external;
     function setRewardTokenPaused(address token_, bool paused_) external;
+    function balanceOf(address _account) external view returns (uint256 amount);
 }
 
 interface IGauge {
@@ -318,7 +319,6 @@ interface IBooster {
         bool shutdown;
     }
 
-    function voterProxy() external view returns (address);
     function crv() external view returns (address);
     function owner() external view returns (address);
     function voterProxy() external view returns (address);
@@ -338,7 +338,7 @@ interface IBooster {
     function shutdownPool(uint256 _pid) external returns (bool);
     function forceShutdownPool(uint256 _pid) external returns (bool);
     function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
-    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external;
+    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external returns (bytes memory);
 }
 
 interface IBoosterEarmark {

@@ -43,11 +43,11 @@ contract BribesRewardPool is BaseRewardPool4626 {
         return BaseRewardPool.stakeFor(_for, _amount);
     }
 
-    function getReward(address _account, bool _lockCvx) public override returns(bool){
+    function _getReward(address _account, address _claimTo, bool _lockCvx, address[] memory _claimTokens) internal override returns(bool) {
         if (callOperatorOnGetReward) {
             IDeposit(operator).rewardClaimed(0, _account, 0, false);
         }
-        return BaseRewardPool.getReward(_account, _lockCvx);
+        return BaseRewardPool._getReward(_account, _claimTo, _lockCvx, _claimTokens);
     }
 
     function withdraw(uint256 amount, bool claim) public override returns(bool) {
@@ -65,7 +65,7 @@ contract BribesRewardPool is BaseRewardPool4626 {
         _totalSupply = _totalSupply.sub(_amount);
         _balances[_from] = _balances[_from].sub(_amount);
 
-        getReward(_claimRecipient, false);
+        _getReward(_from, _claimRecipient, false, allRewardTokens);
 
         emit Withdrawn(_from, _amount);
 
