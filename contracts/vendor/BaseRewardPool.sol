@@ -120,6 +120,8 @@ contract BaseRewardPool {
         operator = operator_;
         pid = pid_;
 
+        _onOperatorUpdate();
+
         emit UpdateOperatorData(msg.sender, operator_, pid_);
     }
 
@@ -295,7 +297,8 @@ contract BaseRewardPool {
     /**
      * @dev Donate some extra rewards to this contract
      */
-    function donate(address _token, uint256 _amount) external returns(bool){
+    function donate(address _token, uint256 _amount) external {
+        require(_token != address(boosterRewardToken), "booster_reward_token");
         uint256 balanceBefore = IERC20(_token).balanceOf(address(this));
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
         _amount = IERC20(_token).balanceOf(address(this)).sub(balanceBefore);
@@ -414,5 +417,9 @@ contract BaseRewardPool {
 
     function rewardTokensList() external view returns (address[] memory) {
         return allRewardTokens;
+    }
+
+    function _onOperatorUpdate() internal virtual {
+
     }
 }

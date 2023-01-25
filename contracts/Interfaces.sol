@@ -165,6 +165,7 @@ interface IStaker{
     function withdrawAllLp(address, address) external returns (bool);
     function lock(uint256 _lockDays) external;
     function releaseLock(uint256 _slot) external returns(uint256);
+    function getGaugeRewardTokens(address _lptoken, address _gauge) external returns (address[] memory tokens);
     function claimCrv(address, uint256) external returns (address[] memory tokens, uint256[] memory balances);
     function balanceOfPool(address, address) external view returns (uint256);
     function operator() external view returns (address);
@@ -308,19 +309,45 @@ interface IWombatRouter {
     ) external returns (uint256 amount);
 }
 
-interface IMasterWombatV2 {
-    function getAssetPid(address) external view returns(uint256);
+interface IBooster {
+    struct PoolInfo {
+        address lptoken;
+        address token;
+        address gauge;
+        address crvRewards;
+        bool shutdown;
+    }
+
+    function voterProxy() external view returns (address);
+    function crv() external view returns (address);
+    function owner() external view returns (address);
+    function voterProxy() external view returns (address);
+    function poolLength() external view returns (uint256);
+    function poolInfo(uint256 _pid) external view returns (PoolInfo memory);
+    function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
+    function setOwner(address _owner) external;
+    function setPoolManager(address _poolManager) external;
+    function voterProxyClaimRewards(uint256 _pid, address[] memory pendingTokens) external returns (uint256[] memory pendingRewards);
+    function addPool(address _lptoken, address _gauge) external returns (uint256);
+    function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) external returns (uint256);
+    function approveDistribution(address _distro, address[] memory _distributionTokens, uint256 _amount) external;
+    function approvePoolsCrvRewardsDistribution(address _token) external;
+    function distributeRewards(uint256 _pid, address _lpToken, address _rewardToken, address[] memory _transferTo, uint256[] memory _transferAmount, bool[] memory _callQueue) external;
+    function lpPendingRewards(address _lptoken, address _token) external returns (uint256);
+    function earmarkRewards(uint256 _pid) external;
+    function shutdownPool(uint256 _pid) external returns (bool);
+    function forceShutdownPool(uint256 _pid) external returns (bool);
+    function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
+    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external;
 }
 
-interface IBooster {
-    function voterProxy() external view returns (address);
-    function owner() external view returns (address);
-    function poolLength() external view returns (uint256);
-    function poolInfo(uint256 _pid) external view returns(address lptoken, address token, address gauge, address crvRewards, bool shutdown);
-    function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
-    function earmarkRewards(uint256 _pid) external returns(bool);
-    function setOwner(address _owner) external;
-    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external returns (bytes memory);
+interface IBoosterEarmark {
+    function earmarkIncentive() external view returns (uint256);
+    function distributionByTokenLength(address _token) external view returns (uint256);
+    function distributionByTokens(address, uint256) external view returns (address, uint256, bool);
+    function distributionTokenList() external view returns (address[] memory);
+    function addPool(address _lptoken, address _gauge) external returns (uint256);
+    function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) external returns (uint256);
 }
 
 interface ISwapRouter {
@@ -343,4 +370,56 @@ interface ISwapRouter {
 interface IWomSwapDepositor {
     function pool() external view returns (address);
     function deposit(uint256 _amount, address _stakeAddress, uint256 _minAmountOut, uint256 _deadline) external returns (bool);
+}
+
+/**
+ * @dev Interface of the MasterWombatV2
+ */
+interface IMasterWombatV2 {
+    function getAssetPid(address asset) external view returns (uint256 pid);
+
+    function poolLength() external view returns (uint256);
+
+    function pendingTokens(uint256 _pid, address _user)
+    external
+    view
+    returns (
+        uint256 pendingRewards,
+        IERC20[] memory bonusTokenAddresses,
+        string[] memory bonusTokenSymbols,
+        uint256[] memory pendingBonusRewards
+    );
+
+    function rewarderBonusTokenInfo(uint256 _pid)
+    external
+    view
+    returns (IERC20[] memory bonusTokenAddresses, string[] memory bonusTokenSymbols);
+
+    function massUpdatePools() external;
+
+    function updatePool(uint256 _pid) external;
+
+    function deposit(uint256 _pid, uint256 _amount) external returns (uint256, uint256[] memory);
+
+    function multiClaim(uint256[] memory _pids)
+    external
+    returns (
+        uint256 transfered,
+        uint256[] memory rewards,
+        uint256[][] memory additionalRewards
+    );
+
+    function withdraw(uint256 _pid, uint256 _amount) external returns (uint256, uint256[] memory);
+
+    function emergencyWithdraw(uint256 _pid) external;
+
+    function migrate(uint256[] calldata _pids) external;
+
+    function depositFor(
+        uint256 _pid,
+        uint256 _amount,
+        address _user
+    ) external;
+
+    function updateFactor(address _user, uint256 _newVeWomBalance) external;
 }

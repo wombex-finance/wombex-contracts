@@ -292,7 +292,7 @@ contract VoterProxy {
         }
     }
 
-    function getGaugeRewardTokens(address _lptoken, address _gauge) public returns (IERC20[] memory tokens) {
+    function getGaugeRewardTokens(address _lptoken, address _gauge) public view returns (IERC20[] memory tokens) {
         require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
         uint256 pid = lpTokenToPid[_gauge][_lptoken];
 
@@ -314,8 +314,8 @@ contract VoterProxy {
         }
     }
 
-    function balanceOfPool(address _token, address _gauge) public view returns (uint256 amount) {
-        (amount, , ) = IMasterWombat(_gauge).userInfo(lpTokenToPid[_gauge][_token], address(this));
+    function balanceOfPool(address _token, address _gauge) public view returns (uint128 amount) {
+        (amount, , , ) = IMasterWombat(_gauge).userInfo(lpTokenToPid[_gauge][_token], address(this));
     }
 
     function execute(

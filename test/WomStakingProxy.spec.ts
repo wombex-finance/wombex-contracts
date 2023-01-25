@@ -5,7 +5,7 @@ import { getMockDistro, getMockMultisigs, deployTestFirstStage } from "../script
 import {
     Asset,
     Asset__factory,
-    Booster,
+    Booster, BoosterEarmark,
     WombatRouter,
     WombatRouter__factory,
     WomSwapDepositor,
@@ -27,7 +27,7 @@ type Pool = {
 
 describe("WomStakingProxy", () => {
     let accounts: Signer[];
-    let booster: Booster;
+    let booster: Booster, boosterEarmark: BoosterEarmark;
     let crv, cvx, cvxCrv, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, crvDepositor;
     let mocks: any;
     let pool: Pool;
@@ -55,7 +55,7 @@ describe("WomStakingProxy", () => {
 
         contracts = await deploy(hre, deployer, daoSigner, mocks, distro, multisigs, mocks.namingConfig, mocks);
 
-        ({ cvx, cvxCrv, booster, booster, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom, crvDepositor } = contracts);
+        ({ cvx, cvxCrv, booster, boosterEarmark, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom, crvDepositor } = contracts);
 
         pool = await booster.poolInfo(0);
 
@@ -169,7 +169,7 @@ describe("WomStakingProxy", () => {
         it("distributes the fees to the correct places", async () => {
             await increaseTime(60 * 60 * 24);
 
-            await booster.connect(daoSigner).updateDistributionByTokens(
+            await boosterEarmark.connect(daoSigner).updateDistributionByTokens(
                 crv.address,
                 [cvxCrvRewards.address, cvxStakingProxy.address, treasuryAddress],
                 [2000, 400, 100],
@@ -182,7 +182,7 @@ describe("WomStakingProxy", () => {
             // bal before
             let balBefore = await crv.balanceOf(veWom.address);
             // collect the rewards
-            let tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
+            let tx = await (await boosterEarmark.connect(alice).earmarkRewards(0)).wait(1);
             let earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === crv.address.toLowerCase())[0].args;
 
             expect(await cvxStakingProxy.swapShare()).to.eq('4000');
@@ -211,7 +211,7 @@ describe("WomStakingProxy", () => {
 
             balBefore = await crv.balanceOf(veWom.address);
 
-            tx = await (await booster.connect(alice).earmarkRewards(0)).wait(1);
+            tx = await (await boosterEarmark.connect(alice).earmarkRewards(0)).wait(1);
             earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === crv.address.toLowerCase())[0].args;
 
             // bals after
