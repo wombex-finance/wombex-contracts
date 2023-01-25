@@ -31,7 +31,7 @@ contract BribesRewardFactory {
     function CreateBribesRewards(address _stakingToken, address _lptoken) external returns (address) {
         require(msg.sender == operator, "!auth");
 
-        BribesRewardPool rewardPool = new BribesRewardPool(_stakingToken, operator, _lptoken);
+        BribesRewardPool rewardPool = new BribesRewardPool(_stakingToken, operator, _lptoken, false);
 
         emit RewardPoolCreated(address(rewardPool), _stakingToken);
         return address(rewardPool);

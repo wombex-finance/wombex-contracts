@@ -7,6 +7,7 @@ contract BribesRewardPool is BaseRewardPool4626 {
     bool callOperatorOnGetReward;
 
     event UpdateBribesConfig(bool callOperatorOnGetReward);
+    event UpdateRatioConfig(uint256 duration, uint256 maxRewardRatio);
 
     constructor(
         address stakingToken_,
@@ -15,7 +16,6 @@ contract BribesRewardPool is BaseRewardPool4626 {
         bool _callOperatorOnGetReward
     ) public BaseRewardPool4626(0, stakingToken_, address(0), operator_, lptoken_) {
         callOperatorOnGetReward = _callOperatorOnGetReward;
-        IERC20(asset).safeApprove(operator_, type(uint256).max);
     }
 
     function updateBribesConfig(bool _callOperatorOnGetReward) external {
@@ -23,6 +23,14 @@ contract BribesRewardPool is BaseRewardPool4626 {
         callOperatorOnGetReward = _callOperatorOnGetReward;
 
         emit UpdateBribesConfig(callOperatorOnGetReward);
+    }
+
+    function updateRatioConfig(uint256 _duration, uint256 _maxRewardRatio) external {
+        require(msg.sender == operator, "!authorized");
+        DURATION = _duration;
+        NEW_REWARD_RATIO = _maxRewardRatio;
+
+        emit UpdateRatioConfig(_duration, _maxRewardRatio);
     }
 
     function stake(uint256 _amount) public override returns(bool) {
@@ -37,7 +45,7 @@ contract BribesRewardPool is BaseRewardPool4626 {
 
     function getReward(address _account, bool _lockCvx) public override returns(bool){
         if (callOperatorOnGetReward) {
-            IDeposit(operator).rewardClaimed(0, _account, 0, 0);
+            IDeposit(operator).rewardClaimed(0, _account, 0, false);
         }
         return BaseRewardPool.getReward(_account, _lockCvx);
     }

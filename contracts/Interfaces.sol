@@ -98,7 +98,7 @@ interface ITokenFactory{
 }
 
 interface IBribesRewardFactory {
-    function IRewardFactory(address _stakingToken, address _lptoken) external returns (address);
+    function CreateBribesRewards(address _stakingToken, address _lptoken) external returns (address);
 }
 
 interface IRewards{
@@ -115,17 +115,47 @@ interface IRewards{
     function stakingToken() external view returns (address);
     function rewardToken() external view returns(address);
     function earned(address account) external view returns (uint256);
+    function updateOperatorData(address operator_, uint256 pid_) external;
+    function setRewardTokenPaused(address token_, bool paused_) external;
+}
+
+interface IGauge {
+    function notifyRewardAmount(IERC20 token, uint256 amount) external;
+}
+
+interface IBribe {
+    function onVote(
+        address user,
+        uint256 newVote,
+        uint256 originalTotalVotes
+    ) external returns (uint256[] memory rewards);
+
+    function pendingTokens(address _user) external view returns (uint256[] memory rewards);
+
+    function rewardTokens() external view returns (IERC20[] memory tokens);
+
+    function rewardLength() external view returns (uint256);
+}
+
+interface IVe {
+    function vote(address user, int256 voteDelta) external;
+}
+
+interface INftLocker {
+    function voteBoost(address _account) external view returns (uint256);
 }
 
 interface IBribeRewardsPool is IRewards {
-    function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) public returns(bool);
+    function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) external returns(bool);
     function updateBribesConfig(bool _callOperatorOnGetReward) external;
+    function updateRatioConfig(uint256 _duration, uint256 _maxRewardRatio) external;
 }
 
-interface ITokenMinter{
+interface ITokenMinter is IERC20 {
     function mint(address,uint256) external;
     function burn(address,uint256) external;
     function setOperator(address) external;
+    function updateOperator(address) external;
 }
 
 interface IStaker{

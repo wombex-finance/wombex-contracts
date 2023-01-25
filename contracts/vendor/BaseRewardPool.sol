@@ -60,8 +60,8 @@ contract BaseRewardPool {
 
     IERC20 public immutable stakingToken;
     IERC20 public immutable boosterRewardToken;
-    uint256 public constant DURATION = 7 days;
-    uint256 public constant NEW_REWARD_RATIO = 830;
+    uint256 public DURATION = 7 days;
+    uint256 public NEW_REWARD_RATIO = 830;
     uint256 public constant MAX_TOKENS = 100;
 
     address public operator;
