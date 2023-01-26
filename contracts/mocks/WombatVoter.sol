@@ -100,62 +100,43 @@ contract WombatVoter {
         // 2. update related lpToken weight and total lpToken weight
         // 3. update used voting power and ensure there's enough voting power
         // 4. call IBribe.onVote() to update bribes
-        console.log("1");
         require(_lpVote.length == _deltas.length, 'voter: array length not equal');
 
         // update voteIndex
-        console.log("2");
         _distributeWom();
 
-        console.log("3");
         uint256 voteCnt = _lpVote.length;
         int256 voteDelta;
 
-        console.log("4");
         bribeRewards = new uint256[][](voteCnt);
 
-        console.log("5");
         for (uint256 i; i < voteCnt; ++i) {
             IERC20 lpToken = _lpVote[i];
-            console.log("6");
             _checkGaugeExist(lpToken);
 
-            console.log("7");
             int256 delta = _deltas[i];
             uint256 originalWeight = weights[lpToken].voteWeight;
-            console.log("8");
             if (delta != 0) {
-                console.log("9");
                 _updateFor(lpToken);
-                console.log("10");
 
                 // update vote and weight
                 if (delta > 0) {
                     // vote
-                    console.log("10 1");
                     votes[msg.sender][lpToken] += uint256(delta);
-                    console.log("10 2");
                     weights[lpToken].voteWeight = to128(originalWeight + uint256(delta));
-                    console.log("10 3");
                     totalWeight += to128(uint256(delta));
                 } else {
                     // unvote
-                    console.log("10 4");
                     require(votes[msg.sender][lpToken] >= uint256(-delta), 'voter: vote underflow');
-                    console.log("10 5");
                     votes[msg.sender][lpToken] -= uint256(-delta);
-                    console.log("10 6");
                     weights[lpToken].voteWeight = to128(originalWeight - uint256(-delta));
-                    console.log("10 7");
                     totalWeight -= to128(uint256(-delta));
                 }
 
-                console.log("10 8");
                 voteDelta += delta;
                 emit UpdateVote(msg.sender, lpToken, votes[msg.sender][lpToken]);
             }
 
-            console.log("10 9");
             // update bribe
             if (address(infos[lpToken].bribe) != address(0)) {
                 bribeRewards[i] = infos[lpToken].bribe.onVote(msg.sender, votes[msg.sender][lpToken], originalWeight);
@@ -163,9 +144,7 @@ contract WombatVoter {
         }
 
         // notice veWom for the new vote, it reverts if vote is invalid
-        console.log("11 voteDelta", uint256(voteDelta));
         veWom.vote(msg.sender, voteDelta);
-        console.log("12");
     }
 
     /// @notice Claim bribes for LP tokens

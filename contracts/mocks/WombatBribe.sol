@@ -42,9 +42,7 @@ contract WombatBribe is IBribe, MultiRewarderPerSec {
         uint256 newVote,
         uint256 originalTotalVotes
     ) external override returns (uint256[] memory rewards) {
-        console.log("_updateReward", originalTotalVotes);
         _updateReward(originalTotalVotes);
-        console.log("_onReward", newVote);
         return _onReward(user, newVote);
     }
 

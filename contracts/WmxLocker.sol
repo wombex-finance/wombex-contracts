@@ -7,7 +7,6 @@ import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts-0.8/security/ReentrancyGuard.sol";
 import {WmxMath, WmxMath32, WmxMath112, WmxMath224} from "./WmxMath.sol";
 import "./Interfaces.sol";
-import "hardhat/console.sol";
 
 interface IRewardStaking {
     function stakeFor(address, uint256) external;
@@ -644,10 +643,8 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
     function getPastVotes(address account, uint256 timestamp) public view returns (uint256 votes) {
         require(timestamp <= block.timestamp, "ERC20Votes: block not yet mined");
         uint256 epoch = timestamp.div(rewardsDuration).mul(rewardsDuration);
-        console.log("epoch", epoch);
         DelegateeCheckpoint memory ckpt = _checkpointsLookup(_checkpointedVotes[account], epoch);
         votes = ckpt.votes;
-        console.log("votes", votes);
         if (votes == 0 || ckpt.epochStart + lockDuration <= epoch) {
             return 0;
         }
