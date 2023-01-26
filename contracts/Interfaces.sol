@@ -63,6 +63,8 @@ interface IWmxLocker {
 
     function balanceOf(address _account) external view returns (uint256 amount);
 
+    function balances(address _account) external view returns (uint112 locked, uint32 nextUnlockIndex);
+
     function getVotes(address account) external view returns (uint256);
 
     function getPastVotes(address account, uint256 timestamp) external view returns (uint256 votes);

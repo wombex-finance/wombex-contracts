@@ -277,6 +277,9 @@ describe("GaugeVoting", () => {
             expect(await reward1.balanceOf(bobAddress)).gt(0);
 
             await increaseTime(ONE_WEEK.mul(18));
+            expect(await gaugeVoting.boostedUserVotes(bobAddress)).gt(0);
+
+            await cvxLocker.connect(bob).processExpiredLocks(false).then(tx => tx.wait());
             expect(await gaugeVoting.boostedUserVotes(bobAddress)).eq(0);
 
             const pokerBalancesBefore = [];

@@ -248,6 +248,9 @@ contract GaugeVoting is Ownable {
     }
 
     function updateRatioConfig(address[] calldata _rewards, uint256 _duration, uint256 _maxRewardRatio) external onlyOwner {
+        require(_duration >= 60 && _duration <= 30 days, "!duration");
+        require(_maxRewardRatio > 0, "!maxRewardRatio");
+
         for(uint256 i = 0; i < _rewards.length; i++) {
             IBribeRewardsPool(_rewards[i]).updateRatioConfig(_duration, _maxRewardRatio);
         }
@@ -304,7 +307,8 @@ contract GaugeVoting is Ownable {
     }
 
     function boostedUserVotes(address _user) public view returns (uint256 userLockerVotes) {
-        userLockerVotes = wmxLocker.getVotes(_user);
+        (uint112 lockedBalance, ) = wmxLocker.balances(_user);
+        userLockerVotes = uint256(lockedBalance);
         if (address(nftLocker) != address(0)) {
             userLockerVotes = userLockerVotes * nftLocker.voteBoost(_user) / 1 ether;
         }
