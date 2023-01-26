@@ -45,7 +45,6 @@ import "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
-import "hardhat/console.sol";
 
 /**
  * @title   BaseRewardPool
@@ -61,9 +60,9 @@ contract BaseRewardPool {
 
     IERC20 public immutable stakingToken;
     IERC20 public immutable boosterRewardToken;
-    uint256 public DURATION = 7 days;
-    uint256 public NEW_REWARD_RATIO = 830;
     uint256 public constant MAX_TOKENS = 100;
+    uint256 public duration = 7 days;
+    uint256 public newRewardRatio = 830;
 
     address public operator;
     uint256 public pid;
@@ -289,13 +288,11 @@ contract BaseRewardPool {
         uint256 len = _claimTokens.length;
         for (uint256 i = 0; i < len; i++) {
             RewardState storage rState = tokenRewards[_claimTokens[i]];
-            console.log("_getReward", _claimTokens[i]);
             if (rState.paused || rState.lastUpdateTime == 0) {
                 continue;
             }
 
             uint256 reward = _earned(rState, _account);
-            console.log("_getReward reward", reward);
             if (reward > 0) {
                 rewards[rState.token][_account] = 0;
                 IERC20(rState.token).safeTransfer(_claimTo, reward);
@@ -365,13 +362,13 @@ contract BaseRewardPool {
         }
 
         //et = now - (finish-duration)
-        uint256 elapsedTime = block.timestamp.sub(rState.periodFinish.sub(DURATION));
+        uint256 elapsedTime = block.timestamp.sub(rState.periodFinish.sub(duration));
         //current at now: rewardRate * elapsedTime
         uint256 currentAtNow = rState.rewardRate * elapsedTime;
         uint256 queuedRatio = currentAtNow.mul(1000).div(_rewards);
 
         //uint256 queuedRatio = currentRewards.mul(1000).div(_rewards);
-        if(queuedRatio < NEW_REWARD_RATIO){
+        if(queuedRatio < newRewardRatio){
             _notifyRewardAmount(rState, _rewards);
             rState.queuedRewards = 0;
         }else{
@@ -386,16 +383,16 @@ contract BaseRewardPool {
     {
         _rState.historicalRewards = _rState.historicalRewards.add(_reward);
         if (block.timestamp >= _rState.periodFinish) {
-            _rState.rewardRate = _reward.div(DURATION);
+            _rState.rewardRate = _reward.div(duration);
         } else {
             uint256 remaining = _rState.periodFinish.sub(block.timestamp);
             uint256 leftover = remaining.mul(_rState.rewardRate);
             _reward = _reward.add(leftover);
-            _rState.rewardRate = _reward.div(DURATION);
+            _rState.rewardRate = _reward.div(duration);
         }
         _rState.currentRewards = _reward;
         _rState.lastUpdateTime = block.timestamp;
-        _rState.periodFinish = block.timestamp.add(DURATION);
+        _rState.periodFinish = block.timestamp.add(duration);
         emit RewardAdded(_rState.token, _rState.currentRewards, _reward);
     }
 
@@ -423,6 +420,14 @@ contract BaseRewardPool {
                 .mul(1e18)
                 .div(totalSupply())
             );
+    }
+
+    function DURATION() external view returns (uint256) {
+        return duration;
+    }
+
+    function NEW_REWARD_RATIO() external view returns (uint256) {
+        return newRewardRatio;
     }
 
     function rewardTokensLen() external view returns (uint256) {

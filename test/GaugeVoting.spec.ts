@@ -3,8 +3,6 @@ import { deploy, SystemDeployed } from "../scripts/deploySystem";
 import { getMockDistro, getMockMultisigs, deployTestFirstStage } from "../scripts/deployMocks";
 import {
     Booster,
-    SafeMoon__factory,
-    SafeMoon,
     MockERC20,
     MockERC20__factory,
     WombatBribe__factory,
@@ -13,11 +11,9 @@ import {
     GaugeVoting__factory,
     WombatVoter,
     WombatVoter__factory,
-    TokenFactory,
-    TokenFactory__factory,
     BribesRewardFactory,
     BribesRewardFactory__factory,
-    WomDepositor, BaseRewardPool4626__factory,
+    WomDepositor, BaseRewardPool4626__factory, BribesTokenFactory__factory, BribesTokenFactory,
 } from "../types/generated";
 import { Signer } from "ethers";
 import {getTimestamp, increaseTime} from "../test-utils/time";
@@ -34,7 +30,7 @@ type Pool = {
     shutdown: boolean;
 };
 
-describe.only("GaugeVoting", () => {
+describe("GaugeVoting", () => {
     let accounts: Signer[];
     let booster: Booster, gaugeVoting: GaugeVoting, wombatVoter: WombatVoter, womDepositor: WomDepositor;
     let crv, cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy;
@@ -132,15 +128,11 @@ describe.only("GaugeVoting", () => {
             await booster.connect(daoSigner).setVoteDelegate(gaugeVoting.address, true).then(tx => tx.wait());
             await booster.connect(daoSigner).setVotingValid(wombatVoter.address, true).then(tx => tx.wait());
 
-            const tokenFactory = await deployContract<TokenFactory>(
+            const tokenFactory = await deployContract<BribesTokenFactory>(
                 hre,
-                new TokenFactory__factory(deployer),
-                "TokenFactory",
-                [
-                    gaugeVoting.address,
-                    "",
-                    ""
-                ],
+                new BribesTokenFactory__factory(deployer),
+                "BribesTokenFactory",
+                [gaugeVoting.address],
                 {},
                 true,
             );
@@ -149,9 +141,7 @@ describe.only("GaugeVoting", () => {
                 hre,
                 new BribesRewardFactory__factory(deployer),
                 "BribesRewardFactory",
-                [
-                    gaugeVoting.address
-                ],
+                [gaugeVoting.address],
                 {},
                 true,
             );
@@ -299,6 +289,8 @@ describe.only("GaugeVoting", () => {
                 expect(claimableRewards.amounts[i]).gt(0);
             }
 
+            console.log('bobAddress', bobAddress);
+            console.log('claimableRewards', claimableRewards);
             await gaugeVoting.connect(poker).onVotesChanged(bobAddress, pokerAddress).then(tx => tx.wait());
             expect(await reward1.balanceOf(bobAddress)).eq(0);
 

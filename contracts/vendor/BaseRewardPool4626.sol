@@ -211,7 +211,7 @@ contract BaseRewardPool4626 is BaseRewardPool, ReentrancyGuard, IERC4626 {
     /**
      * @dev Returns the name of the token.
      */
-    function name() external view override returns (string memory) {
+    function name() external view virtual override returns (string memory) {
         return string(
             abi.encodePacked(IERC20Metadata(address(stakingToken)).name(), " Vault")
         );
@@ -220,7 +220,7 @@ contract BaseRewardPool4626 is BaseRewardPool, ReentrancyGuard, IERC4626 {
     /**
      * @dev Returns the symbol of the token.
      */
-    function symbol() external view override returns (string memory) {
+    function symbol() external view virtual override returns (string memory) {
         return string(
             abi.encodePacked(IERC20Metadata(address(stakingToken)).symbol(), "-vault")
         );

@@ -68,6 +68,7 @@ contract GaugeVoting is Ownable {
     }
 
     function setVotingConfig(uint256 _votePeriod, uint256 _voteThreshold, uint256 _voteIncentive, bool _executeOnVote) public onlyOwner {
+        require(_voteIncentive <= 1000, "voteIncentive>1000");
         votePeriod = _votePeriod;
         voteThreshold = _voteThreshold;
         voteIncentive = _voteIncentive;
@@ -86,7 +87,7 @@ contract GaugeVoting is Ownable {
         bribeRewardsFactory = IBribesRewardFactory(_rewardFactory);
 
         if (_stakingToken == address(0)) {
-            stakingToken = ITokenMinter(tokenFactory.CreateDepositToken(address(wmxLocker)));
+            stakingToken = ITokenMinter(tokenFactory.CreateBribesVotingToken());
         } else {
             stakingToken = ITokenMinter(_stakingToken);
         }
@@ -156,6 +157,7 @@ contract GaugeVoting is Ownable {
         uint256 totalVotedByUser = 0;
 
         for (uint256 i = 0; i < len; i++) {
+            require(lpTokenStatus[_lpTokens[i]] == LpTokenStatus.ACTIVE, "only active");
             require(i == 0 || _deltas[i] >= lastDelta, "< lastDelta");
             lastDelta = _deltas[i];
             address rewards = lpTokenRewards[_lpTokens[i]];
@@ -212,6 +214,9 @@ contract GaugeVoting is Ownable {
         uint256[][] memory bribeRewards = abi.decode(rewardsData, (uint256[][]));
         for (uint256 i = 0; i < len; i++) {
             address lpToken = lpTokensAdded[i];
+            if (lpTokenStatus[lpToken] != LpTokenStatus.ACTIVE) {
+                continue;
+            }
 
             uint256[] memory rewards = bribeRewards[i];
             (, , , , , , address bribe) = bribeVoter.infos(lpToken);

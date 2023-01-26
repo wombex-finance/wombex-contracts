@@ -27,8 +27,8 @@ contract BribesRewardPool is BaseRewardPool4626 {
 
     function updateRatioConfig(uint256 _duration, uint256 _maxRewardRatio) external {
         require(msg.sender == operator, "!authorized");
-        DURATION = _duration;
-        NEW_REWARD_RATIO = _maxRewardRatio;
+        duration = _duration;
+        newRewardRatio = _maxRewardRatio;
 
         emit UpdateRatioConfig(_duration, _maxRewardRatio);
     }
@@ -62,13 +62,32 @@ contract BribesRewardPool is BaseRewardPool4626 {
 
     function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) public returns(bool) {
         require(msg.sender == operator, "!operator");
-        _totalSupply = _totalSupply.sub(_amount);
-        _balances[_from] = _balances[_from].sub(_amount);
 
         _getReward(_from, _claimRecipient, false, allRewardTokens);
+
+        _totalSupply = _totalSupply.sub(_amount);
+        _balances[_from] = _balances[_from].sub(_amount);
 
         emit Withdrawn(_from, _amount);
 
         return true;
+    }
+
+    /**
+     * @dev Returns the name of the token.
+     */
+    function name() external view override returns (string memory) {
+        return string(
+            abi.encodePacked(IERC20Metadata(address(stakingToken)).name(), " Bribes Vault")
+        );
+    }
+
+    /**
+     * @dev Returns the symbol of the token.
+     */
+    function symbol() external view override returns (string memory) {
+        return string(
+            abi.encodePacked(IERC20Metadata(address(stakingToken)).symbol(), "-bribes")
+        );
     }
 }

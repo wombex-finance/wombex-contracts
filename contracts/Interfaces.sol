@@ -95,6 +95,7 @@ interface IWomDepositorWrapper {
 
 interface ITokenFactory{
     function CreateDepositToken(address) external returns(address);
+    function CreateBribesVotingToken() external returns(address);
 }
 
 interface IBribesRewardFactory {
