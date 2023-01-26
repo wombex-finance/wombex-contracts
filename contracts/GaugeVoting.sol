@@ -8,7 +8,6 @@ import "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-0.8/access/Ownable.sol";
 import "@openzeppelin/contracts-0.8/utils/Address.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-import "hardhat/console.sol";
 
 /**
  * @title   GaugeVoting
@@ -101,8 +100,6 @@ contract GaugeVoting is Ownable {
             address rewardPool = lpTokenRewards[lpTokensAdded[i]];
             uint256 rtLen = _rewardTokens.length;
             for (uint256 j = 0; j < rtLen; j++) {
-                console.log("_rewardTokens[j]", _rewardTokens[j]);
-                console.log("approve", rewardPool);
                 IERC20(_rewardTokens[j]).approve(rewardPool, 0);
                 IERC20(_rewardTokens[j]).approve(rewardPool, type(uint256).max);
             }
@@ -150,7 +147,7 @@ contract GaugeVoting is Ownable {
     function vote(address[] memory _lpTokens, int256[] memory _deltas) public {
         uint256 len = _lpTokens.length;
         require(len == _deltas.length, "!len");
-        uint256 userLockerVotes = boostedUserVotes(msg.sender);
+        uint256 userLockerVotes = boostedUserVotes(msg.sender, true);
         require(userLockerVotes != 0, "no votes");
 
         int256 lastDelta = 0;
@@ -225,8 +222,6 @@ contract GaugeVoting is Ownable {
             uint256 tLen = rewardTokens.length;
             for (uint256 j = 0; j < tLen; j++) {
                 uint256 amount = rewards[j];
-                console.log("amount ", amount);
-                console.log("balance", IERC20(rewardTokens[j]).balanceOf(voterProxy));
                 booster.voteExecute( //TODO: check return data
                     rewardTokens[j],
                     0,
@@ -234,8 +229,6 @@ contract GaugeVoting is Ownable {
                 );
                 uint256 incentiveAmount = amount * voteIncentive / DENOMINATOR;
                 IERC20(rewardTokens[j]).safeTransfer(_incentiveRecipient, incentiveAmount);
-                console.log("lpTokenRewards[lpToken]", lpTokenRewards[lpToken]);
-                console.log("queueNewRewards", rewardTokens[j]);
                 IBribeRewardsPool(lpTokenRewards[lpToken]).queueNewRewards(rewardTokens[j], amount - incentiveAmount);
             }
         }
@@ -283,7 +276,7 @@ contract GaugeVoting is Ownable {
     }
 
     function onVotesChanged(address _user, address _incentiveRecipient) public {
-        if (boostedUserVotes(_user) >= userVotes[_user]) {
+        if (boostedUserVotes(_user, false) >= userVotes[_user]) {
             return;
         }
 
@@ -306,9 +299,13 @@ contract GaugeVoting is Ownable {
         return stakingToken.totalSupply();
     }
 
-    function boostedUserVotes(address _user) public view returns (uint256 userLockerVotes) {
-        (uint112 lockedBalance, ) = wmxLocker.balances(_user);
-        userLockerVotes = uint256(lockedBalance);
+    function boostedUserVotes(address _user, bool _locked) public view returns (uint256 userLockerVotes) {
+        if (_locked) {
+            userLockerVotes = wmxLocker.getVotes(_user);
+        } else {
+            (uint112 lockedBalance, ) = wmxLocker.balances(_user);
+            userLockerVotes = uint256(lockedBalance);
+        }
         if (address(nftLocker) != address(0)) {
             userLockerVotes = userLockerVotes * nftLocker.voteBoost(_user) / 1 ether;
         }

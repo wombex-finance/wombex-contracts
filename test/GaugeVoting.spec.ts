@@ -231,6 +231,11 @@ describe("GaugeVoting", () => {
             console.log('getVotes', await cvxLocker.getVotes(bobAddress));
             console.log('balanceOf', await cvxLocker.balanceOf(bobAddress));
 
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(0);
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, false)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, false)).gt(0);
+
             await increaseTime(ONE_WEEK);
 
             console.log('numCheckpoints', await cvxLocker.numCheckpoints(bobAddress));
@@ -244,13 +249,15 @@ describe("GaugeVoting", () => {
 
             expect(await reward1.balanceOf(bobAddress)).eq(0);
             expect(await reward1.balanceOf(aliceAddress)).eq(0);
-            expect(await gaugeVoting.boostedUserVotes(bobAddress)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).gt(0);
 
             await gaugeVoting.connect(bob).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(5), simpleToExactAmount(5)]).then(tx => tx.wait());
 
             expect(await reward1.balanceOf(bobAddress)).gt(0);
             expect(await reward1.balanceOf(aliceAddress)).eq(0);
-            expect(await gaugeVoting.boostedUserVotes(bobAddress)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).gt(0);
 
             await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
 
@@ -260,7 +267,8 @@ describe("GaugeVoting", () => {
 
             expect(await reward1.balanceOf(bobAddress)).gt(0);
             expect(await reward1.balanceOf(aliceAddress)).gt(0);
-            expect(await gaugeVoting.boostedUserVotes(bobAddress)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).gt(0);
 
             await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
 
@@ -273,14 +281,16 @@ describe("GaugeVoting", () => {
             console.log('alice claimableRewards 2', await reward2.claimableRewards(aliceAddress));
 
             await gaugeVoting.connect(poker).onVotesChanged(bobAddress, pokerAddress).then(tx => tx.wait());
-            expect(await gaugeVoting.boostedUserVotes(bobAddress)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).gt(0);
             expect(await reward1.balanceOf(bobAddress)).gt(0);
 
             await increaseTime(ONE_WEEK.mul(18));
-            expect(await gaugeVoting.boostedUserVotes(bobAddress)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, false)).gt(0);
 
             await cvxLocker.connect(bob).processExpiredLocks(false).then(tx => tx.wait());
-            expect(await gaugeVoting.boostedUserVotes(bobAddress)).eq(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, false)).eq(0);
 
             const pokerBalancesBefore = [];
             const bobBalancesBefore = [];
