@@ -78,7 +78,7 @@ contract BribesRewardPool is BaseRewardPool4626 {
      */
     function name() external view override returns (string memory) {
         return string(
-            abi.encodePacked(IERC20Metadata(address(stakingToken)).name(), " Bribes Vault")
+            abi.encodePacked(IERC20Metadata(asset).name(), " Bribes Vault")
         );
     }
 
@@ -87,7 +87,7 @@ contract BribesRewardPool is BaseRewardPool4626 {
      */
     function symbol() external view override returns (string memory) {
         return string(
-            abi.encodePacked(IERC20Metadata(address(stakingToken)).symbol(), "-bribes")
+            abi.encodePacked(IERC20Metadata(asset).symbol(), "-bribes")
         );
     }
 }
