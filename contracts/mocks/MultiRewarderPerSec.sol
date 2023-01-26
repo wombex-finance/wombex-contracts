@@ -160,7 +160,6 @@ contract MultiRewarderPerSec {
     function onReward(address _user, uint256 _lpAmount)
     external
     virtual
-    onlyMaster
     returns (uint256[] memory rewards)
     {
         _updateReward();
