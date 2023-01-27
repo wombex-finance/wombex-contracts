@@ -452,9 +452,8 @@ describe("WomDepositor", () => {
 
         const newWomDepositor = WomDepositorV2__factory.connect(migrated.args.newDepositor, deployer);
 
-        await newWomDepositor.connect(daoSigner).setBooster(contracts.booster.address, '0').then(tx => tx.wait(1));
+        await newWomDepositor.connect(daoSigner).setBooster(contracts.boosterEarmark.address, '0').then(tx => tx.wait(1));
         await contracts.cvxStakingProxy.connect(daoSigner).setConfig(newWomDepositor.address, contracts.cvxLocker.address).then(tx => tx.wait(1));
-        await contracts.cvxStakingProxy.connect(daoSigner).setApprovals().then(tx => tx.wait(1));
 
         expect(await womDepositor.currentSlot()).eq(15);
         expect(await newWomDepositor.currentSlot()).eq(15);

@@ -4,8 +4,7 @@ pragma solidity 0.8.11;
 import { Address } from "@openzeppelin/contracts-0.8/utils/Address.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-import { SafeMath } from "@openzeppelin/contracts-0.8/utils/math/SafeMath.sol";
-import {IWmxLocker, IWomDepositor } from "./Interfaces.sol";
+import { IWmxLocker, IWomDepositor, IWomSwapDepositor, IPool } from "./Interfaces.sol";
 import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
 
 /**
@@ -22,7 +21,8 @@ import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
 contract WomStakingProxy is Ownable {
     using SafeERC20 for IERC20;
     using Address for address;
-    using SafeMath for uint256;
+
+    uint256 public constant DENOMINATOR = 10000;
 
     //tokens
     address public immutable wom;
@@ -30,18 +30,22 @@ contract WomStakingProxy is Ownable {
     address public immutable wmxWom;
 
     address public womDepositor;
+    address public womSwapDepositor;
+    address public womSwapDepositorPool;
+    uint256 public swapShare;
     address public rewards;
 
+    event RewardsSwapped(address indexed swapContract, bool indexed swapDepositor, uint256 amountIn, uint256 amountOut);
     event RewardsDistributed(address indexed token, uint256 amount);
 
     /* ========== CONSTRUCTOR ========== */
 
     /**
-     * @param _rewards       vlWMX
-     * @param _wom           WOM token
-     * @param _wmx           WMX token
-     * @param _wmxWom        wmxWOM token
-     * @param _womDepositor    Wrapper that locks WOM to veWom
+     * @param _wom                  WOM token
+     * @param _wmx                  WMX token
+     * @param _wmxWom               wmxWOM token
+     * @param _womDepositor         Wrapper that locks WOM to veWom
+     * @param _rewards              Rewards contract to queue wmxWOM
      */
     constructor(
         address _wom,
@@ -55,6 +59,7 @@ contract WomStakingProxy is Ownable {
         wmxWom = _wmxWom;
         womDepositor = _womDepositor;
         rewards = _rewards;
+        _setApprovals();
     }
 
     /**
@@ -65,15 +70,34 @@ contract WomStakingProxy is Ownable {
     function setConfig(address _womDepositor, address _rewards) external onlyOwner {
         womDepositor = _womDepositor;
         rewards = _rewards;
+        _setApprovals();
+    }
+
+    /**
+     * @notice Set swap config
+     * @param   _womSwapDepositor WomSwapDepositor address
+     * @param   _swapShare Share to swap through WomSwapDepositor
+     */
+    function setSwapConfig(address _womSwapDepositor, uint256 _swapShare) external onlyOwner {
+        require(_swapShare <= DENOMINATOR, ">denominator");
+        womSwapDepositor = _womSwapDepositor;
+        womSwapDepositorPool = IWomSwapDepositor(_womSwapDepositor).pool();
+        swapShare = _swapShare;
+        _setApprovals();
     }
 
     /**
      * @notice  Approve womDepositor to transfer contract WOM
      *          and rewards to transfer wmxWom
      */
-    function setApprovals() external {
+    function _setApprovals() internal {
         IERC20(wom).safeApprove(womDepositor, 0);
         IERC20(wom).safeApprove(womDepositor, type(uint256).max);
+
+        if (womSwapDepositor != address(0)) {
+            IERC20(wom).safeApprove(womSwapDepositor, 0);
+            IERC20(wom).safeApprove(womSwapDepositor, type(uint256).max);
+        }
 
         IERC20(wmxWom).safeApprove(rewards, 0);
         IERC20(wmxWom).safeApprove(rewards, type(uint256).max);
@@ -101,7 +125,22 @@ contract WomStakingProxy is Ownable {
         //convert wom to wmxWom
         uint256 womBal = IERC20(wom).balanceOf(address(this));
         if (womBal > 0) {
-            IWomDepositor(womDepositor).deposit(womBal, address(0));
+            uint256 womBalToSwap = womBal * swapShare / DENOMINATOR;
+            uint256 amountOut;
+            if (womSwapDepositorPool != address(0)) {
+                (amountOut, ) = IPool(womSwapDepositorPool).quotePotentialSwap(wom, wmxWom, int256(womBalToSwap));
+            }
+
+            if (amountOut > womBalToSwap) {
+                IWomSwapDepositor(womSwapDepositor).deposit(womBalToSwap, address(0), amountOut, block.timestamp + 1);
+                emit RewardsSwapped(womSwapDepositor, true, womBalToSwap, amountOut);
+            } else {
+                womBalToSwap = 0;
+            }
+
+            uint256 womBalToDeposit = womBal - womBalToSwap;
+            IWomDepositor(womDepositor).deposit(womBalToDeposit, address(0));
+            emit RewardsSwapped(womDepositor, false, womBalToDeposit, womBalToDeposit);
         }
 
         //distribute wmxWom

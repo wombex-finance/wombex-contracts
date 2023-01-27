@@ -41,6 +41,11 @@ contract BaseRewardPool4626 is BaseRewardPool, ReentrancyGuard, IERC4626 {
         IERC20(asset).safeApprove(operator_, type(uint256).max);
     }
 
+    function _onOperatorUpdate() internal override {
+        IERC20(asset).safeApprove(operator, 0);
+        IERC20(asset).safeApprove(operator, type(uint256).max);
+    }
+
     /**
      * @notice Total amount of the underlying asset that is "managed" by Vault.
      */

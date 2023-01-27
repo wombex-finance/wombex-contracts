@@ -33,7 +33,15 @@ import {
     WmxMerkleDrop__factory,
     WomDepositor__factory,
     WomDepositor,
-    IMasterWombatRewarder__factory, VeWom, MasterWombatV2, WETH, IERC20, Pool, PoolDepositor, PoolDepositor__factory
+    IMasterWombatRewarder__factory,
+    VeWom,
+    MasterWombatV2,
+    WETH,
+    IERC20,
+    Pool,
+    PoolDepositor,
+    PoolDepositor__factory,
+    BoosterEarmark, BoosterEarmark__factory
 } from "../types/generated";
 import { deployContract, waitForTx } from "../tasks/utils";
 import { ZERO_ADDRESS, ONE_WEEK } from "../test-utils/constants";
@@ -143,6 +151,7 @@ interface Phase2Deployed extends Phase1Deployed {
     cvx: Wmx;
     minter: WmxMinter;
     booster: Booster;
+    boosterEarmark: BoosterEarmark;
     boosterOwner: any;
     factories: Factories;
     arbitratorVault: any;
@@ -352,12 +361,11 @@ async function deployFirstStage(
     debug = false,
     waitForBlocks = 0,
 ): Promise<SystemDeployed> {
-    const { ethers } = hre;
     const deployer = signer;
     const deployerAddress = await deployer.getAddress();
 
     const { token } = config;
-    const { voterProxy, pool, masterWombat } = deployment;
+    const { voterProxy, masterWombat } = deployment;
 
     // -----------------------------
     // 2: cvx, booster, factories, cvxCrv, crvDepositor, poolManager, vlCVX + stakerProxy
@@ -402,7 +410,7 @@ async function deployFirstStage(
         debug,
         waitForBlocks,
     );
-    console.log('minter', minter.address, [cvx.address, multisigs.daoMultisig])
+    console.log('minter', minter.address, [cvx.address, multisigs.daoMultisig]);
 
     const booster = await deployContract<Booster>(
         hre,
@@ -413,7 +421,20 @@ async function deployFirstStage(
         debug,
         waitForBlocks,
     );
-    console.log('booster', booster.address)
+    console.log('booster', booster.address);
+
+    const boosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        [booster.address, deployment.weth.address],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    console.log('boosterEarmark', boosterEarmark.address);
+
+    await booster.setEarmarkDelegate(boosterEarmark.address);
 
     const poolDepositor = await deployContract<PoolDepositor>(
         hre,
@@ -527,9 +548,6 @@ async function deployFirstStage(
     tx = await wmxLocker.setApprovals();
     await waitForTx(tx, debug, waitForBlocks);
 
-    tx = await wmxStakingProxy.setApprovals();
-    await waitForTx(tx, debug, waitForBlocks);
-
     console.log('voterProxy.setOperator')
     tx = await voterProxy.setOperator(booster.address);
     await waitForTx(tx, debug, waitForBlocks);
@@ -551,11 +569,11 @@ async function deployFirstStage(
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setVoteDelegate')
-    tx = await booster.setVoteDelegate(multisigs.daoMultisig);
+    tx = await booster.setVoteDelegate(multisigs.daoMultisig, true);
     await waitForTx(tx, debug, waitForBlocks);
 
-    console.log('booster.setEarmarkIncentive')
-    tx = await booster.setEarmarkIncentive(10);
+    console.log('booster.setEarmarkConfig')
+    tx = await boosterEarmark.setEarmarkConfig(10);
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setExtraRewardsDistributor')
@@ -576,8 +594,12 @@ async function deployFirstStage(
     tx = await booster.setPoolManager(deployerAddress);
     await waitForTx(tx, debug, waitForBlocks);
 
+    tx = await booster.setPoolManager(boosterEarmark.address);
+    await waitForTx(tx, debug, waitForBlocks);
+
     await updateDistributionByTokens(signer, {
         booster,
+        boosterEarmark,
         voterProxy,
         cvxCrvRewards,
         masterWombat: deployment.masterWombat,
@@ -587,7 +609,7 @@ async function deployFirstStage(
         cvxStakingProxy: wmxStakingProxy}
     );
 
-    tx = await booster.setPoolManager(multisigs.daoMultisig);
+    tx = await boosterEarmark.transferOwnership(multisigs.daoMultisig);
     await waitForTx(tx, debug, waitForBlocks);
 
     tx = await wmxLocker.transferOwnership(multisigs.daoMultisig);
@@ -631,6 +653,7 @@ async function deployFirstStage(
         cvx,
         minter,
         booster,
+        boosterEarmark,
         poolDepositor,
         boosterOwner: null,
         cvxCrvBpt: null,
@@ -666,7 +689,7 @@ async function deployFirstStage(
 }
 
 async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1) {
-    const {booster, voterProxy, masterWombat, cvxLocker, cvxCrvRewards, weth, crv, cvxStakingProxy} = deployment;
+    const {booster, boosterEarmark, voterProxy, masterWombat, cvxLocker, cvxCrvRewards, weth, crv, cvxStakingProxy} = deployment;
 
     const poolLength = await masterWombat.poolLength().then(l => parseInt(l.toString()));
 
@@ -680,7 +703,7 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
     await waitForTx(tx, true, waitForBlocks);
 
     console.log('booster.updateDistributionByTokens', poolLength);
-    tx = await booster.connect(signer).updateDistributionByTokens(
+    tx = await boosterEarmark.connect(signer).updateDistributionByTokens(
         crv.address,
         [cvxCrvRewards.address, cvxStakingProxy.address],
         [500, 1000],
@@ -693,7 +716,7 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
         const {lpToken, rewarder} = await masterWombat.poolInfo(i);
 
         console.log('booster.addPool');
-        tx = await booster.connect(signer).addPool(lpToken, masterWombat.address);
+        tx = await boosterEarmark.connect(signer).addPool(lpToken, masterWombat.address);
         await waitForTx(tx, true, waitForBlocks);
 
         if (rewarder !== ZERO_ADDRESS) {
@@ -705,7 +728,7 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
                     token = weth.address;
                     console.log('tokens[i] = weth.address')
                 }
-                tx = await booster.connect(signer).updateDistributionByTokens(
+                tx = await boosterEarmark.connect(signer).updateDistributionByTokens(
                     token,
                     [cvxCrvRewards.address, cvxLocker.address],
                     [500, 1000],

@@ -1,7 +1,7 @@
 import {task} from "hardhat/config";
-import {HardhatRuntimeEnvironment, TaskArguments} from "hardhat/types";
+import {TaskArguments} from "hardhat/types";
 import {getSigner} from "../utils";
-import {deployContract, logContracts, waitForTx} from "./../utils/deploy-utils";
+import {deployContract} from "./../utils/deploy-utils";
 import {deployFirstStage} from "../../scripts/deploySystem";
 import {
     VoterProxy__factory,
@@ -27,28 +27,30 @@ import {
     TokenFactory__factory,
     BoosterMigrator,
     BoosterMigrator__factory,
-    DepositorMigrator,
-    DepositorMigrator__factory,
     ExtraRewardsDistributorProxy,
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
     PoolDepositor__factory,
     Asset__factory,
-    WomSwapDepositor,
-    WomSwapDepositor__factory,
+    WomSwapDepositor, WomSwapDepositor__factory,
+    WomStakingProxy, WomStakingProxy__factory,
+    LpVestedEscrow__factory, LpVestedEscrow,
+    // LensUser, LensUser__factory,
+    BoosterEarmark,
+    BoosterEarmark__factory,
     WmxRewardPoolFactory__factory,
     WmxRewardPoolFactory,
     WmxRewardPoolLens__factory, WmxRewardPoolLens
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
-    getAccountBalanceProof, impersonate, ONE_DAY,
-    ONE_WEEK,
+    getAccountBalanceProof,
+    ONE_DAY,
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
 
-const {approvePoolDepositor, getBoosterValues} = require('../helpers');
+const {approvePoolDepositor} = require('../helpers');
 
 const fs = require('fs');
 const ethers = require('ethers');
@@ -286,6 +288,37 @@ task("deploy-escrow:bnb").setAction(async function (taskArguments: TaskArguments
     console.log('escrow', escrow.address);
 });
 
+task("deploy-lp-escrow:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+
+    const args = [
+        '0xe86eaAD81C32ffbb88B7ec9B325C8f75C8c9f1Ab',
+        treasuryMultisig,
+        '1687996800',
+        '1688083200'
+    ];
+    fs.writeFileSync('./args/lp-escrow.js', 'module.exports = ' + JSON.stringify(args));
+
+    const lpEscrow = await deployContract<LpVestedEscrow>(
+        hre,
+        new LpVestedEscrow__factory(deployer),
+        "LpVestedEscrow",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lp escrow', lpEscrow.address);
+});
+
 task("deploy-zap:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
 
@@ -439,6 +472,21 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         true,
     );
 
+    const newBoosterEarmarkArgs = [newBooster.address, bnbConfig.weth];
+    fs.writeFileSync('./args/boosterEarmark.js', 'module.exports = ' + JSON.stringify(newBoosterEarmarkArgs));
+    const newBoosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        newBoosterEarmarkArgs,
+        {},
+        true,
+    );
+
+    await newBooster.setEarmarkDelegate(newBoosterEarmark.address).then(tx => tx.wait());
+    // const newBooster = Booster__factory.connect('0x561050ffb188420d2605714f84eda714da58da69', deployer);
+    // const newBoosterEarmark = BoosterEarmark__factory.connect('0x9bdcb245234b4d0dfa998d0f8da72e5ccd0f9df4', deployer);
+
     const rewardFactoryArgs = [newBooster.address, bnbConfig.wom];
     fs.writeFileSync('./args/rewardFactory.js', 'module.exports = ' + JSON.stringify(rewardFactoryArgs));
     const rewardFactory = await deployContract<RewardFactory>(
@@ -448,7 +496,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         rewardFactoryArgs,
         {},
         true,
-    );
+    );//0x6d317CF62c55BB96b933fDC637F7e08100628B39
 
     const tokenFactoryNamePostfix = ' Wombex Deposit Token';
     const cvxSymbol = 'WMX';
@@ -461,10 +509,10 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         tokenFactoryArgs,
         {},
         true,
-    );
+    );//0xc20Ae367683Eb5f4FBb2b0ec7912E1c5BA32C2B5
 
     console.log('deployContract BoosterMigrator');
-    const boosterMigratorArgs = [bnbConfig.booster, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth];
+    const boosterMigratorArgs = [bnbConfig.booster, ZERO_ADDRESS, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth];
     fs.writeFileSync('./args/boosterMigrator.js', 'module.exports = ' + JSON.stringify(boosterMigratorArgs));
     const boosterMigrator = await deployContract<BoosterMigrator>(
         hre,
@@ -478,21 +526,8 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     console.log('boosterMigrator', boosterMigrator.address);
 
     await newBooster.setOwner(boosterMigrator.address).then(tx => tx.wait(1));
-    await newBooster.setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
-
-    console.log('deployContract DepositorMigrator');
-    const depositorMigratorArgs = [bnbConfig.crvDepositor, ['0xD684e0090bD4E11246c0F4d0aeFFEbd2aE252828'], [5]];
-    fs.writeFileSync('./args/depositorMigrator.js', 'module.exports = ' + JSON.stringify(depositorMigratorArgs));
-    const depositorMigrator = await deployContract<DepositorMigrator>(
-        hre,
-        new DepositorMigrator__factory(deployer),
-        "DepositorMigrator",
-        depositorMigratorArgs,
-        {},
-        true,
-        waitForBlocks,
-    );
-    console.log('depositorMigrator', depositorMigrator.address);
+    await newBooster.setPoolManager(newBoosterEarmark.address).then(tx => tx.wait(1));
+    await newBoosterEarmark.transferOwnership(boosterMigrator.address).then(tx => tx.wait(1));
 
     const poolDepositorArgs = [bnbConfig.weth, newBooster.address, bnbConfig.masterWombat];
     fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
@@ -546,6 +581,7 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
 
     const poolDepositorArgs = [bnbConfig.weth, bnbConfig.booster, bnbConfig.masterWombat];
     fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
+    // const poolDepositor = PoolDepositor__factory.connect(bnbConfig.poolDepositor, deployer);
     const poolDepositor = await deployContract<PoolDepositor>(
         hre,
         new PoolDepositor__factory(deployer),
@@ -558,6 +594,64 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
     console.log('poolDepositor', poolDepositor.address);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
+
+task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    // const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const args = [
+    ];
+    fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
+
+    // const lens = await deployContract<LensUser>(
+    //     hre,
+    //     new LensUser__factory(deployer),
+    //     "Lens",
+    //     args,
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // console.log('lens', lens.address);
+});
+
+task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const wmxStakingProxyArgs = [
+        bnbConfig.wom,
+        bnbConfig.cvx,
+        bnbConfig.cvxCrv,
+        bnbConfig.crvDepositor,
+        bnbConfig.cvxLocker,
+    ];
+    fs.writeFileSync('./args/wmxStakingProxy.js', 'module.exports = ' + JSON.stringify(wmxStakingProxyArgs));
+    const wmxStakingProxy = await deployContract<WomStakingProxy>(
+        hre,
+        new WomStakingProxy__factory(deployer),
+        "WomStakingProxy",
+        wmxStakingProxyArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxStakingProxy', wmxStakingProxy.address);
+    await wmxStakingProxy.setSwapConfig(bnbConfig.womSwapDepositorAddress, 3000).then(tx => tx.wait(1));
+    await wmxStakingProxy.transferOwnership(treasuryMultisig).then(tx => tx.wait(1));
 });
 
 task("wmx-reward-pool-factory:bnb").setAction(async function (taskArguments: TaskArguments, hre) {

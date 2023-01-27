@@ -1012,7 +1012,9 @@ contract SafeMoon is Context, IERC20, Ownable {
 
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
-        require(amount > 0, "Transfer amount must be greater than zero");
+        if(amount == 0) {
+            return;
+        }
         if(from != owner() && to != owner())
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
 

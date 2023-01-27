@@ -515,9 +515,9 @@ describe("WmxVestedEscrow", () => {
             expect(bobToEveTransferPending.sub(100)).lte(simpleToExactAmount(50));
             expect(bobToEveTransferPending.add(100)).gte(simpleToExactAmount(50));
             expect(await vestedEscrowLockOnly.available(bobAddress)).gte('1190022400312');
-            expect(await vestedEscrowLockOnly.available(bobAddress)).lte('2380044911189');
+            expect(await vestedEscrowLockOnly.available(bobAddress)).lte('2416563494955');
             expect(await vestedEscrowLockOnly.available(eveAddress)).gte('1653439754888');
-            expect(await vestedEscrowLockOnly.available(eveAddress)).lte('3306879728491');
+            expect(await vestedEscrowLockOnly.available(eveAddress)).lte('3506879728491');
 
             expect(
                 (await vestedEscrowLockOnly.totalLocked(bobAddress)).add(await vestedEscrowLockOnly.totalLocked(eveAddress))

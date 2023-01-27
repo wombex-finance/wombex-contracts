@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ContractTransaction, Signer } from "ethers";
 import hre, { ethers } from "hardhat";
-import {Account, WomStakingProxy} from "types";
+import {Account, BoosterEarmark, WomStakingProxy} from "types";
 import {
     deployTestFirstStage,
     getMockDistro,
@@ -85,7 +85,7 @@ describe("WmxLocker", () => {
     let auraLocker: WmxLocker;
     let cvxStakingProxy: WomStakingProxy;
     let cvxCrvRewards: BaseRewardPool;
-    let booster: Booster;
+    let booster: Booster, boosterEarmark: BoosterEarmark;
     let wmx: Wmx;
     let wmxWom: CvxCrvToken;
     let crvDepositor: WomDepositor;
@@ -233,6 +233,7 @@ describe("WmxLocker", () => {
         bobAddress = await bob.getAddress();
 
         booster = contracts.booster;
+        boosterEarmark = contracts.boosterEarmark;
         auraLocker = contracts.cvxLocker;
         cvxStakingProxy = contracts.cvxStakingProxy;
         cvxCrvRewards = contracts.cvxCrvRewards;
@@ -254,11 +255,12 @@ describe("WmxLocker", () => {
         await tx.wait();
     };
     async function distributeRewardsFromBooster(): Promise<BN> {
-        const tx = await (await booster.earmarkRewards(boosterPoolId)).wait(1);
+        const tx = await (await boosterEarmark.earmarkRewards(boosterPoolId)).wait(1);
         await increaseTime(ONE_DAY);
-        const log = tx.events.find(e => e.address.toLowerCase() === cvxStakingProxy.address.toLowerCase());
-        const args = cvxStakingProxy.interface.decodeEventLog('RewardsDistributed', log.data, log.topics);
-        return args[1];
+        const logs = tx.events.filter(e => e.address.toLowerCase() === cvxStakingProxy.address.toLowerCase());
+        return logs
+            .map(l => { try { return cvxStakingProxy.interface.decodeEventLog('RewardsDistributed', l.data, l.topics); } catch (e) {} })
+            .filter(e => e)[0].amount;
     }
     before(async () => {
         await hre.network.provider.send("hardhat_reset");
@@ -382,7 +384,7 @@ describe("WmxLocker", () => {
 
             await increaseTime(ONE_DAY.mul(14));
 
-            await booster.earmarkRewards(boosterPoolId);
+            await boosterEarmark.earmarkRewards(boosterPoolId);
 
             await auraLocker.checkpointEpoch();
 
@@ -1154,7 +1156,7 @@ describe("WmxLocker", () => {
             tx = await booster.connect(bob).deposit(0, amount, true);
             await tx.wait();
 
-            tx = await booster.earmarkRewards(boosterPoolId);
+            tx = await boosterEarmark.earmarkRewards(boosterPoolId);
             await tx.wait();
 
             const lock = await auraLocker.userLocks(aliceAddress, 0);

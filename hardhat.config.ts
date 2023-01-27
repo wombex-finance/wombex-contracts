@@ -6,6 +6,7 @@ import "solidity-coverage";
 import "@nomiclabs/hardhat-etherscan";
 require('hardhat-contract-sizer');
 import "./tasks/coverage";
+import "./tasks/lens";
 
 import { resolve } from "path";
 
