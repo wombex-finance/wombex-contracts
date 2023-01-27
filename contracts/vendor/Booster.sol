@@ -724,24 +724,27 @@ contract Booster{
         return true;
     }
 
-    function gaugeMigrate(uint256[] memory migratePids) external {
+    function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external {
         require(msg.sender == poolManager, "!auth");
 
         address oldGauge = poolInfo[migratePids[0]].gauge;
-        address newGauge = IMasterWombat(oldGauge).newMasterWombat();
 
         for (uint i = 0; i < migratePids.length; i++) {
             uint256 pid = migratePids[i];
             require(poolInfo[pid].gauge == oldGauge, "!gauge");
             address lptoken = poolInfo[pid].lptoken;
 
+            if (!IStaker(voterProxy).lpTokenPidSet(_newGauge, lptoken)) {
+                continue;
+            }
+
             uint128 amount = getLpBalance(oldGauge, lptoken);
             IStaker(voterProxy).withdrawLp(lptoken, oldGauge, amount);
 
             IERC20(lptoken).safeTransfer(voterProxy, amount);
-            IStaker(voterProxy).deposit(lptoken, newGauge);
+            IStaker(voterProxy).deposit(lptoken, _newGauge);
 
-            poolInfo[pid].gauge = newGauge;
+            poolInfo[pid].gauge = _newGauge;
         }
     }
 
