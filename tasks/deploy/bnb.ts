@@ -37,7 +37,10 @@ import {
     LpVestedEscrow__factory, LpVestedEscrow,
     // LensUser, LensUser__factory,
     BoosterEarmark,
-    BoosterEarmark__factory
+    BoosterEarmark__factory,
+    WmxRewardPoolFactory__factory,
+    WmxRewardPoolFactory,
+    WmxRewardPoolLens__factory, WmxRewardPoolLens
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -649,4 +652,54 @@ task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArgum
     console.log('wmxStakingProxy', wmxStakingProxy.address);
     await wmxStakingProxy.setSwapConfig(bnbConfig.womSwapDepositorAddress, 3000).then(tx => tx.wait(1));
     await wmxStakingProxy.transferOwnership(treasuryMultisig).then(tx => tx.wait(1));
+});
+
+task("wmx-reward-pool-factory:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const WmxRewardPoolFactoryArgs = [
+        bnbConfig.cvxCrv,
+        bnbConfig.cvx,
+        daoMultisig,
+        bnbConfig.cvxLocker,
+        [bnbConfig.crvDepositor]
+    ];
+    fs.writeFileSync('./args/wmxRewardPoolFactory.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolFactoryArgs));
+    const wmxRewardPoolFactory = await deployContract<WmxRewardPoolFactory>(
+        hre,
+        new WmxRewardPoolFactory__factory(deployer),
+        "WmxRewardPoolFactory",
+        WmxRewardPoolFactoryArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxRewardPoolFactory', wmxRewardPoolFactory.address);
+});
+
+task("wmx-reward-pool-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const WmxRewardPoolLensArgs = ['0x2B37c10224c8d5432e0C5f7f0ea92b70F82E877c'];
+    fs.writeFileSync('./args/wmxRewardPoolLens.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolLensArgs));
+    const wmxRewardPoolLens = await deployContract<WmxRewardPoolLens>(
+        hre,
+        new WmxRewardPoolLens__factory(deployer),
+        "WmxRewardPoolLens",
+        WmxRewardPoolLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxRewardPoolLens', wmxRewardPoolLens.address);
 });

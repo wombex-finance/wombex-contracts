@@ -4,7 +4,6 @@ pragma solidity 0.8.11;
 import {WmxMath} from "./WmxMath.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-
 import {IWmxLocker} from "./Interfaces.sol";
 
 /**
@@ -20,14 +19,17 @@ contract WmxRewardPool {
     using WmxMath for uint256;
     using SafeERC20 for IERC20;
 
+    uint256 public constant DENOMINATOR = 10000;
+
     IERC20 public immutable rewardToken;
     IERC20 public immutable stakingToken;
-    uint256 public constant duration = 14 days;
+    uint256 public duration;
 
     address public immutable rewardManager;
 
     IWmxLocker public wmxLocker;
     address public immutable penaltyForwarder;
+    uint256 public immutable penaltyShare;
     uint256 public pendingPenalty = 0;
     uint256 public immutable startTime;
 
@@ -35,7 +37,7 @@ contract WmxRewardPool {
     uint256 public rewardRate = 0;
     uint256 public lastUpdateTime;
     uint256 public rewardPerTokenStored;
-    uint256 private _totalSupply;
+    uint256 internal _totalSupply;
 
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
@@ -63,6 +65,7 @@ contract WmxRewardPool {
         address _rewardManager,
         address _wmxLocker,
         address _penaltyForwarder,
+        uint256 _penaltyShare,
         uint256 _startDelay
     ) {
         require(_stakingToken != _rewardToken && _stakingToken != address(0), "!tokens");
@@ -74,9 +77,12 @@ contract WmxRewardPool {
         wmxLocker = IWmxLocker(_wmxLocker);
         require(_penaltyForwarder != address(0), "!forwarder");
         penaltyForwarder = _penaltyForwarder;
+        penaltyShare = _penaltyShare;
 
         require(_startDelay < 2 weeks, "!delay");
         startTime = block.timestamp + _startDelay;
+
+        duration = 14 days;
     }
 
     function totalSupply() public view returns (uint256) {
@@ -120,6 +126,7 @@ contract WmxRewardPool {
 
     function stake(uint256 _amount) public updateReward(msg.sender) returns (bool) {
         require(_amount > 0, "RewardPool : Cannot stake 0");
+        _stakeCheck(_amount);
 
         _totalSupply = _totalSupply.add(_amount);
         _balances[msg.sender] = _balances[msg.sender].add(_amount);
@@ -138,6 +145,7 @@ contract WmxRewardPool {
 
     function stakeFor(address _for, uint256 _amount) public updateReward(_for) returns (bool) {
         require(_amount > 0, "RewardPool : Cannot stake 0");
+        _stakeCheck(_amount);
 
         //give to _for
         _totalSupply = _totalSupply.add(_amount);
@@ -182,7 +190,7 @@ contract WmxRewardPool {
                 rewardToken.safeIncreaseAllowance(address(wmxLocker), reward);
                 wmxLocker.lock(msg.sender, reward);
             } else {
-                uint256 penalty = (reward * 3) / 10;
+                uint256 penalty = (reward * penaltyShare) / DENOMINATOR;
                 pendingPenalty += penalty;
                 rewardToken.safeTransfer(msg.sender, reward - penalty);
             }
@@ -241,5 +249,9 @@ contract WmxRewardPool {
         emit RewardAdded(rewardsAvailable);
 
         return true;
+    }
+
+    function _stakeCheck(uint256) internal virtual {
+
     }
 }
