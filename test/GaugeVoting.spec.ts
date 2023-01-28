@@ -307,6 +307,7 @@ describe("GaugeVoting", () => {
         });
 
         it("GaugeVoting config should be able to change by owner", async () => {
+            expect(await gaugeVoting.getLpTokensAdded()).deep.eq([lptoken1.address, lptoken2.address]);
             expect(await gaugeVoting.votePeriod()).eq(0);
             expect(await gaugeVoting.voteThreshold()).eq(0);
             expect(await gaugeVoting.voteIncentive()).eq(0);
