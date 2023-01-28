@@ -94,7 +94,7 @@ describe("GaugeVoting", () => {
         await setup();
     });
 
-    describe("performing core functions with deflationary token", async () => {
+    describe("performing vote functions", async () => {
         before(async () => {
             wombatVoter = await deployContract<WombatVoter>(
                 hre,
@@ -231,12 +231,10 @@ describe("GaugeVoting", () => {
             console.log('getVotes', await cvxLocker.getVotes(bobAddress));
             console.log('balanceOf', await cvxLocker.balanceOf(bobAddress));
 
-            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(0);
-            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
-            expect(await gaugeVoting.boostedUserVotes(bobAddress, false)).gt(0);
-            expect(await gaugeVoting.boostedUserVotes(aliceAddress, false)).gt(0);
-
-            await increaseTime(ONE_WEEK);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(simpleToExactAmount(10));
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, false)).eq(simpleToExactAmount(10));
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, false)).eq(simpleToExactAmount(20));
 
             console.log('numCheckpoints', await cvxLocker.numCheckpoints(bobAddress));
             console.log('getVotes', await cvxLocker.getVotes(bobAddress));
@@ -249,15 +247,15 @@ describe("GaugeVoting", () => {
 
             expect(await reward1.balanceOf(bobAddress)).eq(0);
             expect(await reward1.balanceOf(aliceAddress)).eq(0);
-            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).gt(0);
-            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(simpleToExactAmount(10));
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
 
             await gaugeVoting.connect(bob).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(5), simpleToExactAmount(5)]).then(tx => tx.wait());
 
-            expect(await reward1.balanceOf(bobAddress)).gt(0);
+            expect(await reward1.balanceOf(bobAddress)).eq(simpleToExactAmount(5));
             expect(await reward1.balanceOf(aliceAddress)).eq(0);
-            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).gt(0);
-            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(simpleToExactAmount(10));
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
 
             await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
 
@@ -265,10 +263,10 @@ describe("GaugeVoting", () => {
 
             await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(9), simpleToExactAmount(11)]).then(tx => tx.wait());
 
-            expect(await reward1.balanceOf(bobAddress)).gt(0);
-            expect(await reward1.balanceOf(aliceAddress)).gt(0);
-            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).gt(0);
-            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).gt(0);
+            expect(await reward1.balanceOf(bobAddress)).eq(simpleToExactAmount(5));
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(simpleToExactAmount(10));
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
 
             await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
 
@@ -281,12 +279,12 @@ describe("GaugeVoting", () => {
             console.log('alice claimableRewards 2', await reward2.claimableRewards(aliceAddress));
 
             await gaugeVoting.connect(poker).onVotesChanged(bobAddress, pokerAddress).then(tx => tx.wait());
-            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).gt(0);
-            expect(await reward1.balanceOf(bobAddress)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(simpleToExactAmount(10));
+            expect(await reward1.balanceOf(bobAddress)).eq(simpleToExactAmount(5));
 
             await increaseTime(ONE_WEEK.mul(18));
             expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(0);
-            expect(await gaugeVoting.boostedUserVotes(bobAddress, false)).gt(0);
+            expect(await gaugeVoting.boostedUserVotes(bobAddress, false)).eq(simpleToExactAmount(10));
 
             await cvxLocker.connect(bob).processExpiredLocks(false).then(tx => tx.wait());
             expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(0);
@@ -295,6 +293,7 @@ describe("GaugeVoting", () => {
             const pokerBalancesBefore = [];
             const bobBalancesBefore = [];
             let claimableRewards = await reward1.claimableRewards(bobAddress);
+            expect(claimableRewards.tokens.length).gt(0);
             for (let i = 0; i < claimableRewards.tokens.length; i++) {
                 const token = BaseRewardPool4626__factory.connect(claimableRewards.tokens[i], alice);
                 pokerBalancesBefore[i] = await token.balanceOf(pokerAddress);
@@ -308,12 +307,37 @@ describe("GaugeVoting", () => {
             expect(await reward1.balanceOf(bobAddress)).eq(0);
 
             claimableRewards = await reward1.claimableRewards(bobAddress);
+            expect(claimableRewards.tokens.length).gt(0);
             for (let i = 0; i < claimableRewards.tokens.length; i++) {
                 const token = BaseRewardPool4626__factory.connect(claimableRewards.tokens[i], alice);
                 expect(await token.balanceOf(pokerAddress)).gt(pokerBalancesBefore[i]);
                 expect(await token.balanceOf(bobAddress)).eq(bobBalancesBefore[i]);
                 expect(claimableRewards.amounts[i]).eq(0);
             }
+        });
+
+        it("@method Booster.deposit", async () => {
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
+            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(1), simpleToExactAmount(1)])).to.be.revertedWith("no votes");
+            console.log('1 lockedBalances', await cvxLocker.lockedBalances(aliceAddress));
+            await cvxLocker.connect(alice).processExpiredLocks(true).then(tx => tx.wait());
+            console.log('2 lockedBalances', await cvxLocker.lockedBalances(aliceAddress));
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
+            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(20));
+            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(1), simpleToExactAmount(1)])).to.be.revertedWith("votes overflow");
+
+            await increaseTime(ONE_WEEK.mul(20));
+
+            await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
+
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
+
+            const reward1Address = await gaugeVoting.lpTokenRewards(lptoken1.address);
+            const reward1 = BaseRewardPool4626__factory.connect(reward1Address, alice);
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
+            await reward1["getReward(address,bool)"](aliceAddress, false).then(tx => tx.wait());
+            expect(await gaugeVoting.userVotes(aliceAddress)).eq(0);
+            expect(await reward1.balanceOf(aliceAddress)).eq(0);
         });
     });
 });

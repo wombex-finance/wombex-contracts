@@ -122,7 +122,7 @@ contract GaugeVoting is Ownable {
     }
 
     function _registerLpToken(address _lpToken) internal {
-        _registerCreatedLpToken(_lpToken, bribeRewardsFactory.CreateBribesRewards(address(stakingToken), _lpToken));
+        _registerCreatedLpToken(_lpToken, bribeRewardsFactory.CreateBribesRewards(address(stakingToken), _lpToken, true));
     }
 
     function _registerCreatedLpToken(address _lpToken, address _rewards) internal {
@@ -190,11 +190,14 @@ contract GaugeVoting is Ownable {
     function voteExecute(address _incentiveRecipient) public {
         require(isVoteExecuteReady(), "!ready");
 
-        uint256 ratio = veWom.totalSupply() * 1 ether / totalVotes();
+        uint256 totalVotesAmount = totalVotes();
+        if (totalVotesAmount == 0) {
+            return;
+        }
+        uint256 ratio = veWom.totalSupply() * 1 ether / totalVotesAmount;
 
-        uint256 len = lpTokensAdded.length;
-        int256[] memory _deltas = new int256[](len);
-        for (uint256 i = 0; i < len; i++) {
+        int256[] memory _deltas = new int256[](lpTokensAdded.length);
+        for (uint256 i = 0; i < _deltas.length; i++) {
             address lpToken = lpTokensAdded[i];
             address rewardsPool = lpTokenRewards[lpToken];
             int256 lpVotes = int256(IERC20(rewardsPool).totalSupply() * ratio) / 1 ether;
@@ -209,7 +212,7 @@ contract GaugeVoting is Ownable {
         );
 
         uint256[][] memory bribeRewards = abi.decode(rewardsData, (uint256[][]));
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < _deltas.length; i++) {
             address lpToken = lpTokensAdded[i];
             if (lpTokenStatus[lpToken] != LpTokenStatus.ACTIVE) {
                 continue;
@@ -270,13 +273,19 @@ contract GaugeVoting is Ownable {
     }
 
     function rewardClaimed(uint256, address _account, uint256, bool) external {
+        _onVotesChanged(_account, _account, _account);
         if (isVoteExecuteReady()) {
             voteExecute(_account);
         }
     }
 
     function onVotesChanged(address _user, address _incentiveRecipient) public {
-        if (boostedUserVotes(_user, false) >= userVotes[_user]) {
+        address msgSender = msg.sender == address(nftLocker) ? _user : msg.sender;
+        _onVotesChanged(_user, _incentiveRecipient, msgSender);
+    }
+
+    function _onVotesChanged(address _user, address _incentiveRecipient, address _msgSender) internal {
+        if (boostedUserVotes(_user, _user == _msgSender) >= userVotes[_user]) {
             return;
         }
 
@@ -300,12 +309,8 @@ contract GaugeVoting is Ownable {
     }
 
     function boostedUserVotes(address _user, bool _locked) public view returns (uint256 userLockerVotes) {
-        if (_locked) {
-            userLockerVotes = wmxLocker.getVotes(_user);
-        } else {
-            (uint112 lockedBalance, ) = wmxLocker.balances(_user);
-            userLockerVotes = uint256(lockedBalance);
-        }
+        (uint256 totalBalance, , uint256 lockedBalance, ) = wmxLocker.lockedBalances(_user);
+        userLockerVotes = _locked ? lockedBalance : totalBalance;
         if (address(nftLocker) != address(0)) {
             userLockerVotes = userLockerVotes * nftLocker.voteBoost(_user) / 1 ether;
         }

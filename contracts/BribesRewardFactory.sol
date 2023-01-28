@@ -28,10 +28,10 @@ contract BribesRewardFactory {
     /**
      * @notice Create a Managed Reward Pool to handle distribution of all crv/wom mined in a pool
      */
-    function CreateBribesRewards(address _stakingToken, address _lptoken) external returns (address) {
+    function CreateBribesRewards(address _stakingToken, address _lptoken, bool _callOperatorOnGetReward) external returns (address) {
         require(msg.sender == operator, "!auth");
 
-        BribesRewardPool rewardPool = new BribesRewardPool(_stakingToken, operator, _lptoken, false);
+        BribesRewardPool rewardPool = new BribesRewardPool(_stakingToken, operator, _lptoken, _callOperatorOnGetReward);
 
         emit RewardPoolCreated(address(rewardPool), _stakingToken);
         return address(rewardPool);

@@ -68,6 +68,18 @@ interface IWmxLocker {
     function getVotes(address account) external view returns (uint256);
 
     function getPastVotes(address account, uint256 timestamp) external view returns (uint256 votes);
+
+    struct LockedBalance {
+        uint112 amount;
+        uint32 unlockTime;
+    }
+
+    function lockedBalances(address _user) external view returns (
+        uint256 total,
+        uint256 unlockable,
+        uint256 locked,
+        LockedBalance[] memory lockData
+    );
 }
 
 interface IBribeVoter {
@@ -101,7 +113,7 @@ interface ITokenFactory{
 }
 
 interface IBribesRewardFactory {
-    function CreateBribesRewards(address _stakingToken, address _lptoken) external returns (address);
+    function CreateBribesRewards(address _stakingToken, address _lptoken, bool _callOperatorOnGetReward) external returns (address);
 }
 
 interface IRewards{

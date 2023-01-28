@@ -51,10 +51,6 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
         uint112 locked;
         uint32 nextUnlockIndex;
     }
-    struct LockedBalance {
-        uint112 amount;
-        uint32 unlockTime;
-    }
     struct Epoch {
         uint224 supply;
         uint32 date; //epoch start date

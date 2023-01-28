@@ -43,11 +43,12 @@ contract BribesRewardPool is BaseRewardPool4626 {
         return BaseRewardPool.stakeFor(_for, _amount);
     }
 
-    function _getReward(address _account, address _claimTo, bool _lockCvx, address[] memory _claimTokens) internal override returns(bool) {
+    function _getReward(address _account, address _claimTo, bool _lockCvx, address[] memory _claimTokens) internal override returns(bool result) {
+        result = BaseRewardPool._getReward(_account, _claimTo, _lockCvx, _claimTokens);
         if (callOperatorOnGetReward) {
             IDeposit(operator).rewardClaimed(0, _account, 0, false);
         }
-        return BaseRewardPool._getReward(_account, _claimTo, _lockCvx, _claimTokens);
+        return result;
     }
 
     function withdraw(uint256 amount, bool claim) public override returns(bool) {
@@ -63,7 +64,7 @@ contract BribesRewardPool is BaseRewardPool4626 {
     function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) public returns(bool) {
         require(msg.sender == operator, "!operator");
 
-        _getReward(_from, _claimRecipient, false, allRewardTokens);
+        BaseRewardPool._getReward(_from, _claimRecipient, false, allRewardTokens);
 
         _totalSupply = _totalSupply.sub(_amount);
         _balances[_from] = _balances[_from].sub(_amount);
