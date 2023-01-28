@@ -13,7 +13,11 @@ import {
     WombatVoter__factory,
     BribesRewardFactory,
     BribesRewardFactory__factory,
-    WomDepositor, BaseRewardPool4626__factory, BribesTokenFactory__factory, BribesTokenFactory,
+    WomDepositor,
+    BaseRewardPool4626__factory,
+    BribesTokenFactory__factory,
+    BribesTokenFactory,
+    BribesRewardPool__factory, BribesRewardPool, ITokenMinter__factory, BribesVotingToken__factory,
 } from "../types/generated";
 import { Signer } from "ethers";
 import {getTimestamp, increaseTime} from "../test-utils/time";
@@ -35,6 +39,7 @@ describe("GaugeVoting", () => {
     let booster: Booster, gaugeVoting: GaugeVoting, wombatVoter: WombatVoter, womDepositor: WomDepositor;
     let crv, cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy;
     let rewardToken1, rewardToken2, rewardToken3, lptoken1, lptoken2, multiRewarder1, multiRewarder2;
+    let reward1: BribesRewardPool, reward2: BribesRewardPool;
     let mocks: any;
     let pool: Pool;
     let contracts: SystemDeployed;
@@ -156,8 +161,8 @@ describe("GaugeVoting", () => {
             await booster.connect(daoSigner).setVotingValid(rewardToken2.address, true).then(tx => tx.wait());
             await booster.connect(daoSigner).setVotingValid(rewardToken3.address, true).then(tx => tx.wait());
 
-            lptoken1 = await deployContract<MockERC20>(hre, new MockERC20__factory(deployer), "MockLP", ["MockLP1", "MockLP1", 18, deployerAddress, simpleToExactAmount(1000000)],{},true);
-            lptoken2 = await deployContract<MockERC20>(hre, new MockERC20__factory(deployer), "MockLP", ["MockLP2", "MockLP2", 18, deployerAddress, simpleToExactAmount(1000000)],{},true);
+            lptoken1 = await deployContract<MockERC20>(hre, new MockERC20__factory(deployer), "MockLP", ["MockLP1", "MLP1", 18, deployerAddress, simpleToExactAmount(1000000)],{},true);
+            lptoken2 = await deployContract<MockERC20>(hre, new MockERC20__factory(deployer), "MockLP", ["MockLP2", "MLP2", 18, deployerAddress, simpleToExactAmount(1000000)],{},true);
 
             multiRewarder1 = await deployContract<WombatBribe>(
                 hre,
@@ -199,6 +204,8 @@ describe("GaugeVoting", () => {
             await gaugeVoting.registerLpTokens([lptoken1.address, lptoken2.address]).then(tx => tx.wait());
             await gaugeVoting.approveRewards([rewardToken1.address, rewardToken2.address, rewardToken3.address]).then(tx => tx.wait());
 
+            await gaugeVoting.transferOwnership(await daoSigner.getAddress()).then(tx => tx.wait());
+
             const operatorAccount = await impersonateAccount(booster.address);
             await cvx
                 .connect(operatorAccount.signer)
@@ -215,35 +222,132 @@ describe("GaugeVoting", () => {
             await mocks.crv.connect(alice).approve(womDepositor.address, await mocks.crv.balanceOf(aliceAddress));
             const amountToDeposit = simpleToExactAmount(200);
             await womDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, ZERO_ADDRESS).then(r => r.wait(1));
+
+            reward1 = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lptoken1.address), alice);
+            reward2 = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lptoken2.address), alice);
         });
 
-        it("@method Booster.deposit", async () => {
+        it("BribesRewardPool should have proper values", async () => {
+            expect(await reward1.name()).eq("MockLP1 Bribes Vault");
+            expect(await reward1.symbol()).eq("MLP1-bribes");
+            expect(await reward1.pid()).eq(0);
+            expect(await reward1.operator()).eq(gaugeVoting.address);
+            expect(await reward1.boosterRewardToken()).eq(ZERO_ADDRESS);
+            expect(await reward1.stakingToken()).eq(await gaugeVoting.stakingToken());
+            expect(await reward1.asset()).eq(lptoken1.address);
+            expect(await reward1.callOperatorOnGetReward()).eq(true);
+            expect(await reward1.duration()).eq(ONE_WEEK);
+            expect(await reward1.DURATION()).eq(ONE_WEEK);
+            expect(await reward1.newRewardRatio()).eq(830);
+            expect(await reward1.NEW_REWARD_RATIO()).eq(830);
+            expect(await reward1.pid()).eq(0);
+        });
+
+        it("GaugeVoting should BribesRewardPool set config", async () => {
+            await expect(gaugeVoting.updateBribeRewardsConfig([reward1.address], false)).to.be.revertedWith("Ownable: caller is not the owner");
+            await gaugeVoting.connect(daoSigner).updateBribeRewardsConfig([reward1.address], false).then(tx => tx.wait(1));
+            expect(await reward1.callOperatorOnGetReward()).eq(false);
+            await gaugeVoting.connect(daoSigner).updateBribeRewardsConfig([reward1.address], true).then(tx => tx.wait(1));
+            expect(await reward1.callOperatorOnGetReward()).eq(true);
+
+            await expect(gaugeVoting.updateRatioConfig([reward1.address], ONE_DAY, 100)).to.be.revertedWith("Ownable: caller is not the owner");
+            await gaugeVoting.connect(daoSigner).updateRatioConfig([reward1.address], ONE_DAY, 100).then(tx => tx.wait(1));
+            expect(await reward1.duration()).eq(ONE_DAY);
+            expect(await reward1.DURATION()).eq(ONE_DAY);
+            expect(await reward1.newRewardRatio()).eq(100);
+            expect(await reward1.NEW_REWARD_RATIO()).eq(100);
+            await gaugeVoting.connect(daoSigner).updateRatioConfig([reward1.address], ONE_WEEK, 830).then(tx => tx.wait(1));
+            expect(await reward1.duration()).eq(ONE_WEEK);
+            expect(await reward1.DURATION()).eq(ONE_WEEK);
+            expect(await reward1.newRewardRatio()).eq(830);
+            expect(await reward1.NEW_REWARD_RATIO()).eq(830);
+
+            expect(await reward1.tokenRewards(rewardToken1.address).then(r => r.paused)).eq(false);
+            await expect(gaugeVoting.setRewardTokenPausedInPools([reward1.address], rewardToken1.address, true)).to.be.revertedWith("Ownable: caller is not the owner");
+            await gaugeVoting.connect(daoSigner).setRewardTokenPausedInPools([reward1.address], rewardToken1.address, true).then(tx => tx.wait(1));
+            expect(await reward1.tokenRewards(rewardToken1.address).then(r => r.paused)).eq(true);
+            await gaugeVoting.connect(daoSigner).setRewardTokenPausedInPools([reward1.address], rewardToken1.address, false).then(tx => tx.wait(1));
+            expect(await reward1.tokenRewards(rewardToken1.address).then(r => r.paused)).eq(false);
+        });
+
+        it("GaugeVoting should migrate BribesRewardPool and staking token", async () => {
+            const stakingToken = BribesVotingToken__factory.connect(await gaugeVoting.stakingToken(), deployer);
+            expect(await stakingToken.operator()).eq(gaugeVoting.address);
+            await expect(gaugeVoting.migrateStakingToken(deployerAddress)).to.be.revertedWith("Ownable: caller is not the owner");
+            await gaugeVoting.connect(daoSigner).migrateStakingToken(deployerAddress).then(tx => tx.wait(1));
+            expect(await stakingToken.operator()).eq(deployerAddress);
+            await expect(stakingToken.connect(daoSigner).updateOperator(gaugeVoting.address)).to.be.revertedWith("!authorized");
+            await stakingToken.connect(deployer).updateOperator(gaugeVoting.address).then(tx => tx.wait(1));
+            expect(await stakingToken.operator()).eq(gaugeVoting.address);
+
+            await expect(gaugeVoting.migrateRewards([reward1.address], deployerAddress)).to.be.revertedWith("Ownable: caller is not the owner");
+            await gaugeVoting.connect(daoSigner).migrateRewards([reward1.address], deployerAddress).then(tx => tx.wait(1));
+            expect(await reward1.operator()).eq(deployerAddress);
+
+            await expect(reward1.connect(daoSigner).updateOperatorData(gaugeVoting.address, 0)).to.be.revertedWith("!authorized");
+            await reward1.connect(deployer).updateOperatorData(gaugeVoting.address, 0).then(tx => tx.wait(1));
+            expect(await reward1.operator()).eq(gaugeVoting.address);
+        });
+
+        it("BribesRewardPool direct stake and withdraw methods should be disabled", async () => {
+            await lptoken1.transfer(bobAddress, simpleToExactAmount(10)).then(tx => tx.wait());
+            await lptoken1.connect(bob).approve(reward1.address, simpleToExactAmount(10)).then(tx => tx.wait());
+            await expect(reward1.connect(bob).deposit(simpleToExactAmount(10), bobAddress)).to.be.revertedWith("Transaction reverted: function selector was not recognized and there's no fallback function");
+            await expect(reward1.connect(bob).mint(simpleToExactAmount(10), bobAddress)).to.be.revertedWith("Transaction reverted: function selector was not recognized and there's no fallback function");
+
+            await expect(reward1.connect(bob).stake(simpleToExactAmount(10))).to.be.revertedWith("disabled");
+            await expect(reward1.connect(bob).stakeFor(bobAddress, simpleToExactAmount(10))).to.be.revertedWith("!operator");
+            await expect(reward1.connect(bob).stakeAll()).to.be.revertedWith("disabled");
+            await expect(reward1.connect(bob)['withdraw(uint256,bool)'](simpleToExactAmount(10), false)).to.be.revertedWith("disabled");
+            await expect(reward1.connect(bob)['withdraw(uint256,address,address)'](simpleToExactAmount(1), bobAddress, bobAddress)).to.be.revertedWith("disabled");
+            await expect(reward1.connect(bob)['redeem(uint256,address,address)'](simpleToExactAmount(1), bobAddress, bobAddress)).to.be.revertedWith("disabled");
+            await expect(reward1.connect(bob).withdrawAndUnwrap(simpleToExactAmount(10), false)).to.be.revertedWith("disabled");
+            await expect(reward1.connect(bob).withdrawAllAndUnwrap(false)).to.be.revertedWith("disabled");
+            await expect(reward1.connect(bob).withdrawAndUnwrapFrom(bobAddress, simpleToExactAmount(10), bobAddress)).to.be.revertedWith("!operator");
+        });
+
+        it("GaugeVoting config should be able to change by owner", async () => {
+            expect(await gaugeVoting.votePeriod()).eq(0);
+            expect(await gaugeVoting.voteThreshold()).eq(0);
+            expect(await gaugeVoting.voteIncentive()).eq(0);
+            expect(await gaugeVoting.executeOnVote()).eq(false);
+
+            await expect(gaugeVoting.setVotingConfig(ONE_DAY, simpleToExactAmount(10), 100, true)).to.be.revertedWith("Ownable: caller is not the owner");
+            await gaugeVoting.connect(daoSigner).setVotingConfig(ONE_DAY, simpleToExactAmount(10), 100, true).then(tx => tx.wait(1));
+
+            expect(await gaugeVoting.votePeriod()).eq(ONE_DAY);
+            expect(await gaugeVoting.voteThreshold()).eq(simpleToExactAmount(10));
+            expect(await gaugeVoting.voteIncentive()).eq(100);
+            expect(await gaugeVoting.executeOnVote()).eq(true);
+
+            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 0, false).then(tx => tx.wait(1));
+
+            expect(await gaugeVoting.votePeriod()).eq(0);
+            expect(await gaugeVoting.voteThreshold()).eq(0);
+            expect(await gaugeVoting.voteIncentive()).eq(0);
+            expect(await gaugeVoting.executeOnVote()).eq(false);
+
+            expect(await gaugeVoting.nftLocker()).eq(ZERO_ADDRESS);
+            await expect(gaugeVoting.setNftLocker(deployerAddress)).to.be.revertedWith("Ownable: caller is not the owner");
+            await gaugeVoting.connect(daoSigner).setNftLocker(deployerAddress).then(tx => tx.wait(1));
+            expect(await gaugeVoting.nftLocker()).eq(deployerAddress);
+            await gaugeVoting.connect(daoSigner).setNftLocker(ZERO_ADDRESS).then(tx => tx.wait(1));
+            expect(await gaugeVoting.nftLocker()).eq(ZERO_ADDRESS);
+        });
+
+        it("methods vote, voteExecute and onVotesChanged should work properly", async () => {
             await cvx.connect(bob).approve(cvxLocker.address, simpleToExactAmount(10)).then(tx => tx.wait());
             await cvxLocker.connect(bob).lock(bobAddress, simpleToExactAmount(10)).then(tx => tx.wait());
-            await cvxLocker.connect(bob).delegate(bobAddress).then(tx => tx.wait());
             await cvxLocker.connect(bob)['getReward(address)'](bobAddress).then(tx => tx.wait());
 
             await cvx.connect(alice).approve(cvxLocker.address, simpleToExactAmount(20)).then(tx => tx.wait());
             await cvxLocker.connect(alice).lock(aliceAddress, simpleToExactAmount(20)).then(tx => tx.wait());
-            await cvxLocker.connect(alice).delegate(aliceAddress).then(tx => tx.wait());
             await cvxLocker.connect(alice)['getReward(address)'](aliceAddress).then(tx => tx.wait());
-
-            console.log('getVotes', await cvxLocker.getVotes(bobAddress));
-            console.log('balanceOf', await cvxLocker.balanceOf(bobAddress));
 
             expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(simpleToExactAmount(10));
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
             expect(await gaugeVoting.boostedUserVotes(bobAddress, false)).eq(simpleToExactAmount(10));
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, false)).eq(simpleToExactAmount(20));
-
-            console.log('numCheckpoints', await cvxLocker.numCheckpoints(bobAddress));
-            console.log('getVotes', await cvxLocker.getVotes(bobAddress));
-            console.log('balanceOf', await cvxLocker.balanceOf(bobAddress));
-
-            const reward1Address = await gaugeVoting.lpTokenRewards(lptoken1.address);
-            const reward2Address = await gaugeVoting.lpTokenRewards(lptoken2.address);
-            const reward1 = BaseRewardPool4626__factory.connect(reward1Address, alice);
-            const reward2 = BaseRewardPool4626__factory.connect(reward2Address, alice);
 
             expect(await reward1.balanceOf(bobAddress)).eq(0);
             expect(await reward1.balanceOf(aliceAddress)).eq(0);
@@ -272,12 +376,6 @@ describe("GaugeVoting", () => {
 
             await increaseTime(ONE_DAY);
 
-            console.log('bob claimableRewards 1', await reward1.claimableRewards(bobAddress));
-            console.log('bob claimableRewards 2', await reward2.claimableRewards(bobAddress));
-
-            console.log('alice claimableRewards 1', await reward1.claimableRewards(aliceAddress));
-            console.log('alice claimableRewards 2', await reward2.claimableRewards(aliceAddress));
-
             await gaugeVoting.connect(poker).onVotesChanged(bobAddress, pokerAddress).then(tx => tx.wait());
             expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(simpleToExactAmount(10));
             expect(await reward1.balanceOf(bobAddress)).eq(simpleToExactAmount(5));
@@ -301,8 +399,6 @@ describe("GaugeVoting", () => {
                 expect(claimableRewards.amounts[i]).gt(0);
             }
 
-            console.log('bobAddress', bobAddress);
-            console.log('claimableRewards', claimableRewards);
             await gaugeVoting.connect(poker).onVotesChanged(bobAddress, pokerAddress).then(tx => tx.wait());
             expect(await reward1.balanceOf(bobAddress)).eq(0);
 
@@ -316,20 +412,17 @@ describe("GaugeVoting", () => {
             }
         });
 
-        it("@method Booster.deposit", async () => {
+        it("re-vote and GaugeVoting callback should work properly", async () => {
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
             const incrEther = simpleToExactAmount(1);
             const decrEther = '-' + simpleToExactAmount(1).toString();
             await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("no votes");
-            console.log('1 lockedBalances', await cvxLocker.lockedBalances(aliceAddress));
             await cvxLocker.connect(alice).processExpiredLocks(true).then(tx => tx.wait());
-            console.log('2 lockedBalances', await cvxLocker.lockedBalances(aliceAddress));
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
             expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(20));
             await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("votes overflow");
 
-            const reward1 = BaseRewardPool4626__factory.connect(await gaugeVoting.lpTokenRewards(lptoken1.address), alice);
-            const reward2 = BaseRewardPool4626__factory.connect(await gaugeVoting.lpTokenRewards(lptoken2.address), alice);
+            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("votes overflow");
 
             await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [decrEther, decrEther]).then(tx => tx.wait());
             expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(18));
@@ -351,9 +444,24 @@ describe("GaugeVoting", () => {
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
             expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
 
+            await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address], [decrEther, decrEther, decrEther, decrEther]).then(tx => tx.wait());
+            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(15));
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(5));
+            expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
+
+            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address, lptoken2.address], [incrEther, incrEther, decrEther])).to.be.revertedWith("< lastDelta");
+
+            let res = await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address], [decrEther, incrEther, incrEther, incrEther, incrEther, incrEther]).then(tx => tx.wait());
+            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(19));
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
+            expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
+
+            let VoteExecuteEvent = res.events.filter(e => e.event === 'VoteExecute')[0];
+            expect(VoteExecuteEvent).eq(undefined);
+
             await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("votes overflow");
 
-            await increaseTime(ONE_WEEK.mul(20));
+            await increaseTime(ONE_WEEK.mul(1));
 
             const reward1Tokens = [rewardToken1, rewardToken2];
             const rewardPool1Balance = {};
@@ -361,12 +469,18 @@ describe("GaugeVoting", () => {
                 rewardPool1Balance[rewardToken1.address.toLowerCase()] = await reward1Tokens[i].balanceOf(reward1.address);
             }
 
-            let res = await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
+            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 100, true);
+            res = await gaugeVoting.connect(alice).vote([lptoken1.address], [incrEther]).then(tx => tx.wait());
 
             const lpTokensArr = [lptoken1.address, lptoken2.address];
-            const VoteExecuteEvent = res.events.filter(e => e.event === 'VoteExecute')[0];
+            VoteExecuteEvent = res.events.filter(e => e.event === 'VoteExecute')[0];
             expect(VoteExecuteEvent).not.eq(undefined);
             expect(VoteExecuteEvent.args.lpTokens).deep.eq(lpTokensArr);
+
+            let TransferIncentiveRewards = res.events.filter(e => e.event === 'TransferRewards' && !e.args.queueRewards)[0];
+            expect(TransferIncentiveRewards).not.eq(undefined);
+            expect(TransferIncentiveRewards.args.recipient).eq(aliceAddress);
+            expect(TransferIncentiveRewards.args.rewardAmount).gt(0);
 
             let DistributeBribeRewardsEvents = res.events.filter(e => e.event === 'DistributeBribeRewards');
             expect(DistributeBribeRewardsEvents.length).eq(2);
@@ -385,12 +499,20 @@ describe("GaugeVoting", () => {
             }
 
             expect(rewardsDistributed[reward1.address.toLowerCase()]).eq(true);
-            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
-            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
 
-            await increaseTime(ONE_WEEK.mul(2));
+            await increaseTime(ONE_WEEK.mul(20));
+
+            expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
+
+
+            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 0, false);
 
             res = await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
+
+            TransferIncentiveRewards = res.events.filter(e => e.event === 'TransferRewards' && !e.args.queueRewards)[0];
+            expect(TransferIncentiveRewards).eq(undefined);
+
             DistributeBribeRewardsEvents = res.events.filter(e => e.event === 'DistributeBribeRewards');
             expect(DistributeBribeRewardsEvents.length).eq(2);
             DistributeBribeRewardsEvents.forEach((e, i) => {
@@ -403,7 +525,6 @@ describe("GaugeVoting", () => {
 
             const aliceBalancesBefore = [];
             let claimableRewards = await reward1.claimableRewards(aliceAddress);
-            console.log('claimableRewards', claimableRewards);
             expect(claimableRewards.tokens.length).gt(0);
             for (let i = 0; i < claimableRewards.tokens.length; i++) {
                 const token = BaseRewardPool4626__factory.connect(claimableRewards.tokens[i], alice);

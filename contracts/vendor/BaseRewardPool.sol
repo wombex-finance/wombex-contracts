@@ -244,7 +244,7 @@ contract BaseRewardPool {
         return true;
     }
 
-    function _withdrawAndUnwrapTo(uint256 amount, address from, address receiver) internal updateReward(from) returns(bool){
+    function _withdrawAndUnwrapTo(uint256 amount, address from, address receiver) internal virtual updateReward(from) returns(bool){
         _totalSupply = _totalSupply.sub(amount);
         _balances[from] = _balances[from].sub(amount);
 

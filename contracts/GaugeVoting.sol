@@ -47,21 +47,22 @@ contract GaugeVoting is Ownable {
     bool public executeOnVote;
 
     event SetVotingConfig(uint256 votePeriod, uint256 voteThreshold, uint256 voteIncentive, bool executeOnVote);
-    event SetNftLocker(address nftLocker);
-    event SetFactories(address tokenFactory, address rewardFactory);
-    event AddLpToken(address lpToken, address rewards);
-    event SetLpTokenStatus(address lpToken, LpTokenStatus status);
-    event StakingTokenMigrate(address newOperator);
-    event RewardPoolMigrate(address rewards, address newOperator);
+    event SetNftLocker(address indexed nftLocker);
+    event SetFactories(address indexed tokenFactory, address indexed rewardFactory);
+    event AddLpToken(address indexed lpToken, address indexed rewards);
+    event SetLpTokenStatus(address indexed lpToken, LpTokenStatus indexed status);
+    event StakingTokenMigrate(address indexed newOperator);
+    event RewardPoolMigrate(address indexed rewards, address indexed newOperator);
     event Vote(address[] lpTokens, int256[] deltas, uint256 availableVotes, uint256 votedAmount);
-    event DistributeBribeRewards(address lpToken, address rewardsPool, address bribe, address[] rewardTokens, uint256[] rewardAmounts);
+    event DistributeBribeRewards(address indexed lpToken, address indexed rewardsPool, address indexed bribe, address[] rewardTokens, uint256[] rewardAmounts);
+    event TransferRewards(address indexed lpToken, address indexed rewardToken, address indexed recipient, uint256 rewardAmount, bool queueRewards);
     event VoteExecute(address[] lpTokens, int256[] deltas, int256[] votes);
 
     constructor(
         IWmxLocker _wmxLocker,
         IBooster _booster,
         IBribeVoter _bribeVoter
-    ) public {
+    ) {
         wmxLocker = _wmxLocker;
         booster = _booster;
         voterProxy = _booster.voterProxy();
@@ -109,6 +110,41 @@ contract GaugeVoting is Ownable {
         }
     }
 
+    function updateBribeRewardsConfig(address[] calldata _rewards, bool _callOperatorOnGetReward) external onlyOwner {
+        for(uint256 i = 0; i < _rewards.length; i++) {
+            IBribeRewardsPool(_rewards[i]).updateBribesConfig(_callOperatorOnGetReward);
+        }
+    }
+
+    function updateRatioConfig(address[] calldata _rewards, uint256 _duration, uint256 _newRewardRatio) external onlyOwner {
+        require(_duration >= 60 && _duration <= 30 days, "!duration");
+        require(_newRewardRatio > 0, "!maxRewardRatio");
+
+        for(uint256 i = 0; i < _rewards.length; i++) {
+            IBribeRewardsPool(_rewards[i]).updateRatioConfig(_duration, _newRewardRatio);
+        }
+    }
+
+    function setRewardTokenPausedInPools(address[] memory _rewardPools, address _token, bool _paused) external onlyOwner {
+        for (uint256 i = 0; i < _rewardPools.length; i++) {
+            IRewards(_rewardPools[i]).setRewardTokenPaused(_token, _paused);
+        }
+    }
+
+    function migrateStakingToken(address _newOperator) external onlyOwner {
+        stakingToken.updateOperator(_newOperator);
+        emit StakingTokenMigrate(_newOperator);
+    }
+
+    function migrateRewards(address[] calldata _rewards, address _newOperator) external onlyOwner {
+        uint256 len = _rewards.length;
+
+        for (uint256 i = 0; i < len; i++) {
+            IRewards(_rewards[i]).updateOperatorData(_newOperator, 0);
+            emit RewardPoolMigrate(_rewards[i], _newOperator);
+        }
+    }
+
     function registerLpTokens(address[] memory _lpTokens) external onlyOwner {
         uint256 len = _lpTokens.length;
         for (uint256 i = 0; i < len; i++) {
@@ -122,6 +158,12 @@ contract GaugeVoting is Ownable {
         for (uint256 i = 0; i < len; i++) {
             _registerCreatedLpToken(_lpTokens[i], _rewards[i]);
         }
+    }
+
+    function setLpTokenStatus(address _lpToken, LpTokenStatus _status) public onlyOwner {
+        require(lpTokenStatus[_lpToken] != LpTokenStatus.NOT_EXISTS, "already exists");
+        lpTokenStatus[_lpToken] = _status;
+        emit SetLpTokenStatus(_lpToken, _status);
     }
 
     function _registerLpToken(address _lpToken) internal {
@@ -139,12 +181,6 @@ contract GaugeVoting is Ownable {
         stakingToken.approve(_rewards, type(uint256).max);
 
         emit AddLpToken(_lpToken, _rewards);
-    }
-
-    function setLpTokenStatus(address _lpToken, LpTokenStatus _status) public onlyOwner {
-        require(lpTokenStatus[_lpToken] != LpTokenStatus.NOT_EXISTS, "already exists");
-        lpTokenStatus[_lpToken] = _status;
-        emit SetLpTokenStatus(_lpToken, _status);
     }
 
     function vote(address[] memory _lpTokens, int256[] memory _deltas) public {
@@ -225,8 +261,12 @@ contract GaugeVoting is Ownable {
                     abi.encodeWithSelector(IERC20.transfer.selector, address(this), amount)
                 );
                 uint256 incentiveAmount = amount * voteIncentive / DENOMINATOR;
-                IERC20(rewardTokens[j]).safeTransfer(_incentiveRecipient, incentiveAmount);
+                if (incentiveAmount > 0) {
+                    IERC20(rewardTokens[j]).safeTransfer(_incentiveRecipient, incentiveAmount);
+                    emit TransferRewards(lpToken, rewardTokens[j], _incentiveRecipient, incentiveAmount, false);
+                }
                 IBribeRewardsPool(lpTokenRewards[lpToken]).queueNewRewards(rewardTokens[j], amount - incentiveAmount);
+                emit TransferRewards(lpToken, rewardTokens[j], lpTokenRewards[lpToken], amount - incentiveAmount, true);
             }
             emit DistributeBribeRewards(lpToken, lpTokenRewards[lpToken], bribe, rewardTokens, rewards);
         }
@@ -234,7 +274,7 @@ contract GaugeVoting is Ownable {
         emit VoteExecute(lpTokensAdded, deltas, votes);
     }
 
-    function getVotesDelta() public returns (int256[] memory deltas, int256[] memory votes) {
+    function getVotesDelta() public view returns (int256[] memory deltas, int256[] memory votes) {
         uint256 totalVotesAmount = totalVotes();
         if (totalVotesAmount == 0) {
             return (deltas, votes);
@@ -252,42 +292,11 @@ contract GaugeVoting is Ownable {
         }
     }
 
-    function updateBribeRewardsConfig(address[] calldata _rewards, bool _callOperatorOnGetReward) external onlyOwner {
-        for(uint256 i = 0; i < _rewards.length; i++) {
-            IBribeRewardsPool(_rewards[i]).updateBribesConfig(_callOperatorOnGetReward);
-        }
-    }
-
-    function updateRatioConfig(address[] calldata _rewards, uint256 _duration, uint256 _maxRewardRatio) external onlyOwner {
-        require(_duration >= 60 && _duration <= 30 days, "!duration");
-        require(_maxRewardRatio > 0, "!maxRewardRatio");
-
-        for(uint256 i = 0; i < _rewards.length; i++) {
-            IBribeRewardsPool(_rewards[i]).updateRatioConfig(_duration, _maxRewardRatio);
-        }
-    }
-
-    function migrateStakingToken(address _newOperator) external onlyOwner {
-        stakingToken.updateOperator(_newOperator);
-        emit StakingTokenMigrate(_newOperator);
-    }
-
-    function migrateRewards(address[] calldata _rewards, address _newOperator) external onlyOwner {
-        uint256 len = _rewards.length;
-
-        for (uint256 i = 0; i < len; i++) {
-            IRewards(_rewards[i]).updateOperatorData(_newOperator, 0);
-            emit RewardPoolMigrate(_rewards[i], _newOperator);
-        }
-    }
-
-    function setRewardTokenPausedInPools(address[] memory _rewardPools, address _token, bool _paused) external onlyOwner {
-        for (uint256 i = 0; i < _rewardPools.length; i++) {
-            IRewards(_rewardPools[i]).setRewardTokenPaused(_token, _paused);
-        }
-    }
-
     function rewardClaimed(uint256, address _account, uint256, bool) external {
+        IBribeRewardsPool rewardsPool = IBribeRewardsPool(msg.sender);
+        address asset = rewardsPool.asset();
+        require(lpTokenRewards[asset] == msg.sender, "!lpTokenRewards");
+
         _onVotesChanged(_account, _account, _account);
         if (isVoteExecuteReady()) {
             voteExecute(_account);

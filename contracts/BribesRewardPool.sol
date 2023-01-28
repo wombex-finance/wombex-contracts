@@ -4,7 +4,7 @@ pragma solidity 0.6.12;
 import "./vendor/BaseRewardPool4626.sol";
 
 contract BribesRewardPool is BaseRewardPool4626 {
-    bool callOperatorOnGetReward;
+    bool public callOperatorOnGetReward;
 
     event UpdateBribesConfig(bool callOperatorOnGetReward);
     event UpdateRatioConfig(uint256 duration, uint256 maxRewardRatio);
@@ -25,12 +25,12 @@ contract BribesRewardPool is BaseRewardPool4626 {
         emit UpdateBribesConfig(callOperatorOnGetReward);
     }
 
-    function updateRatioConfig(uint256 _duration, uint256 _maxRewardRatio) external {
+    function updateRatioConfig(uint256 _duration, uint256 _newRewardRatio) external {
         require(msg.sender == operator, "!authorized");
         duration = _duration;
-        newRewardRatio = _maxRewardRatio;
+        newRewardRatio = _newRewardRatio;
 
-        emit UpdateRatioConfig(_duration, _maxRewardRatio);
+        emit UpdateRatioConfig(_duration, _newRewardRatio);
     }
 
     function stake(uint256 _amount) public override returns(bool) {
@@ -56,7 +56,7 @@ contract BribesRewardPool is BaseRewardPool4626 {
         return true;
     }
 
-    function withdrawAndUnwrap(uint256 amount, bool claim) public override returns(bool) {
+    function _withdrawAndUnwrapTo(uint256 amount, address from, address receiver) internal override returns(bool) {
         require(false, "disabled");
         return true;
     }

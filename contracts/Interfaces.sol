@@ -84,8 +84,8 @@ interface IWmxLocker {
 
 interface IBribeVoter {
     function vote(IERC20[] calldata _lpVote, int256[] calldata _deltas) external returns (uint256[][] memory bribeRewards);
-    function votes(address _user, address _lpToken) external returns (uint256);
-    function infos(address _lpToken) external returns (uint104 supplyBaseIndex, uint104 supplyVoteIndex, uint40 nextEpochStartTime, uint128 claimable, bool whitelist, address gaugeManager, address bribe);
+    function votes(address _user, address _lpToken) external view returns (uint256);
+    function infos(address _lpToken) external view returns (uint104 supplyBaseIndex, uint104 supplyVoteIndex, uint40 nextEpochStartTime, uint128 claimable, bool whitelist, address gaugeManager, address bribe);
 }
 
 interface IMasterWombatRewarder {
@@ -117,6 +117,7 @@ interface IBribesRewardFactory {
 }
 
 interface IRewards{
+    function asset() external returns(address);
     function stake(address, uint256) external;
     function stakeFor(address, uint256) external;
     function withdraw(address, uint256) external;
