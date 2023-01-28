@@ -53,6 +53,9 @@ contract GaugeVoting is Ownable {
     event SetLpTokenStatus(address lpToken, LpTokenStatus status);
     event StakingTokenMigrate(address newOperator);
     event RewardPoolMigrate(address rewards, address newOperator);
+    event Vote(address[] lpTokens, int256[] deltas, uint256 availableVotes, uint256 votedAmount);
+    event DistributeBribeRewards(address lpToken, address rewardsPool, address bribe, address[] rewardTokens, uint256[] rewardAmounts);
+    event VoteExecute(address[] lpTokens, int256[] deltas, int256[] votes);
 
     constructor(
         IWmxLocker _wmxLocker,
@@ -151,7 +154,6 @@ contract GaugeVoting is Ownable {
         require(userLockerVotes != 0, "no votes");
 
         int256 lastDelta = 0;
-        uint256 totalVotedByUser = 0;
 
         for (uint256 i = 0; i < len; i++) {
             require(lpTokenStatus[_lpTokens[i]] == LpTokenStatus.ACTIVE, "only active");
@@ -169,6 +171,8 @@ contract GaugeVoting is Ownable {
         }
 
         require(userVotes[msg.sender] <= userLockerVotes, "votes overflow");
+
+        emit Vote(_lpTokens, _deltas, userLockerVotes, userVotes[msg.sender]);
 
         if (executeOnVote && isVoteExecuteReady()) {
             voteExecute(msg.sender);
@@ -190,29 +194,19 @@ contract GaugeVoting is Ownable {
     function voteExecute(address _incentiveRecipient) public {
         require(isVoteExecuteReady(), "!ready");
 
-        uint256 totalVotesAmount = totalVotes();
-        if (totalVotesAmount == 0) {
+        (int256[] memory deltas, int256[] memory votes) = getVotesDelta();
+        if (deltas.length == 0) {
             return;
-        }
-        uint256 ratio = veWom.totalSupply() * 1 ether / totalVotesAmount;
-
-        int256[] memory _deltas = new int256[](lpTokensAdded.length);
-        for (uint256 i = 0; i < _deltas.length; i++) {
-            address lpToken = lpTokensAdded[i];
-            address rewardsPool = lpTokenRewards[lpToken];
-            int256 lpVotes = int256(IERC20(rewardsPool).totalSupply() * ratio) / 1 ether;
-            int256 bribeVotes = int256(bribeVoter.votes(voterProxy, lpToken));
-            _deltas[i] = lpVotes - bribeVotes;
         }
 
         bytes memory rewardsData = booster.voteExecute(
             address(bribeVoter),
             0,
-            abi.encodeWithSelector(IBribeVoter.vote.selector, lpTokensAdded, _deltas)
+            abi.encodeWithSelector(IBribeVoter.vote.selector, lpTokensAdded, deltas)
         );
 
         uint256[][] memory bribeRewards = abi.decode(rewardsData, (uint256[][]));
-        for (uint256 i = 0; i < _deltas.length; i++) {
+        for (uint256 i = 0; i < deltas.length; i++) {
             address lpToken = lpTokensAdded[i];
             if (lpTokenStatus[lpToken] != LpTokenStatus.ACTIVE) {
                 continue;
@@ -234,6 +228,27 @@ contract GaugeVoting is Ownable {
                 IERC20(rewardTokens[j]).safeTransfer(_incentiveRecipient, incentiveAmount);
                 IBribeRewardsPool(lpTokenRewards[lpToken]).queueNewRewards(rewardTokens[j], amount - incentiveAmount);
             }
+            emit DistributeBribeRewards(lpToken, lpTokenRewards[lpToken], bribe, rewardTokens, rewards);
+        }
+
+        emit VoteExecute(lpTokensAdded, deltas, votes);
+    }
+
+    function getVotesDelta() public returns (int256[] memory deltas, int256[] memory votes) {
+        uint256 totalVotesAmount = totalVotes();
+        if (totalVotesAmount == 0) {
+            return (deltas, votes);
+        }
+
+        uint256 ratio = veWom.totalSupply() * 1 ether / totalVotesAmount;
+        deltas = new int256[](lpTokensAdded.length);
+        votes = new int256[](lpTokensAdded.length);
+        for (uint256 i = 0; i < deltas.length; i++) {
+            address lpToken = lpTokensAdded[i];
+            address rewardsPool = lpTokenRewards[lpToken];
+            int256 bribeVotes = int256(bribeVoter.votes(voterProxy, lpToken));
+            votes[i] = int256(IERC20(rewardsPool).totalSupply() * ratio) / 1 ether;
+            deltas[i] = votes[i] - bribeVotes;
         }
     }
 

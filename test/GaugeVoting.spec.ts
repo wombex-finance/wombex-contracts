@@ -174,8 +174,8 @@ describe("GaugeVoting", () => {
                 true,
             );
             await multiRewarder1.addRewardToken(rewardToken2.address, 142207).then(tx => tx.wait());
-            await rewardToken1.transfer(multiRewarder1.address, simpleToExactAmount(10000, 9)).then(tx => tx.wait());
-            await rewardToken2.transfer(multiRewarder1.address, simpleToExactAmount(10000, 9)).then(tx => tx.wait());
+            await rewardToken1.transfer(multiRewarder1.address, simpleToExactAmount(100000, 9)).then(tx => tx.wait());
+            await rewardToken2.transfer(multiRewarder1.address, simpleToExactAmount(100000, 9)).then(tx => tx.wait());
 
             multiRewarder2 = await deployContract<WombatBribe>(
                 hre,
@@ -191,7 +191,7 @@ describe("GaugeVoting", () => {
                 {},
                 true,
             );
-            await rewardToken3.transfer(multiRewarder2.address, simpleToExactAmount(10000, 9)).then(tx => tx.wait());
+            await rewardToken3.transfer(multiRewarder2.address, simpleToExactAmount(100000, 9)).then(tx => tx.wait());
 
             await wombatVoter.add(deployerAddress, lptoken1.address, multiRewarder1.address).then(tx => tx.wait());
             await wombatVoter.add(deployerAddress, lptoken2.address, multiRewarder2.address).then(tx => tx.wait());
@@ -318,26 +318,109 @@ describe("GaugeVoting", () => {
 
         it("@method Booster.deposit", async () => {
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
-            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(1), simpleToExactAmount(1)])).to.be.revertedWith("no votes");
+            const incrEther = simpleToExactAmount(1);
+            const decrEther = '-' + simpleToExactAmount(1).toString();
+            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("no votes");
             console.log('1 lockedBalances', await cvxLocker.lockedBalances(aliceAddress));
             await cvxLocker.connect(alice).processExpiredLocks(true).then(tx => tx.wait());
             console.log('2 lockedBalances', await cvxLocker.lockedBalances(aliceAddress));
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
             expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(20));
-            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(1), simpleToExactAmount(1)])).to.be.revertedWith("votes overflow");
+            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("votes overflow");
+
+            const reward1 = BaseRewardPool4626__factory.connect(await gaugeVoting.lpTokenRewards(lptoken1.address), alice);
+            const reward2 = BaseRewardPool4626__factory.connect(await gaugeVoting.lpTokenRewards(lptoken2.address), alice);
+
+            await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [decrEther, decrEther]).then(tx => tx.wait());
+            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(18));
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(8));
+            expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
+
+            await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [decrEther, decrEther]).then(tx => tx.wait());
+            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(16));
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(7));
+            expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
+
+            await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther]).then(tx => tx.wait());
+            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(18));
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(8));
+            expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
+
+            await gaugeVoting.connect(alice).vote([lptoken1.address], [incrEther]).then(tx => tx.wait());
+            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(19));
+            expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
+            expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
+
+            await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("votes overflow");
 
             await increaseTime(ONE_WEEK.mul(20));
 
-            await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
+            const reward1Tokens = [rewardToken1, rewardToken2];
+            const rewardPool1Balance = {};
+            for(let i = 0; i < reward1Tokens.length; i++) {
+                rewardPool1Balance[rewardToken1.address.toLowerCase()] = await reward1Tokens[i].balanceOf(reward1.address);
+            }
 
+            let res = await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
+
+            const lpTokensArr = [lptoken1.address, lptoken2.address];
+            const VoteExecuteEvent = res.events.filter(e => e.event === 'VoteExecute')[0];
+            expect(VoteExecuteEvent).not.eq(undefined);
+            expect(VoteExecuteEvent.args.lpTokens).deep.eq(lpTokensArr);
+
+            let DistributeBribeRewardsEvents = res.events.filter(e => e.event === 'DistributeBribeRewards');
+            expect(DistributeBribeRewardsEvents.length).eq(2);
+            let rewardsDistributed = {};
+            DistributeBribeRewardsEvents.forEach((e, i) => {
+                expect(e.args.lpToken).eq(lpTokensArr[i]);
+                rewardsDistributed[reward1.address.toLowerCase()] = true;
+                expect(e.args.rewardAmounts.length).gt(0);
+                e.args.rewardAmounts.forEach((amount) => {
+                    expect(amount).gt(0);
+                });
+            });
+
+            for(let i = 0; i < reward1Tokens.length; i++) {
+                expect(await reward1Tokens[i].balanceOf(reward1.address)).gt(rewardPool1Balance[rewardToken1.address.toLowerCase()]);
+            }
+
+            expect(rewardsDistributed[reward1.address.toLowerCase()]).eq(true);
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
-
-            const reward1Address = await gaugeVoting.lpTokenRewards(lptoken1.address);
-            const reward1 = BaseRewardPool4626__factory.connect(reward1Address, alice);
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
+
+            await increaseTime(ONE_WEEK.mul(2));
+
+            res = await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
+            DistributeBribeRewardsEvents = res.events.filter(e => e.event === 'DistributeBribeRewards');
+            expect(DistributeBribeRewardsEvents.length).eq(2);
+            DistributeBribeRewardsEvents.forEach((e, i) => {
+                expect(e.args.lpToken).eq(lpTokensArr[i]);
+                expect(e.args.rewardAmounts.length).gt(0);
+                e.args.rewardAmounts.forEach((amount) => {
+                    expect(amount).gt(0);
+                });
+            });
+
+            const aliceBalancesBefore = [];
+            let claimableRewards = await reward1.claimableRewards(aliceAddress);
+            console.log('claimableRewards', claimableRewards);
+            expect(claimableRewards.tokens.length).gt(0);
+            for (let i = 0; i < claimableRewards.tokens.length; i++) {
+                const token = BaseRewardPool4626__factory.connect(claimableRewards.tokens[i], alice);
+                aliceBalancesBefore[i] = await token.balanceOf(aliceAddress);
+                expect(claimableRewards.amounts[i]).gt(0);
+            }
             await reward1["getReward(address,bool)"](aliceAddress, false).then(tx => tx.wait());
             expect(await gaugeVoting.userVotes(aliceAddress)).eq(0);
             expect(await reward1.balanceOf(aliceAddress)).eq(0);
+
+            claimableRewards = await reward1.claimableRewards(aliceAddress);
+            expect(claimableRewards.tokens.length).gt(0);
+            for (let i = 0; i < claimableRewards.tokens.length; i++) {
+                const token = BaseRewardPool4626__factory.connect(claimableRewards.tokens[i], alice);
+                expect(await token.balanceOf(aliceAddress)).gt(aliceBalancesBefore[i]);
+                expect(claimableRewards.amounts[i]).eq(0);
+            }
         });
     });
 });
