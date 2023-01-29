@@ -298,7 +298,7 @@ contract GaugeVoting is Ownable {
         require(lpTokenRewards[asset] == msg.sender, "!lpTokenRewards");
 
         _onVotesChanged(_account, _account, _account);
-        if (isVoteExecuteReady()) {
+        if (executeOnVote && isVoteExecuteReady()) {
             voteExecute(_account);
         }
     }
