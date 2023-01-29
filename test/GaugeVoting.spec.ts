@@ -351,7 +351,7 @@ describe("GaugeVoting", () => {
             expect(await gaugeVoting.nftLocker()).eq(ZERO_ADDRESS);
         });
 
-        it("methods vote, voteExecute and onVotesChanged should work properly", async () => {
+        it.only("methods vote, voteExecute and onVotesChanged should work properly", async () => {
             await cvx.connect(bob).approve(cvxLocker.address, simpleToExactAmount(10)).then(tx => tx.wait());
             await cvxLocker.connect(bob).lock(bobAddress, simpleToExactAmount(10)).then(tx => tx.wait());
             await cvxLocker.connect(bob)['getReward(address)'](bobAddress).then(tx => tx.wait());
@@ -372,16 +372,19 @@ describe("GaugeVoting", () => {
 
             await gaugeVoting.connect(bob).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(5), simpleToExactAmount(5)]).then(tx => tx.wait());
 
+            // console.log('gaugeVotingLens.getPools', await gaugeVotingLens.getPools());
             expect(await reward1.balanceOf(bobAddress)).eq(simpleToExactAmount(5));
             expect(await reward1.balanceOf(aliceAddress)).eq(0);
             expect(await gaugeVoting.boostedUserVotes(bobAddress, true)).eq(simpleToExactAmount(10));
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
 
             await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
+            // console.log('gaugeVotingLens.getPools', await gaugeVotingLens.getPools());
 
             await increaseTime(ONE_DAY);
 
             await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(9), simpleToExactAmount(11)]).then(tx => tx.wait());
+            // console.log('gaugeVotingLens.getPools', await gaugeVotingLens.getPools());
 
             expect(await reward1.balanceOf(bobAddress)).eq(simpleToExactAmount(5));
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));

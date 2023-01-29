@@ -14,9 +14,11 @@ contract GaugeVotingLens {
     struct Pool {
         address lpToken;
         address rewards;
+        uint256 vlVotes;
+        int256 vlDelta;
         bool isActive;
-        int256 votes;
-        int256 delta;
+        int256 veWomVotes;
+        int256 veWomDelta;
         string name;
         string symbol;
     }
@@ -33,8 +35,16 @@ contract GaugeVotingLens {
             votes = new int256[](lpTokens.length);
         }
         pools = new Pool[](lpTokens.length);
-        for(uint256 i = 0; i < lpTokens.length; i++) {
-            pools[i] = Pool(lpTokens[i], gaugeVoting.lpTokenRewards(lpTokens[i]), uint256(gaugeVoting.lpTokenStatus(lpTokens[i])) == 2, votes[i], deltas[i], ERC20(lpTokens[i]).name(), ERC20(lpTokens[i]).symbol());
+        for (uint256 i = 0; i < lpTokens.length; i++) {
+            address rewards = gaugeVoting.lpTokenRewards(lpTokens[i]);
+            uint256 vlVotes = IERC20(rewards).totalSupply();
+            int256 ratio;
+            int256 vlDelta;
+            if (votes[i] != 0) {
+                ratio = int256(vlVotes) * int256(1 ether) / votes[i];
+                vlDelta = deltas[i] * ratio / int256(1 ether);
+            }
+            pools[i] = Pool(lpTokens[i], rewards, vlVotes, vlDelta, uint256(gaugeVoting.lpTokenStatus(lpTokens[i])) == 2, votes[i], deltas[i], ERC20(lpTokens[i]).name(), ERC20(lpTokens[i]).symbol());
         }
     }
 
