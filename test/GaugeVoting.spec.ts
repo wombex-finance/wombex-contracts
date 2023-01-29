@@ -17,7 +17,12 @@ import {
     BaseRewardPool4626__factory,
     BribesTokenFactory__factory,
     BribesTokenFactory,
-    BribesRewardPool__factory, BribesRewardPool, ITokenMinter__factory, BribesVotingToken__factory,
+    BribesRewardPool__factory,
+    BribesRewardPool,
+    ITokenMinter__factory,
+    BribesVotingToken__factory,
+    GaugeVotingLens,
+    GaugeVotingLens__factory,
 } from "../types/generated";
 import { Signer } from "ethers";
 import {getTimestamp, increaseTime} from "../test-utils/time";
@@ -36,7 +41,7 @@ type Pool = {
 
 describe("GaugeVoting", () => {
     let accounts: Signer[];
-    let booster: Booster, gaugeVoting: GaugeVoting, wombatVoter: WombatVoter, womDepositor: WomDepositor;
+    let booster: Booster, gaugeVoting: GaugeVoting, gaugeVotingLens: GaugeVotingLens, wombatVoter: WombatVoter, womDepositor: WomDepositor;
     let crv, cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy;
     let rewardToken1, rewardToken2, rewardToken3, lptoken1, lptoken2, multiRewarder1, multiRewarder2;
     let reward1: BribesRewardPool, reward2: BribesRewardPool;
@@ -126,6 +131,15 @@ describe("GaugeVoting", () => {
                     booster.address,
                     wombatVoter.address
                 ],
+                {},
+                true,
+            );
+
+            gaugeVotingLens = await deployContract<GaugeVotingLens>(
+                hre,
+                new GaugeVotingLens__factory(deployer),
+                "GaugeVotingLens",
+                [gaugeVoting.address],
                 {},
                 true,
             );
@@ -307,6 +321,7 @@ describe("GaugeVoting", () => {
         });
 
         it("GaugeVoting config should be able to change by owner", async () => {
+            expect(await gaugeVotingLens.getPools().then(pools => pools.map(p => p.lpToken))).deep.eq([lptoken1.address, lptoken2.address]);
             expect(await gaugeVoting.getLpTokensAdded()).deep.eq([lptoken1.address, lptoken2.address]);
             expect(await gaugeVoting.votePeriod()).eq(0);
             expect(await gaugeVoting.voteThreshold()).eq(0);

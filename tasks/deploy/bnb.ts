@@ -32,12 +32,20 @@ import {
     PoolDepositor,
     PoolDepositor__factory,
     Asset__factory,
-    WomSwapDepositor, WomSwapDepositor__factory,
-    WomStakingProxy, WomStakingProxy__factory,
-    LpVestedEscrow__factory, LpVestedEscrow,
+    WomSwapDepositor,
+    WomSwapDepositor__factory,
+    WomStakingProxy,
+    WomStakingProxy__factory,
+    LpVestedEscrow__factory,
+    LpVestedEscrow,
     // LensUser, LensUser__factory,
     BoosterEarmark,
-    BoosterEarmark__factory
+    BoosterEarmark__factory,
+    GaugeVoting,
+    GaugeVoting__factory,
+    GaugeVotingLens__factory,
+    GaugeVotingLens,
+    BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory__factory, BribesTokenFactory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -650,3 +658,91 @@ task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArgum
     await wmxStakingProxy.setSwapConfig(bnbConfig.womSwapDepositorAddress, 3000).then(tx => tx.wait(1));
     await wmxStakingProxy.transferOwnership(treasuryMultisig).then(tx => tx.wait(1));
 });
+
+task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const gaugeVotingLens1 = await deployContract<GaugeVotingLens>(
+        hre,
+        new GaugeVotingLens__factory(deployer),
+        "GaugeVotingLens",
+        ['0x728d643b09670765A9983f62C920CB1d7082C62C'],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVotingLens', gaugeVotingLens1.address);
+    return
+
+    const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const gaugeVotingArgs = [
+        bnbConfig.cvxLocker,
+        bnbConfig.booster,
+        '0x04d4e1c1f3d6539071b6d3849fdaed04d48d563d',
+    ];
+    fs.writeFileSync('./args/gaugeVoting.js', 'module.exports = ' + JSON.stringify(gaugeVotingArgs));
+    const gaugeVoting = await deployContract<GaugeVoting>(
+        hre,
+        new GaugeVoting__factory(deployer),
+        "GaugeVoting",
+        gaugeVotingArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVoting', gaugeVoting.address);
+
+    const gaugeVotingLensArgs = [
+        gaugeVoting.address,
+    ];
+    fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
+    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+        hre,
+        new GaugeVotingLens__factory(deployer),
+        "GaugeVotingLens",
+        gaugeVotingLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVotingLens', gaugeVotingLens.address);
+
+    const bribesRewardFactoryArgs = [
+        gaugeVoting.address,
+    ];
+    fs.writeFileSync('./args/bribesRewardFactory.js', 'module.exports = ' + JSON.stringify(bribesRewardFactoryArgs));
+    const bribesRewardFactory = await deployContract<BribesRewardFactory>(
+        hre,
+        new BribesRewardFactory__factory(deployer),
+        "BribesRewardFactory",
+        bribesRewardFactoryArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bribesRewardFactory', bribesRewardFactory.address);
+
+    const bribesTokenFactoryArgs = [
+        gaugeVoting.address,
+    ];
+    fs.writeFileSync('./args/bribesTokenFactory.js', 'module.exports = ' + JSON.stringify(bribesTokenFactoryArgs));
+    const bribesTokenFactory = await deployContract<BribesTokenFactory>(
+        hre,
+        new BribesTokenFactory__factory(deployer),
+        "BribesTokenFactory",
+        bribesTokenFactoryArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bribesTokenFactory', bribesTokenFactory.address);
+
+    await gaugeVoting.setFactories(bribesTokenFactory.address, bribesRewardFactory.address, ZERO_ADDRESS).then(tx => tx.wait());
+    await gaugeVoting.transferOwnership(treasuryMultisig).then(tx => tx.wait());
+});
+
