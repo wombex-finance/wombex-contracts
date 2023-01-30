@@ -54,6 +54,7 @@ contract GaugeVoting is Ownable {
     event RewardPoolMigrate(address indexed rewards, address indexed newOperator);
     event Vote(address[] lpTokens, int256[] deltas, uint256 availableVotes, uint256 votedAmount);
     event DistributeBribeRewards(address indexed lpToken, address indexed rewardsPool, address indexed bribe, address[] rewardTokens, uint256[] rewardAmounts);
+    event ZeroRewards(address indexed lpToken, address indexed bribe, address indexed rewardToken);
     event TransferRewards(address indexed lpToken, address indexed rewardToken, address indexed recipient, uint256 rewardAmount, bool queueRewards);
     event VoteExecute(address[] lpTokens, int256[] deltas, int256[] votes);
 
@@ -100,6 +101,9 @@ contract GaugeVoting is Ownable {
     function approveRewards() external onlyOwner {
         uint256 lpLen = lpTokensAdded.length;
         for (uint256 i = 0; i < lpLen; i++) {
+            if (lpTokenStatus[lpTokensAdded[i]] != LpTokenStatus.ACTIVE) {
+                continue;
+            }
             address rewardPool = lpTokenRewards[lpTokensAdded[i]];
 
             (, , , , , , address bribe) = bribeVoter.infos(lpTokensAdded[i]);
@@ -259,6 +263,10 @@ contract GaugeVoting is Ownable {
             uint256 tLen = rewardTokens.length;
             for (uint256 j = 0; j < tLen; j++) {
                 uint256 amount = rewards[j];
+                if (amount == 0) {
+                    emit ZeroRewards(lpToken, bribe, rewardTokens[j]);
+                    continue;
+                }
                 booster.voteExecute(
                     rewardTokens[j],
                     0,
@@ -274,6 +282,8 @@ contract GaugeVoting is Ownable {
             }
             emit DistributeBribeRewards(lpToken, lpTokenRewards[lpToken], bribe, rewardTokens, rewards);
         }
+
+        lastVoteAt = block.timestamp;
 
         emit VoteExecute(lpTokensAdded, deltas, votes);
     }
