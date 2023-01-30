@@ -746,3 +746,54 @@ task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments,
     await gaugeVoting.transferOwnership(treasuryMultisig).then(tx => tx.wait());
 });
 
+
+task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+
+    const oldGaugeVoting = GaugeVoting__factory.connect('0xfC41ACe00811cfF97EB6BAdF42f3d2B9f1ceB3d4', deployer);
+
+    const newGaugeVoting = await deployContract<GaugeVoting>(
+        hre,
+        new GaugeVoting__factory(deployer),
+        "GaugeVoting",
+        [await oldGaugeVoting.wmxLocker(), await oldGaugeVoting.booster(), await oldGaugeVoting.bribeVoter()],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('newGaugeVoting', newGaugeVoting.address);
+    const bribesRewardFactory = await deployContract<BribesRewardFactory>(
+        hre,
+        new BribesRewardFactory__factory(deployer),
+        "BribesRewardFactory",
+        [newGaugeVoting.address],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bribesRewardFactory', bribesRewardFactory.address);
+
+    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+        hre,
+        new GaugeVotingLens__factory(deployer),
+        "GaugeVotingLens",
+        [newGaugeVoting.address],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVotingLens', gaugeVotingLens.address);
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await newGaugeVoting.setFactories(ZERO_ADDRESS, bribesRewardFactory.address, await oldGaugeVoting.stakingToken()).then(tx => tx.wait());
+    const rewards = ["0x1623955a87DC65B19482864d7a1F7213F0e3e04A", "0x24373CF57213874C989444d9712780D4CD7ee0bd", "0x4EB829FB1d7c9d14a214d26419bff94776853b91", "0xa140a78a0a2c4d7B2478C61C8F76F36E0C774C0f", "0x5623EBb81b9a10aD599BaCa9A309F2c409fC498c"];
+    await newGaugeVoting.registerCreatedLpTokens(rewards).then(tx => tx.wait());
+    await newGaugeVoting.approveRewards().then(tx => tx.wait());
+    await newGaugeVoting.transferOwnership(daoMultisig).then(tx => tx.wait());
+});
