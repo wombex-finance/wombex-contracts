@@ -28,7 +28,6 @@ contract GaugeVoting is Ownable {
     IBribesRewardFactory public bribeRewardsFactory;
     INftLocker public nftLocker;
 
-    mapping(address => uint256) public userVotes;
     mapping(address => address) public lpTokenRewards;
 
     enum LpTokenStatus {
@@ -152,11 +151,10 @@ contract GaugeVoting is Ownable {
         }
     }
 
-    function registerCreatedLpTokens(address[] memory _lpTokens, address[] memory _rewards) external onlyOwner {
-        uint256 len = _lpTokens.length;
-        require(len == _rewards.length, "!len");
+    function registerCreatedLpTokens(address[] memory _rewards) external onlyOwner {
+        uint256 len = _rewards.length;
         for (uint256 i = 0; i < len; i++) {
-            _registerCreatedLpToken(_lpTokens[i], _rewards[i]);
+            _registerCreatedLpToken(IBribeRewardsPool(_rewards[i]).asset(), _rewards[i]);
         }
     }
 
@@ -206,9 +204,10 @@ contract GaugeVoting is Ownable {
             }
         }
 
-        require(userVotes[msg.sender] <= userLockerVotes, "votes overflow");
+        uint256 userVoted = getUserVoted(msg.sender);
+        require(userVoted <= userLockerVotes, "votes overflow");
 
-        emit Vote(_lpTokens, _deltas, userLockerVotes, userVotes[msg.sender]);
+        emit Vote(_lpTokens, _deltas, userLockerVotes, userVoted);
 
         if (executeOnVote && isVoteExecuteReady()) {
             voteExecute(msg.sender);
@@ -216,13 +215,11 @@ contract GaugeVoting is Ownable {
     }
 
     function _rewardPoolWithdraw(IBribeRewardsPool _rewardsPool, address _user, uint256 _amount, address _claimFor) internal {
-        userVotes[_user] -= _amount;
         _rewardsPool.withdrawAndUnwrapFrom(_user, _amount, _claimFor);
         stakingToken.burn(address(_rewardsPool), _amount);
     }
 
     function _rewardPoolDeposit(IBribeRewardsPool _rewardsPool, address _user, uint256 _amount, address _claimFor) internal {
-        userVotes[_user] += _amount;
         stakingToken.mint(address(this), _amount);
         _rewardsPool.stakeFor(_user, _amount);
     }
@@ -255,7 +252,7 @@ contract GaugeVoting is Ownable {
             uint256 tLen = rewardTokens.length;
             for (uint256 j = 0; j < tLen; j++) {
                 uint256 amount = rewards[j];
-                booster.voteExecute( //TODO: check return data
+                booster.voteExecute(
                     rewardTokens[j],
                     0,
                     abi.encodeWithSelector(IERC20.transfer.selector, address(this), amount)
@@ -280,7 +277,7 @@ contract GaugeVoting is Ownable {
             return (deltas, votes);
         }
 
-        uint256 ratio = veWom.totalSupply() * 1 ether / totalVotesAmount;
+        uint256 ratio = veWom.balanceOf(voterProxy) * 1 ether / totalVotesAmount;
         deltas = new int256[](lpTokensAdded.length);
         votes = new int256[](lpTokensAdded.length);
         for (uint256 i = 0; i < deltas.length; i++) {
@@ -309,7 +306,7 @@ contract GaugeVoting is Ownable {
     }
 
     function _onVotesChanged(address _user, address _incentiveRecipient, address _msgSender) internal {
-        if (boostedUserVotes(_user, _user == _msgSender) >= userVotes[_user]) {
+        if (boostedUserVotes(_user, _user == _msgSender) >= getUserVoted(_user)) {
             return;
         }
 
@@ -317,6 +314,17 @@ contract GaugeVoting is Ownable {
         for (uint256 i = 0; i < len; i++) {
             IBribeRewardsPool rewardsPool = IBribeRewardsPool(lpTokenRewards[lpTokensAdded[i]]);
             _rewardPoolWithdraw(rewardsPool, _user, rewardsPool.balanceOf(_user), _incentiveRecipient);
+        }
+    }
+
+    function getUserVoted(address _user) public view returns(uint256 voted) {
+        uint256 len = lpTokensAdded.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (lpTokenStatus[lpTokensAdded[i]] != LpTokenStatus.ACTIVE) {
+                continue;
+            }
+            IBribeRewardsPool rewardsPool = IBribeRewardsPool(lpTokenRewards[lpTokensAdded[i]]);
+            voted += rewardsPool.balanceOf(_user);
         }
     }
 

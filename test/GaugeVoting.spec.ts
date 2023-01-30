@@ -351,7 +351,7 @@ describe("GaugeVoting", () => {
             expect(await gaugeVoting.nftLocker()).eq(ZERO_ADDRESS);
         });
 
-        it.only("methods vote, voteExecute and onVotesChanged should work properly", async () => {
+        it("methods vote, voteExecute and onVotesChanged should work properly", async () => {
             await cvx.connect(bob).approve(cvxLocker.address, simpleToExactAmount(10)).then(tx => tx.wait());
             await cvxLocker.connect(bob).lock(bobAddress, simpleToExactAmount(10)).then(tx => tx.wait());
             await cvxLocker.connect(bob)['getReward(address)'](bobAddress).then(tx => tx.wait());
@@ -438,40 +438,41 @@ describe("GaugeVoting", () => {
             await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("no votes");
             await cvxLocker.connect(alice).processExpiredLocks(true).then(tx => tx.wait());
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(simpleToExactAmount(20));
-            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(20));
+            expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(simpleToExactAmount(20));
             await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("votes overflow");
 
             await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther])).to.be.revertedWith("votes overflow");
 
-            await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [decrEther, decrEther]).then(tx => tx.wait());
-            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(18));
+            let res = await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [decrEther, decrEther]).then(tx => tx.wait());
+            console.log('vote cumulativeGasUsed', res.cumulativeGasUsed)
+            expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(simpleToExactAmount(18));
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(8));
             expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
 
             await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [decrEther, decrEther]).then(tx => tx.wait());
-            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(16));
+            expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(simpleToExactAmount(16));
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(7));
             expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
 
             await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [incrEther, incrEther]).then(tx => tx.wait());
-            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(18));
+            expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(simpleToExactAmount(18));
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(8));
             expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
 
             await gaugeVoting.connect(alice).vote([lptoken1.address], [incrEther]).then(tx => tx.wait());
-            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(19));
+            expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(simpleToExactAmount(19));
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
             expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
 
             await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address], [decrEther, decrEther, decrEther, decrEther]).then(tx => tx.wait());
-            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(15));
+            expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(simpleToExactAmount(15));
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(5));
             expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
 
             await expect(gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address, lptoken2.address], [incrEther, incrEther, decrEther])).to.be.revertedWith("< lastDelta");
 
-            let res = await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address], [decrEther, incrEther, incrEther, incrEther, incrEther, incrEther]).then(tx => tx.wait());
-            expect(await gaugeVoting.userVotes(aliceAddress)).eq(simpleToExactAmount(19));
+            res = await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address, lptoken1.address], [decrEther, incrEther, incrEther, incrEther, incrEther, incrEther]).then(tx => tx.wait());
+            expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(simpleToExactAmount(19));
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(9));
             expect(await reward2.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
 
@@ -550,8 +551,9 @@ describe("GaugeVoting", () => {
                 aliceBalancesBefore[i] = await token.balanceOf(aliceAddress);
                 expect(claimableRewards.amounts[i]).gt(0);
             }
-            await reward1["getReward(address,bool)"](aliceAddress, false).then(tx => tx.wait());
-            expect(await gaugeVoting.userVotes(aliceAddress)).eq(0);
+            res = await reward1["getReward(address,bool)"](aliceAddress, false).then(tx => tx.wait());
+            console.log('getReward cumulativeGasUsed', res.cumulativeGasUsed)
+            expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(0);
             expect(await reward1.balanceOf(aliceAddress)).eq(0);
 
             claimableRewards = await reward1.claimableRewards(aliceAddress);

@@ -23,7 +23,12 @@ import {
     WomSwapDepositor__factory,
     WmxClaimZap,
     WmxClaimZap__factory,
-    BoosterEarmark__factory, BoosterEarmark
+    BoosterEarmark__factory,
+    BoosterEarmark,
+    GaugeVoting,
+    GaugeVoting__factory,
+    BribesRewardFactory,
+    BribesRewardFactory__factory
 } from "../../types/generated";
 import {BN, impersonate, simpleToExactAmount, ZERO_ADDRESS} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
@@ -729,6 +734,66 @@ task("test-fork:booster-earmark").setAction(async function (taskArguments: TaskA
     console.log('earmarkRewards 10');
     await boosterEarmark.earmarkRewards(10).then(tx => tx.wait());
     console.log('earmarkRewards success');
+});
+
+task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: TaskArguments, hre) {
+    // const deployer = await getSigner(hre);
+    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
+    // const deployerAddress = await deployer.getAddress();
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    // console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+
+    const oldGaugeVoting = GaugeVoting__factory.connect('0x728d643b09670765A9983f62C920CB1d7082C62C', deployer);
+
+    const newGaugeVoting = await deployContract<GaugeVoting>(
+        hre,
+        new GaugeVoting__factory(deployer),
+        "GaugeVoting",
+        [await oldGaugeVoting.wmxLocker(), await oldGaugeVoting.booster(), await oldGaugeVoting.bribeVoter()],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('newGaugeVoting', newGaugeVoting.address);
+    const bribesRewardFactory = await deployContract<BribesRewardFactory>(
+        hre,
+        new BribesRewardFactory__factory(deployer),
+        "BribesRewardFactory",
+        [newGaugeVoting.address],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bribesRewardFactory', bribesRewardFactory.address);
+    await newGaugeVoting.setFactories(ZERO_ADDRESS, bribesRewardFactory.address, await oldGaugeVoting.stakingToken()).then(tx => tx.wait());
+    const rewards = ["0x1623955a87DC65B19482864d7a1F7213F0e3e04A", "0x24373CF57213874C989444d9712780D4CD7ee0bd", "0x4EB829FB1d7c9d14a214d26419bff94776853b91", "0xa140a78a0a2c4d7B2478C61C8F76F36E0C774C0f", "0x5623EBb81b9a10aD599BaCa9A309F2c409fC498c"];
+    await newGaugeVoting.registerCreatedLpTokens(rewards).then(tx => tx.wait());
+    await newGaugeVoting.approveRewards(["0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5", "0xa75d9ca2a0a1D547409D82e1B06618EC284A2CeD", "0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8"]).then(tx => tx.wait());
+    await newGaugeVoting.transferOwnership(daoMultisig).then(tx => tx.wait());
+
+    const dao = await impersonate(daoMultisig, true);
+
+    const booster = Booster__factory.connect(bnbConfig.booster, dao);
+
+    console.log('migration...');
+    await oldGaugeVoting.connect(dao).migrateRewards(rewards, newGaugeVoting.address).then(tx => tx.wait());
+    await oldGaugeVoting.connect(dao).migrateStakingToken(newGaugeVoting.address).then(tx => tx.wait());
+    await booster.connect(dao).setVoteDelegate(newGaugeVoting.address, true).then(tx => tx.wait());
+
+    console.log('getVotesDelta 1', await newGaugeVoting.getVotesDelta());
+
+    await newGaugeVoting.voteExecute(daoMultisig);
+
+    console.log('getVotesDelta 2', await newGaugeVoting.getVotesDelta());
 });
 
 
