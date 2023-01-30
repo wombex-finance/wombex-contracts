@@ -216,7 +216,7 @@ describe("GaugeVoting", () => {
             await wombatVoter.add(deployerAddress, lptoken2.address, multiRewarder2.address).then(tx => tx.wait());
 
             await gaugeVoting.registerLpTokens([lptoken1.address, lptoken2.address]).then(tx => tx.wait());
-            await gaugeVoting.approveRewards([rewardToken1.address, rewardToken2.address, rewardToken3.address]).then(tx => tx.wait());
+            await gaugeVoting.approveRewards().then(tx => tx.wait());
 
             await gaugeVoting.transferOwnership(await daoSigner.getAddress()).then(tx => tx.wait());
 

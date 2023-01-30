@@ -97,14 +97,18 @@ contract GaugeVoting is Ownable {
         emit SetFactories(_tokenFactory, _rewardFactory);
     }
 
-    function approveRewards(address[] memory _rewardTokens) external onlyOwner {
+    function approveRewards() external onlyOwner {
         uint256 lpLen = lpTokensAdded.length;
         for (uint256 i = 0; i < lpLen; i++) {
             address rewardPool = lpTokenRewards[lpTokensAdded[i]];
-            uint256 rtLen = _rewardTokens.length;
+
+            (, , , , , , address bribe) = bribeVoter.infos(lpTokensAdded[i]);
+            address[] memory rewardTokens = IMasterWombatRewarder(bribe).rewardTokens();
+
+            uint256 rtLen = rewardTokens.length;
             for (uint256 j = 0; j < rtLen; j++) {
-                IERC20(_rewardTokens[j]).approve(rewardPool, 0);
-                IERC20(_rewardTokens[j]).approve(rewardPool, type(uint256).max);
+                IERC20(rewardTokens[j]).approve(rewardPool, 0);
+                IERC20(rewardTokens[j]).approve(rewardPool, type(uint256).max);
             }
         }
     }
@@ -169,6 +173,9 @@ contract GaugeVoting is Ownable {
     }
 
     function _registerCreatedLpToken(address _lpToken, address _rewards) internal {
+        (, , , , , , address bribe) = bribeVoter.infos(_lpToken);
+        require(bribe != address(0), "!bribe");
+
         require(lpTokenStatus[_lpToken] == LpTokenStatus.NOT_EXISTS, "already exists");
         lpTokenStatus[_lpToken] = LpTokenStatus.ACTIVE;
 
