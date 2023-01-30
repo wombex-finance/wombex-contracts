@@ -23,6 +23,13 @@ contract GaugeVotingLens {
         string symbol;
     }
 
+    struct UserReward {
+        address lpToken;
+        address rewards;
+        address rewardToken;
+        uint256 rewardAmount;
+    }
+
     constructor(GaugeVoting _gaugeVoting) {
         gaugeVoting = _gaugeVoting;
     }
@@ -53,6 +60,45 @@ contract GaugeVotingLens {
         votes = new uint256[](lpTokens.length);
         for(uint256 i = 0; i < lpTokens.length; i++) {
             votes[i] = IERC20(gaugeVoting.lpTokenRewards(lpTokens[i])).balanceOf(_user);
+        }
+    }
+
+    function getUserRewards(address _user, uint256 _rewardsPerLpToken) public view returns (UserReward[] memory rewards) {
+        IBribeVoter bribeVoter = gaugeVoting.bribeVoter();
+
+        address[] memory lpTokens = gaugeVoting.getLpTokensAdded();
+        rewards = new UserReward[](lpTokens.length * _rewardsPerLpToken);
+        uint256 rIndex = 0;
+
+        address[] memory rewardPools = new address[](lpTokens.length);
+        uint256[] memory balances = new uint256[](lpTokens.length);
+        for (uint256 j = 0; j < lpTokens.length; j++) {
+            rewardPools[j] = gaugeVoting.lpTokenRewards(lpTokens[j]);
+            balances[j] = IBribeRewardsPool(rewardPools[j]).balanceOf(_user);
+
+            address[] memory bribeRewardTokens = IBribeRewardsPool(rewardPools[j]).rewardTokensList();
+            for (uint256 i = 0; i < bribeRewardTokens.length; i++) {
+                bool added = false;
+                for (uint256 k = 0; k < rIndex; k++) {
+                    if (rewards[k].rewardToken == bribeRewardTokens[i]) {
+                        added = true;
+                        break;
+                    }
+                }
+                if (added) {
+                    continue;
+                }
+                rewards[i] = UserReward(lpTokens[j], rewardPools[j], bribeRewardTokens[i], 0);
+                rIndex++;
+            }
+        }
+        for (uint256 i = 0; i < rewards.length; i++) {
+            for (uint256 j = 0; j < lpTokens.length; j++) {
+                if (balances[j] == 0) {
+                    continue;
+                }
+                rewards[i].rewardAmount += IBribeRewardsPool(rewardPools[j]).earned(rewards[i].rewardToken, _user);
+            }
         }
     }
 }

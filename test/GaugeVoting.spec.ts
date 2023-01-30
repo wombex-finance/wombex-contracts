@@ -551,6 +551,7 @@ describe("GaugeVoting", () => {
                 aliceBalancesBefore[i] = await token.balanceOf(aliceAddress);
                 expect(claimableRewards.amounts[i]).gt(0);
             }
+            // console.log('getUserRewards', await gaugeVotingLens.getUserRewards(aliceAddress, 2));
             res = await reward1["getReward(address,bool)"](aliceAddress, false).then(tx => tx.wait());
             console.log('getReward cumulativeGasUsed', res.cumulativeGasUsed)
             expect(await gaugeVoting.getUserVoted(aliceAddress)).eq(0);

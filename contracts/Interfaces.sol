@@ -130,10 +130,11 @@ interface IRewards{
     function extraRewardsLength() external view returns (uint256);
     function stakingToken() external view returns (address);
     function rewardToken() external view returns(address);
-    function earned(address account) external view returns (uint256);
+    function earned(address _token, address _account) external view returns (uint256);
     function updateOperatorData(address operator_, uint256 pid_) external;
     function setRewardTokenPaused(address token_, bool paused_) external;
     function balanceOf(address _account) external view returns (uint256 amount);
+    function rewardTokensList() external view returns (address[] memory);
 }
 
 interface IGauge {
