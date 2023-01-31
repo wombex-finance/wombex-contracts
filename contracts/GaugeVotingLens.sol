@@ -88,13 +88,13 @@ contract GaugeVotingLens {
                 if (added) {
                     continue;
                 }
-                rewards[i] = UserReward(lpTokens[j], rewardPools[j], bribeRewardTokens[i], 0);
+                rewards[rIndex] = UserReward(lpTokens[j], rewardPools[j], bribeRewardTokens[i], 0);
                 rIndex++;
             }
         }
         for (uint256 i = 0; i < rewards.length; i++) {
             for (uint256 j = 0; j < lpTokens.length; j++) {
-                if (balances[j] == 0) {
+                if (balances[j] == 0 || rewards[i].rewardToken == address(0)) {
                     continue;
                 }
                 rewards[i].rewardAmount += IBribeRewardsPool(rewardPools[j]).earned(rewards[i].rewardToken, _user);
