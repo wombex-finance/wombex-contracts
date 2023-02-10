@@ -28,7 +28,7 @@ import {
     GaugeVoting,
     GaugeVoting__factory,
     BribesRewardFactory,
-    BribesRewardFactory__factory
+    BribesRewardFactory__factory, GaugeVotingLens__factory, GaugeVotingLens
 } from "../../types/generated";
 import {BN, impersonate, simpleToExactAmount, ZERO_ADDRESS, increaseTime} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
@@ -746,6 +746,18 @@ task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: 
         maxPriorityFeePerGas: null,
         gasPrice: ethers.BigNumber.from(5000000000),
     })) as any;
+
+    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+        hre,
+        new GaugeVotingLens__factory(deployer),
+        "GaugeVotingLens",
+        ['0x01F5cf0ddf7654714DA2a8D712Ce55687aC6057c'],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log("getUserRewards", await gaugeVotingLens.getUserRewards('0x2f667D66dD3145F9cf9665428fd530902b0F7843', 2));
+    return;
 
     // console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
     const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));

@@ -135,6 +135,7 @@ interface IRewards{
     function setRewardTokenPaused(address token_, bool paused_) external;
     function balanceOf(address _account) external view returns (uint256 amount);
     function rewardTokensList() external view returns (address[] memory);
+    function tokenRewards(address _token) external view returns (address token, uint256 periodFinish, uint256 rewardRate, uint256 lastUpdateTime, uint256 rewardPerTokenStored, uint256 queuedRewards, uint256 currentRewards, uint256 historicalRewards, bool paused);
 }
 
 interface IGauge {

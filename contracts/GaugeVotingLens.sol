@@ -64,40 +64,56 @@ contract GaugeVotingLens {
     }
 
     function getUserRewards(address _user, uint256 _rewardsPerLpToken) public view returns (UserReward[] memory rewards) {
-        IBribeVoter bribeVoter = gaugeVoting.bribeVoter();
-
         address[] memory lpTokens = gaugeVoting.getLpTokensAdded();
         rewards = new UserReward[](lpTokens.length * _rewardsPerLpToken);
         uint256 rIndex = 0;
 
-        address[] memory rewardPools = new address[](lpTokens.length);
-        uint256[] memory balances = new uint256[](lpTokens.length);
         for (uint256 j = 0; j < lpTokens.length; j++) {
-            rewardPools[j] = gaugeVoting.lpTokenRewards(lpTokens[j]);
-            balances[j] = IBribeRewardsPool(rewardPools[j]).balanceOf(_user);
+            address rewardPool = gaugeVoting.lpTokenRewards(lpTokens[j]);
+            uint256 rewardPoolBalance = IBribeRewardsPool(rewardPool).balanceOf(_user);
 
-            address[] memory bribeRewardTokens = IBribeRewardsPool(rewardPools[j]).rewardTokensList();
+            address[] memory bribeRewardTokens = IBribeRewardsPool(rewardPool).rewardTokensList();
             for (uint256 i = 0; i < bribeRewardTokens.length; i++) {
                 bool added = false;
-                for (uint256 k = 0; k < rIndex; k++) {
-                    if (rewards[k].rewardToken == bribeRewardTokens[i]) {
-                        added = true;
-                        break;
+                if (rewardPoolBalance == 0) {
+                    for (uint256 k = 0; k < rIndex; k++) {
+                        if (rewards[k].rewardToken == bribeRewardTokens[i]) {
+                            added = true;
+                            break;
+                        }
                     }
                 }
                 if (added) {
                     continue;
                 }
-                rewards[rIndex] = UserReward(lpTokens[j], rewardPools[j], bribeRewardTokens[i], 0);
+                rewards[rIndex] = UserReward(
+                    lpTokens[j],
+                    rewardPool,
+                    bribeRewardTokens[i],
+                    rewardPoolBalance == 0 ? 0 : IBribeRewardsPool(rewardPool).earned(bribeRewardTokens[i], _user)
+                );
                 rIndex++;
             }
         }
-        for (uint256 i = 0; i < rewards.length; i++) {
-            for (uint256 j = 0; j < lpTokens.length; j++) {
-                if (balances[j] == 0 || rewards[i].rewardToken == address(0)) {
-                    continue;
-                }
-                rewards[i].rewardAmount += IBribeRewardsPool(rewardPools[j]).earned(rewards[i].rewardToken, _user);
+    }
+
+    function getTotalRewards(uint256 _rewardsPerLpToken) public view returns (UserReward[] memory rewards) {
+        address[] memory lpTokens = gaugeVoting.getLpTokensAdded();
+        rewards = new UserReward[](lpTokens.length * _rewardsPerLpToken);
+        uint256 rIndex = 0;
+
+        for (uint256 i = 0; i < lpTokens.length; i++) {
+            address rewardPool = gaugeVoting.lpTokenRewards(lpTokens[i]);
+            address[] memory bribeRewardTokens = IBribeRewardsPool(rewardPool).rewardTokensList();
+            for (uint256 j = 0; j < bribeRewardTokens.length; j++) {
+                (, , , , , uint256 queuedRewards, , uint256 historicalRewards, ) = IBribeRewardsPool(rewardPool).tokenRewards(bribeRewardTokens[j]);
+                rewards[rIndex] = UserReward(
+                    lpTokens[i],
+                    rewardPool,
+                    bribeRewardTokens[j],
+                    queuedRewards + historicalRewards
+                );
+                rIndex++;
             }
         }
     }
