@@ -75,7 +75,7 @@ describe("Booster", () => {
 
         contracts = await deploy(hre, deployer, daoSigner, mocks, distro, multisigs, mocks.namingConfig, mocks);
 
-        ({ cvx, booster, booster, boosterEarmark, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom } = contracts);
+        ({ cvx, booster, boosterEarmark, cvxLocker, cvxStakingProxy, cvxCrvRewards, veWom } = contracts);
 
         pool = await booster.poolInfo(0);
 

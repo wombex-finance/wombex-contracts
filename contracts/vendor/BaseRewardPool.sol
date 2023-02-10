@@ -67,7 +67,7 @@ contract BaseRewardPool {
     address public operator;
     uint256 public pid;
 
-    mapping(address => uint256) private _balances;
+    mapping(address => uint256) internal _balances;
     uint256 private _totalSupply;
 
     struct RewardState {
@@ -222,6 +222,7 @@ contract BaseRewardPool {
 
     function withdraw(uint256 amount, bool claim)
         public
+        virtual
         updateReward(msg.sender)
         returns(bool)
     {
@@ -253,7 +254,7 @@ contract BaseRewardPool {
         return true;
     }
 
-    function _withdrawAndUnwrapTo(uint256 amount, address from, address receiver) internal updateReward(from) returns(bool){
+    function _withdrawAndUnwrapTo(uint256 amount, address from, address receiver) internal virtual updateReward(from) returns(bool){
         _totalSupply = _totalSupply.sub(amount);
         _balances[from] = _balances[from].sub(amount);
 
