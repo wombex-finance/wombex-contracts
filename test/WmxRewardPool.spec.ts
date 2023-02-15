@@ -2,29 +2,35 @@ import hre, { ethers } from "hardhat";
 import { Signer } from "ethers";
 import { expect } from "chai";
 import {
-    deployPhase1,
-    deployPhase2,
-    deployPhase3,
-    deployPhase4,
+    deploy,
     MultisigConfig,
     SystemDeployed,
 } from "../scripts/deploySystem";
-import { deployMocks, getMockDistro, getMockMultisigs } from "../scripts/deployMocks";
-import { AuraBalRewardPool, AuraBalRewardPool__factory, ERC20 } from "../types/generated";
-import { DEAD_ADDRESS, ONE_DAY, ONE_WEEK, ZERO_ADDRESS } from "../test-utils/constants";
+import {deployTestFirstStage, getMockDistro, getMockMultisigs} from "../scripts/deployMocks";
+import {
+    WmxRewardPool,
+    WmxRewardPool__factory,
+    ERC20,
+    WomDepositor,
+    WmxRewardPoolFactory, WmxRewardPoolFactory__factory, WmxRewardPoolV2__factory
+} from "../types/generated";
+import { ONE_DAY, ONE_WEEK, ZERO_ADDRESS } from "../test-utils/constants";
 import { increaseTime, getTimestamp } from "../test-utils/time";
 import { BN, simpleToExactAmount } from "../test-utils/math";
 import { assertBNClose, assertBNClosePercent } from "../test-utils/assertions";
+import {deployContract} from "../tasks/utils";
 
-describe("AuraBalRewardPool", () => {
+describe("WmxRewardPool", () => {
     let accounts: Signer[];
 
     let contracts: SystemDeployed;
-    let rewards: AuraBalRewardPool;
+    let rewards: WmxRewardPool;
     let cvxCrv: ERC20;
     let multisigs: MultisigConfig;
+    let womDepositor: WomDepositor;
+    let mocks: any;
 
-    let deployer: Signer;
+    let deployer: Signer, daoSigner: Signer, treasurySigner: Signer;
 
     let alice: Signer;
     let aliceAddress: string;
@@ -36,23 +42,14 @@ describe("AuraBalRewardPool", () => {
     let rewardAmount: BN;
     let stakeAmount: BN;
 
-    const reset = async () => {
-        const mocks = await deployMocks(hre, deployer);
-        multisigs = await getMockMultisigs(accounts[0], accounts[7], accounts[0]);
+    const setup = async () => {
+        mocks = await deployTestFirstStage(hre, deployer);
+        daoSigner = accounts[0];
+        treasurySigner = accounts[7];
+        multisigs = await getMockMultisigs(daoSigner, treasurySigner, daoSigner);
         const distro = getMockDistro();
-        const phase1 = await deployPhase1(hre, deployer, mocks.addresses);
-        const phase2 = await deployPhase2(
-            hre,
-            deployer,
-            phase1,
-            distro,
-            multisigs,
-            mocks.namingConfig,
-            mocks.addresses,
-        );
-        const phase3 = await deployPhase3(hre, deployer, phase2, multisigs, mocks.addresses);
-        await phase3.poolManager.setProtectPool(false);
-        contracts = await deployPhase4(hre, deployer, phase3, mocks.addresses);
+
+        contracts = await deploy(hre, deployer, daoSigner, mocks, distro, multisigs, mocks.namingConfig, mocks);
 
         alice = accounts[1];
         aliceAddress = await alice.getAddress();
@@ -66,14 +63,20 @@ describe("AuraBalRewardPool", () => {
         rewards = contracts.initialCvxCrvStaking.connect(alice);
         cvxCrv = contracts.cvxCrv.connect(alice) as ERC20;
 
-        initialBal = await mocks.crvBpt.balanceOf(await deployer.getAddress());
-        await mocks.crvBpt.transfer(aliceAddress, initialBal);
-        await mocks.crvBpt.connect(alice).approve(contracts.crvDepositor.address, initialBal);
-        await contracts.crvDepositor.connect(alice)["deposit(uint256,bool,address)"](initialBal, true, ZERO_ADDRESS);
-        initialBal = initialBal.div(2);
-        await cvxCrv.transfer(bobAddress, initialBal);
+        ({ crvDepositor: womDepositor } = contracts);
 
-        stakeAmount = initialBal.div(5);
+        await womDepositor.connect(daoSigner).setLockConfig(14, 60 * 60);
+
+        initialBal = simpleToExactAmount(1000);
+        await mocks.crv.transfer(aliceAddress, initialBal);
+        await mocks.crv.connect(alice).approve(womDepositor.address, initialBal);
+        await womDepositor.connect(alice)["deposit(uint256,address)"](initialBal, ZERO_ADDRESS).then(r => r.wait(1));
+
+        await mocks.crv.approve(womDepositor.address, initialBal.div(2));
+        await womDepositor["deposit(uint256,address)"](initialBal.div(2), ZERO_ADDRESS).then(r => r.wait(1));
+        await contracts.cvxCrv.transfer(bobAddress, initialBal.div(2));
+
+        stakeAmount = initialBal.div(10);
     };
     async function verifyWithdraw(signer: Signer, accountAddress: string, amount: BN, claim = false, lock = false) {
         const totalSupplyBefore = await rewards.totalSupply();
@@ -111,14 +114,15 @@ describe("AuraBalRewardPool", () => {
     before(async () => {
         accounts = await ethers.getSigners();
         deployer = accounts[0];
-        await reset();
+        await hre.network.provider.send("hardhat_reset");
+        await setup();
     });
 
     it("initial configuration is correct", async () => {
         expect(await rewards.stakingToken()).eq(cvxCrv.address);
         expect(await rewards.rewardToken()).eq(contracts.cvx.address);
         expect(await rewards.rewardManager()).eq(multisigs.treasuryMultisig);
-        expect(await rewards.auraLocker()).eq(contracts.cvxLocker.address);
+        expect(await rewards.wmxLocker()).eq(contracts.cvxLocker.address);
         expect(await rewards.penaltyForwarder()).eq(contracts.penaltyForwarder.address);
         const currentTime = await getTimestamp();
         expect(await rewards.startTime()).gt(currentTime.add(ONE_DAY.mul(6)));
@@ -224,7 +228,7 @@ describe("AuraBalRewardPool", () => {
     });
     describe("funding rewards", () => {
         before(async () => {
-            await reset();
+            await setup();
         });
         it("blocks funding before startTime", async () => {
             await expect(rewards.connect(bob).initialiseRewards()).to.be.revertedWith("!authorized");
@@ -238,12 +242,13 @@ describe("AuraBalRewardPool", () => {
             await expect(rewards.initialiseRewards()).to.be.revertedWith("!one time");
         });
         it("blocks funding if the pool has no balance", async () => {
-            const rewardPool = await new AuraBalRewardPool__factory(deployer).deploy(
+            const rewardPool = await new WmxRewardPool__factory(deployer).deploy(
                 cvxCrv.address,
                 contracts.cvx.address,
                 await deployer.getAddress(),
                 contracts.cvxLocker.address,
                 contracts.penaltyForwarder.address,
+                3000,
                 ONE_WEEK,
             );
             await expect(rewardPool.connect(deployer).initialiseRewards()).to.be.revertedWith("!balance");
@@ -253,25 +258,77 @@ describe("AuraBalRewardPool", () => {
             await expect(rewards.connect(accounts[7]).rescueReward()).to.be.revertedWith("Already started");
         });
     });
-    describe("rescuing", () => {
+
+    describe("wmxRewardPoolV2", () => {
+        let wmxRewardPoolFactory, wmxRewardPoolV2;
         before(async () => {
-            await reset();
+            await setup();
+            wmxRewardPoolFactory = await deployContract<WmxRewardPoolFactory>(
+                hre,
+                new WmxRewardPoolFactory__factory(deployer),
+                "WmxRewardPoolFactory",
+                [cvxCrv.address, contracts.cvx.address, multisigs.treasuryMultisig, contracts.cvxLocker.address, [contracts.crvDepositor.address]],
+                {},
+                true,
+                1,
+            );
         });
-        it("rescues rewards before contract has started", async () => {
-            const treasuryAddress = await accounts[7].getAddress();
-            const contractBal = await contracts.cvx.balanceOf(rewards.address);
-            expect(contractBal).gt(0);
-            const treasuryBal = await contracts.cvx.balanceOf(treasuryAddress);
-            await rewards.connect(accounts[7]).rescueReward();
-            const treasuryBalAfter = await contracts.cvx.balanceOf(treasuryAddress);
-            expect(treasuryBalAfter).eq(treasuryBal.add(contractBal));
+        it("wrong creation by wmxRewardPoolFactory", async () => {
+            await expect(wmxRewardPoolFactory.connect(bob).CreateWmxRewardPoolV2(0, ONE_WEEK, simpleToExactAmount(100), ZERO_ADDRESS, 0)).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.mul(2), ONE_WEEK, simpleToExactAmount(100), await treasurySigner.getAddress(), 0)).to.be.revertedWith("!delay");
+            await expect(wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.mul(2), ONE_WEEK, simpleToExactAmount(100), ZERO_ADDRESS, 0)).to.be.revertedWith("!forwarder");
         });
-        it("allows admin to update auraLocker address", async () => {
-            await expect(rewards.connect(deployer).setLocker(DEAD_ADDRESS)).to.be.revertedWith("!auth");
-            await rewards.connect(accounts[7]).setLocker(DEAD_ADDRESS);
-            expect(await rewards.auraLocker()).eq(DEAD_ADDRESS);
+        it("allows admin to update wmxLocker address", async () => {
+            expect(await wmxRewardPoolFactory.depositors(0)).eq(contracts.crvDepositor.address);
+
+            expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools.length)).eq(0);
+
+            const tx = await wmxRewardPoolFactory.connect(daoSigner).CreateWmxRewardPoolV2(ONE_WEEK.div(2), ONE_WEEK, simpleToExactAmount(100), await treasurySigner.getAddress(), 4000).then(tx => tx.wait(1));
+            const [RewardPoolCreated] = tx.events.filter(e => e.event === 'RewardPoolCreated');
+            wmxRewardPoolV2 = WmxRewardPoolV2__factory.connect(RewardPoolCreated.args.rewardPool, deployer);
+
+            expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools.length)).eq(1);
+            expect(await wmxRewardPoolFactory.getCreatedPools().then(pools => pools[0])).eq(RewardPoolCreated.args.rewardPool);
+
+            expect(await wmxRewardPoolV2.penaltyShare()).eq(4000);
+            expect(await wmxRewardPoolV2.penaltyForwarder()).eq(await treasurySigner.getAddress());
+            expect(await wmxRewardPoolV2.duration()).eq(ONE_WEEK);
+            expect(await wmxRewardPoolV2.maxCap()).eq(simpleToExactAmount(100));
+            expect(await wmxRewardPoolV2.canStake(contracts.crvDepositor.address)).eq(true);
+            expect(await wmxRewardPoolV2.canStake(bobAddress)).eq(false);
+        });
+        it("allows manager to initialiseRewards", async () => {
+            await expect(wmxRewardPoolV2.connect(bob).initialiseRewards()).to.be.revertedWith("!authorized");
+            await expect(wmxRewardPoolV2.connect(treasurySigner).initialiseRewards()).to.be.revertedWith("!balance");
+
+            await contracts.cvx.transfer(wmxRewardPoolV2.address, simpleToExactAmount(2000));
+
+            await wmxRewardPoolV2.connect(treasurySigner).initialiseRewards().then(tx => tx.wait(1));
+
+            await expect(wmxRewardPoolV2.connect(treasurySigner).initialiseRewards()).to.be.revertedWith("!one time");
+        });
+        it("allows to stake only from womDepositor", async () => {
+            await mocks.crv.transfer(aliceAddress, stakeAmount.mul(2));
+            await mocks.crv.connect(alice).approve(womDepositor.address, stakeAmount.mul(2));
+
+            await womDepositor.connect(alice)["deposit(uint256,address)"](stakeAmount.div(2), wmxRewardPoolV2.address).then(r => r.wait(1));
+            await expect(await wmxRewardPoolV2.balanceOf(aliceAddress)).to.eq(stakeAmount.div(2));
+
+            await womDepositor.connect(alice)["deposit(uint256,address)"](stakeAmount.div(2), ZERO_ADDRESS).then(r => r.wait(1));
+            await cvxCrv.connect(alice).approve(wmxRewardPoolV2.address, stakeAmount.div(2));
+
+            await expect(wmxRewardPoolV2.connect(alice)["stake(uint256)"](stakeAmount.div(2))).to.be.revertedWith("!authorized");
+            await expect(wmxRewardPoolV2.connect(alice)["stakeFor(address,uint256)"](aliceAddress, stakeAmount.div(2))).to.be.revertedWith("!authorized");
+
+            console.log('maxCap')
+            await expect(await wmxRewardPoolV2.totalSupply()).to.eq(stakeAmount.div(2));
+            await expect(womDepositor.connect(alice)["deposit(uint256,address)"](stakeAmount, wmxRewardPoolV2.address)).to.be.revertedWith("maxCap");
+
+            await womDepositor.connect(alice)["deposit(uint256,address)"](stakeAmount.div(2), wmxRewardPoolV2.address).then(r => r.wait(1));
+            await expect(await wmxRewardPoolV2.balanceOf(aliceAddress)).to.eq(stakeAmount);
         });
     });
+
     describe("fails", () => {
         it("if stake amount is zero", async () => {
             await expect(rewards.connect(bob).stake(0)).to.revertedWith("RewardPool : Cannot stake 0");
@@ -286,78 +343,73 @@ describe("AuraBalRewardPool", () => {
         });
         it("constructor pass wrong arguments", async () => {
             await expect(
-                new AuraBalRewardPool__factory(deployer).deploy(
+                new WmxRewardPool__factory(deployer).deploy(
                     cvxCrv.address,
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
-                    0,
-                ),
-                "Wrong startDelay < 4 days",
-            ).revertedWith("!delay");
-            await expect(
-                new AuraBalRewardPool__factory(deployer).deploy(
-                    cvxCrv.address,
-                    contracts.cvx.address,
-                    await deployer.getAddress(),
-                    contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK.mul(2),
                 ),
                 "Wrong startDelay >= 2 weeks",
             ).revertedWith("!delay");
             await expect(
-                new AuraBalRewardPool__factory(deployer).deploy(
+                new WmxRewardPool__factory(deployer).deploy(
                     ZERO_ADDRESS,
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _stakingToken",
             ).revertedWith("!tokens");
             await expect(
-                new AuraBalRewardPool__factory(deployer).deploy(
+                new WmxRewardPool__factory(deployer).deploy(
                     contracts.cvx.address,
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _stakingToken",
             ).revertedWith("!tokens");
             await expect(
-                new AuraBalRewardPool__factory(deployer).deploy(
+                new WmxRewardPool__factory(deployer).deploy(
                     cvxCrv.address,
                     contracts.cvx.address,
                     ZERO_ADDRESS,
                     contracts.cvxLocker.address,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _rewardManager",
             ).revertedWith("!manager");
             await expect(
-                new AuraBalRewardPool__factory(deployer).deploy(
+                new WmxRewardPool__factory(deployer).deploy(
                     cvxCrv.address,
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     ZERO_ADDRESS,
-                    contracts.penaltyForwarder.address,
+                    await treasurySigner.getAddress(),
+                    3000,
                     ONE_WEEK,
                 ),
-                "Wrong _auraLocker",
+                "Wrong _wmxLocker",
             ).revertedWith("!locker");
             await expect(
-                new AuraBalRewardPool__factory(deployer).deploy(
+                new WmxRewardPool__factory(deployer).deploy(
                     cvxCrv.address,
                     contracts.cvx.address,
                     await deployer.getAddress(),
                     contracts.cvxLocker.address,
                     ZERO_ADDRESS,
+                    3000,
                     ONE_WEEK,
                 ),
                 "Wrong _penaltyForwarder",

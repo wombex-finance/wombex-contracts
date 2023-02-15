@@ -233,7 +233,7 @@ async function deploy(
         hre,
         new WmxRewardPool__factory(deployer),
         "WmxRewardPool",
-        [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, DELAY],
+        [cvxCrv.address, cvx.address, multisigs.treasuryMultisig, wmxLocker.address, penaltyForwarder.address, 3000, DELAY],
         {},
         debug,
         waitForBlocks,
