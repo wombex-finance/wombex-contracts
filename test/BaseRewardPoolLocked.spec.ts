@@ -17,6 +17,7 @@ import {
     BaseRewardPoolLocked,
     DepositToken__factory,
     DepositToken, MockERC20, MockERC20__factory, BaseRewardPoolLocked__factory, BoosterEarmark, VoterProxy,
+    MultiStaker, MultiStaker__factory,
 } from "../types/generated";
 import { Signer } from "ethers";
 import { ZERO_ADDRESS } from "../test-utils/constants";
@@ -33,7 +34,7 @@ type Pool = {
 
 describe("BaseRewardPoolLocked", () => {
     let accounts: Signer[];
-    let voterProxy: VoterProxy, booster: Booster, boosterEarmark: BoosterEarmark;
+    let voterProxy: VoterProxy, booster: Booster, boosterEarmark: BoosterEarmark, multiStaker: MultiStaker;
     let mocks: any;
     let pool: Pool;
     let contracts: SystemDeployed;
@@ -41,8 +42,8 @@ describe("BaseRewardPoolLocked", () => {
     let deployer: Signer;
     let deployerAddress: string;
 
-    let alice: Signer, bob: Signer;
-    let aliceAddress: string, bobAddress: string;
+    let alice: Signer, bob: Signer, dan: Signer;
+    let aliceAddress: string, bobAddress: string, danAddress: string;
 
     let unlockTime: number, newPoolId: string, lockedAmount: string;
     let lptoken: MockERC20, lockedRewards: BaseRewardPoolLocked;
@@ -93,11 +94,23 @@ describe("BaseRewardPoolLocked", () => {
         await voterProxy.connect(daoSigner).setLpTokensPid(mocks.masterWombat.address);
         pool = await booster.poolInfo(newPoolId);
 
+        multiStaker = await deployContract<MultiStaker>(
+            hre,
+            new MultiStaker__factory(deployer),
+            "MultiStaker",
+            [],
+            {},
+            true,
+        );
+
         alice = accounts[1];
         aliceAddress = await alice.getAddress();
 
         bob = accounts[2];
         bobAddress = await bob.getAddress();
+
+        dan = accounts[3];
+        danAddress = await dan.getAddress();
     };
 
     before(async () => {
@@ -118,21 +131,22 @@ describe("BaseRewardPoolLocked", () => {
             const balanceBefore = await crvRewards.balanceOf(aliceAddress);
             const totalSupplyBefore = await crvRewards.totalSupply();
 
-            await lptoken.approve(booster.address, lockedAmount);
-
             expect(await lockedRewards.lockManager()).eq(deployerAddress);
             expect(await lockedRewards.lockedBalance(aliceAddress)).eq(0);
             await lockedRewards.setLock([aliceAddress], [lockedAmount], true);
             expect(await lockedRewards.lockManager()).eq(ZERO_ADDRESS);
             expect(await lockedRewards.lockedBalance(aliceAddress)).eq(lockedAmount);
 
-            await booster.depositFor(newPoolId, lockedAmount, true, aliceAddress).then(tx => tx.wait());
+            await lptoken.approve(multiStaker.address, ethers.utils.parseEther("30"));
+            await multiStaker.depositFor(booster.address, newPoolId, [aliceAddress, danAddress], [lockedAmount, ethers.utils.parseEther("20")], ethers.utils.parseEther("30")).then(tx => tx.wait());
+
+            expect(await crvRewards.balanceOf(danAddress)).eq(ethers.utils.parseEther("20"));
 
             const balanceAfter = await crvRewards.balanceOf(aliceAddress);
             const totalSupplyAfter = await crvRewards.totalSupply();
 
             expect(balanceAfter.sub(balanceBefore)).eq(lockedAmount);
-            expect(totalSupplyAfter.sub(totalSupplyBefore)).eq(lockedAmount);
+            expect(totalSupplyAfter.sub(totalSupplyBefore)).eq(ethers.utils.parseEther("30"));
         });
 
         it("try to withdraw and deposit", async () => {
