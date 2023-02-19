@@ -16,7 +16,33 @@ interface IMasterWombat {
         uint40 lastRewardTimestamp; // Last timestamp that WOMs distribution occurs.
     }
 
+    struct PoolInfoV3 {
+        address lpToken; // Address of LP token contract.
+        ////
+        address rewarder;
+        uint40 periodFinish;
+        ////
+        uint128 sumOfFactors; // 20.18 fixed point. the sum of all boosted factors by all of the users in the pool
+        uint128 rewardRate; // 20.18 fixed point.
+        ////
+        uint104 accWomPerShare; // 19.12 fixed point. Accumulated WOM per share, times 1e12.
+        uint104 accWomPerFactorShare; // 19.12 fixed point. Accumulated WOM per factor share
+        uint40 lastRewardTimestamp;
+    }
+
+    // Info of each user.
+    struct UserInfo {
+        // storage slot 1
+        uint128 amount; // 20.18 fixed point. How many LP tokens the user has provided.
+        uint128 factor; // 20.18 fixed point. boosted factor = sqrt (lpAmount * veWom.balanceOf())
+        // storage slot 2
+        uint128 rewardDebt; // 20.18 fixed point. Reward debt. See explanation below.
+        uint128 pendingWom; // 20.18 fixed point. Amount of pending wom
+    }
+
     function poolInfo(uint256 _index) external view returns (PoolInfo memory);
+    function poolInfoV3(uint256 _index) external view returns (PoolInfoV3 memory);
+    function userInfo(uint256 _pid, address _user) external view returns (UserInfo memory);
 }
 
 interface IVotingProxy {
@@ -78,6 +104,14 @@ contract LensPoker {
 
             // 0. Ignore if the pool is shut down
             if (poolInfo.shutdown) {
+                continue;
+            }
+
+            // 1. Ignore if reward distribution paused
+            uint256 womPid = IVotingProxy(WMX_VOTING_PROXY).lpTokenToPid(poolInfo.gauge, poolInfo.lptoken);
+            IMasterWombat.PoolInfoV3 memory womPoolInfoV3 = IMasterWombat(WOM_MASTER_WOMBAT).poolInfoV3(womPid);
+            if (womPoolInfoV3.rewardRate == 0 &&
+                IMasterWombat(WOM_MASTER_WOMBAT).userInfo(womPid, WMX_VOTING_PROXY).pendingWom == 0) {
                 continue;
             }
 
