@@ -4,24 +4,16 @@ const fs = require('fs');
 const path = require('path');
 
 const LENS_ADDRESS = '0xf5c285c77ac0d4668cf8749309aa3db99a138d85';
-// const METHOD_NAME = 'getUserBalances';
-const METHOD_NAME = 'getUserBalancesDefault';
-// const METHOD_NAME = 'allBoosterPoolIds';
-// const METHOD_NAME = 'getUserWmxWom';
-// const METHOD_NAME = 'check';
+const BOOSTER_ADDRESS = '0x561050FFB188420D2605714F84EdA714DA58da69';
+const METHOD_NAME = 'getApys1';
 
-// example: hardhat lens:user --network bsc --user 0xCA31D21901CFEDEf50c5dc8C3F4efe461FF9C96C
-task("lens:user")
-    .addParam("user", "user address")
+// example: hardhat lens:poker --network bsc
+task("lens:apys")
     .setAction(async function (taskArgs, hre, runSuper) {
         const { user } = taskArgs;
         const Lens = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../../out/WombexLensUI.sol/WombexLensUI.json`)).toString());
         const lens = new ethers.Contract(LENS_ADDRESS, Lens.abi, hre.ethers.provider);
-        let data = lens.interface.encodeFunctionData(METHOD_NAME, [
-            '0x561050FFB188420D2605714F84EdA714DA58da69',
-            ethers.utils.getIcapAddress(user)
-        ]);
-        // data = lens.interface.encodeFunctionData(METHOD_NAME, []);
+        let data = lens.interface.encodeFunctionData(METHOD_NAME, [BOOSTER_ADDRESS]);
 
         const params = [
           {
@@ -39,11 +31,8 @@ task("lens:user")
           },
         ];
 
-        console.time('request');
         const result = await hre.ethers.provider.send("eth_call", params);
-        console.timeEnd('request');
         // console.log('result', result);
 
         console.log(lens.interface.decodeFunctionResult(METHOD_NAME, result));
-
     });
