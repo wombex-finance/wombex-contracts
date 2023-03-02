@@ -37,7 +37,7 @@ import {
     WomSwapDepositor, WomSwapDepositor__factory,
     WomStakingProxy, WomStakingProxy__factory,
     LpVestedEscrow__factory, LpVestedEscrow,
-    LensUser, LensUser__factory
+    WombexLensUI, WombexLensUI__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -591,10 +591,10 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     ];
     fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
 
-    const lens = await deployContract<LensUser>(
+    const lens = await deployContract<WombexLensUI>(
         hre,
-        new LensUser__factory(deployer),
-        "Lens",
+        new WombexLensUI__factory(deployer),
+        "WombexLensUI",
         args,
         {},
         true,
