@@ -45,6 +45,15 @@ interface IAsset is IERC20 {
 }
 
 interface IWmxLocker {
+    struct EarnedData {
+        address token;
+        uint256 amount;
+    }
+    struct LockedBalance {
+        uint112 amount;
+        uint32 unlockTime;
+    }
+
     function lock(address _account, uint256 _amount) external;
 
     function checkpointEpoch() external;
@@ -62,6 +71,16 @@ interface IWmxLocker {
     function getReward(address _account) external;
 
     function balanceOf(address _account) external view returns (uint256 amount);
+
+    function claimableRewards(address _account) external view returns (EarnedData[] memory userRewards);
+
+    function lockedBalances(address _user) external view
+        returns (
+            uint256 total,
+            uint256 unlockable,
+            uint256 locked,
+            LockedBalance[] memory lockData
+        );
 }
 
 interface IExtraRewardsDistributor {
@@ -282,6 +301,7 @@ interface IBooster {
     function voteExecute(address _voting, uint256 _value, bytes calldata _data) external;
     function mintRatio() external view returns (uint256);
     function crvLockRewards() external view returns (address);
+    function cvxLocker() external view returns (address);
 }
 
 interface IBoosterEarmark {
