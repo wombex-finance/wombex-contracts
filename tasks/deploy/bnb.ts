@@ -27,8 +27,6 @@ import {
     TokenFactory__factory,
     BoosterMigrator,
     BoosterMigrator__factory,
-    DepositorMigrator,
-    DepositorMigrator__factory,
     ExtraRewardsDistributorProxy,
     ExtraRewardsDistributorProxy__factory,
     PoolDepositor,
@@ -37,7 +35,12 @@ import {
     WomSwapDepositor, WomSwapDepositor__factory,
     WomStakingProxy, WomStakingProxy__factory,
     LpVestedEscrow__factory, LpVestedEscrow,
-    WombexLensUI, WombexLensUI__factory
+    WombexLensUI, WombexLensUI__factory,
+    BoosterEarmark,
+    BoosterEarmark__factory,
+    WmxRewardPoolFactory__factory,
+    WmxRewardPoolFactory,
+    WmxRewardPoolLens__factory, WmxRewardPoolLens
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -469,6 +472,21 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         true,
     );
 
+    const newBoosterEarmarkArgs = [newBooster.address, bnbConfig.weth];
+    fs.writeFileSync('./args/boosterEarmark.js', 'module.exports = ' + JSON.stringify(newBoosterEarmarkArgs));
+    const newBoosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        newBoosterEarmarkArgs,
+        {},
+        true,
+    );
+
+    await newBooster.setEarmarkDelegate(newBoosterEarmark.address).then(tx => tx.wait());
+    // const newBooster = Booster__factory.connect('0x561050ffb188420d2605714f84eda714da58da69', deployer);
+    // const newBoosterEarmark = BoosterEarmark__factory.connect('0x9bdcb245234b4d0dfa998d0f8da72e5ccd0f9df4', deployer);
+
     const rewardFactoryArgs = [newBooster.address, bnbConfig.wom];
     fs.writeFileSync('./args/rewardFactory.js', 'module.exports = ' + JSON.stringify(rewardFactoryArgs));
     const rewardFactory = await deployContract<RewardFactory>(
@@ -478,7 +496,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         rewardFactoryArgs,
         {},
         true,
-    );
+    );//0x6d317CF62c55BB96b933fDC637F7e08100628B39
 
     const tokenFactoryNamePostfix = ' Wombex Deposit Token';
     const cvxSymbol = 'WMX';
@@ -491,10 +509,10 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         tokenFactoryArgs,
         {},
         true,
-    );
+    );//0xc20Ae367683Eb5f4FBb2b0ec7912E1c5BA32C2B5
 
     console.log('deployContract BoosterMigrator');
-    const boosterMigratorArgs = [bnbConfig.booster, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth];
+    const boosterMigratorArgs = [bnbConfig.booster, ZERO_ADDRESS, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth];
     fs.writeFileSync('./args/boosterMigrator.js', 'module.exports = ' + JSON.stringify(boosterMigratorArgs));
     const boosterMigrator = await deployContract<BoosterMigrator>(
         hre,
@@ -508,7 +526,8 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     console.log('boosterMigrator', boosterMigrator.address);
 
     await newBooster.setOwner(boosterMigrator.address).then(tx => tx.wait(1));
-    await newBooster.setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
+    await newBooster.setPoolManager(newBoosterEarmark.address).then(tx => tx.wait(1));
+    await newBoosterEarmark.transferOwnership(boosterMigrator.address).then(tx => tx.wait(1));
 
     const poolDepositorArgs = [bnbConfig.weth, newBooster.address, bnbConfig.masterWombat];
     fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
@@ -562,6 +581,7 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
 
     const poolDepositorArgs = [bnbConfig.weth, bnbConfig.booster, bnbConfig.masterWombat];
     fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
+    // const poolDepositor = PoolDepositor__factory.connect(bnbConfig.poolDepositor, deployer);
     const poolDepositor = await deployContract<PoolDepositor>(
         hre,
         new PoolDepositor__factory(deployer),
@@ -632,4 +652,54 @@ task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArgum
     console.log('wmxStakingProxy', wmxStakingProxy.address);
     await wmxStakingProxy.setSwapConfig(bnbConfig.womSwapDepositorAddress, 3000).then(tx => tx.wait(1));
     await wmxStakingProxy.transferOwnership(treasuryMultisig).then(tx => tx.wait(1));
+});
+
+task("wmx-reward-pool-factory:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const WmxRewardPoolFactoryArgs = [
+        bnbConfig.cvxCrv,
+        bnbConfig.cvx,
+        daoMultisig,
+        bnbConfig.cvxLocker,
+        [bnbConfig.crvDepositor]
+    ];
+    fs.writeFileSync('./args/wmxRewardPoolFactory.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolFactoryArgs));
+    const wmxRewardPoolFactory = await deployContract<WmxRewardPoolFactory>(
+        hre,
+        new WmxRewardPoolFactory__factory(deployer),
+        "WmxRewardPoolFactory",
+        WmxRewardPoolFactoryArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxRewardPoolFactory', wmxRewardPoolFactory.address);
+});
+
+task("wmx-reward-pool-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const WmxRewardPoolLensArgs = ['0x2B37c10224c8d5432e0C5f7f0ea92b70F82E877c'];
+    fs.writeFileSync('./args/wmxRewardPoolLens.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolLensArgs));
+    const wmxRewardPoolLens = await deployContract<WmxRewardPoolLens>(
+        hre,
+        new WmxRewardPoolLens__factory(deployer),
+        "WmxRewardPoolLens",
+        WmxRewardPoolLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxRewardPoolLens', wmxRewardPoolLens.address);
 });

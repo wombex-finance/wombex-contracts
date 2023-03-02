@@ -260,6 +260,7 @@ interface IBooster {
         bool shutdown;
     }
 
+    function crv() external view returns (address);
     function owner() external view returns (address);
     function voterProxy() external view returns (address);
     function poolLength() external view returns (uint256);
@@ -277,8 +278,10 @@ interface IBooster {
     function earmarkRewards(uint256 _pid) external;
     function shutdownPool(uint256 _pid) external returns (bool);
     function forceShutdownPool(uint256 _pid) external returns (bool);
-    function gaugeMigrate(uint256[] memory migratePids) external;
+    function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
     function voteExecute(address _voting, uint256 _value, bytes calldata _data) external;
+    function mintRatio() external view returns (uint256);
+    function crvLockRewards() external view returns (address);
 }
 
 interface IBoosterEarmark {

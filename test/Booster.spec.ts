@@ -1111,6 +1111,7 @@ describe("Booster", () => {
             await cvxLocker.connect(daoSigner).approveRewardDistributor(underlying.address, newBooster, true);
             await cvxLocker.connect(daoSigner).approveRewardDistributor(mocks.weth.address, newBooster, true);
 
+            expect(await newBoosterContract.paused()).to.equal(true);
             expect(await newBoosterContract.owner()).to.equal(await daoSigner.getAddress());
             expect(await newBoosterContract.poolLength()).to.equal(poolLength);
             expect(await newBoosterContract.poolLength()).to.lt(await booster.poolLength());
@@ -1118,6 +1119,14 @@ describe("Booster", () => {
             expect(await newBoosterContract.maxMintRatio()).to.equal(15000);
             expect(await crvRewards.operator()).eq(newBooster);
             expect(await depositToken.operator()).eq(newBooster);
+
+            await newBoosterContract.connect(daoSigner).setPaused(false).then(tx => tx.wait(1));
+
+            await expect(boosterEarmark.connect(alice).setBoosterPoolManager(aliceAddress)).to.revertedWith("Ownable: caller is not the owner");
+            await boosterEarmark.connect(daoSigner).setBoosterPoolManager(aliceAddress).then(tx => tx.wait());
+            expect(await newBoosterContract.poolManager()).to.equal(aliceAddress);
+            await newBoosterContract.connect(alice).setPoolManager(boosterEarmark.address).then(tx => tx.wait());
+            expect(await newBoosterContract.poolManager()).to.equal(boosterEarmark.address);
 
             await newBoosterContract.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
             expect(await newBoosterContract.owner()).to.equal(boosterMigrator.address);
@@ -1148,6 +1157,28 @@ describe("Booster", () => {
             expect(await contracts.cvx.operator()).eq(newBooster);
 
             await increaseTime(60 * 60 * 24 * 6);
+
+            const prevOldEarmark = boosterEarmark;
+            boosterEarmark = await deployContract<BoosterEarmark>(
+                hre,
+                new BoosterEarmark__factory(deployer),
+                "BoosterEarmark",
+                [newBoosterContract.address, mocks.weth.address],
+                {},
+                true,
+            );
+            await boosterEarmark.transferOwnership(await daoSigner.getAddress()).then(tx => tx.wait());
+
+            await expect(boosterEarmark.connect(daoSigner).migrateDistribution(prevOldEarmark.address)).to.revertedWith("!auth");
+
+            await expect(newBoosterContract.connect(alice).setEarmarkDelegate(boosterEarmark.address)).to.revertedWith("!auth");
+            await newBoosterContract.connect(daoSigner).setEarmarkDelegate(boosterEarmark.address).then(tx => tx.wait());
+            expect(await newBoosterContract.earmarkDelegate()).to.equal(boosterEarmark.address);
+
+            await expect(boosterEarmark.connect(alice).migrateDistribution(prevOldEarmark.address)).to.revertedWith("Ownable: caller is not the owner");
+            await boosterEarmark.connect(daoSigner).migrateDistribution(prevOldEarmark.address).then(tx => tx.wait());
+            expect(await newBoosterContract.earmarkDelegate()).to.equal(boosterEarmark.address);
+            await prevOldEarmark.connect(daoSigner).setBoosterPoolManager(boosterEarmark.address).then(tx => tx.wait());
 
             const oldDistroTokens = await oldBoosterEarmark.distributionTokenList();
             const newDistroTokens = await boosterEarmark.distributionTokenList();
@@ -1544,7 +1575,8 @@ describe("Booster", () => {
 
             await voterProxy.connect(daoSigner).setLpTokensPid(newMasterWombat.address);
 
-            await boosterEarmark.connect(daoSigner).gaugeMigrate(pids).then(tx => tx.wait());
+            await expect(boosterEarmark.gaugeMigrate(newMasterWombat.address, pids)).to.revertedWith("Ownable: caller is not the owner");
+            await boosterEarmark.connect(daoSigner).gaugeMigrate(newMasterWombat.address, pids).then(tx => tx.wait());
 
             for (let i = 0; i < mwLen; i++) {
                 const pool = await oldMW.poolInfo(i);

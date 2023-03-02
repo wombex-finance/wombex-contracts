@@ -1,29 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.17;
+pragma solidity 0.8.11;
 
-interface IERC20 {
-    function balanceOf(address _who) external view returns (uint256);
-    function totalSupply() external view returns (uint256);
-    function symbol() external view returns (string memory);
-    function decimals() external view returns (uint8);
-}
+import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
+import "./Interfaces.sol";
 
 interface IUniswapV2Router01 {
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
-}
-
-interface IBooster {
-    struct PoolInfo {
-        address lptoken;
-        address token;
-        address gauge;
-        address crvRewards;
-        bool shutdown;
-    }
-    function poolInfo(uint256 _index) external view returns (PoolInfo memory);
-    function poolLength() external view returns (uint256);
-    function crvLockRewards() external view returns (address);
-    function mintRatio() external view returns (uint256);
 }
 
 interface IWmx {
@@ -192,12 +174,12 @@ contract WombexLensUI {
             PoolValues memory pValues;
 
             pValues.pid = i;
-            pValues.symbol = IERC20(poolInfo.lptoken).symbol();
+            pValues.symbol = ERC20(poolInfo.lptoken).symbol();
             pValues.rewardPool = poolInfo.crvRewards;
 
             // 1. Calculate Tvl
             pValues.lpTokenPrice = getLpUsdOut(pool, 1 ether);
-            pValues.lpTokenBalance = IERC20(poolInfo.crvRewards).totalSupply();
+            pValues.lpTokenBalance = ERC20(poolInfo.crvRewards).totalSupply();
             pValues.tvl = pValues.lpTokenBalance * pValues.lpTokenPrice / 1 ether;
 
             // 2. Calculate APYs
@@ -347,7 +329,7 @@ contract WombexLensUI {
         uint256[] memory wmxWomRewardsUSD
     ) {
         (wmxWomRewardTokens,,wmxWomRewardsUSD) = getUserPendingRewards(_crvLockRewards, _user);
-        wmxWomBalance = IERC20(_crvLockRewards).balanceOf(_user);
+        wmxWomBalance = ERC20(_crvLockRewards).balanceOf(_user);
         if (wmxWomBalance > 0) {
 
             (uint256 womAmountOut,) = IWomPool(WOM_WMX_POOL)
@@ -389,7 +371,7 @@ contract WombexLensUI {
             (rewardTokens[i],,earnedRewardsUSD[i]) = getUserPendingRewards(poolInfo.crvRewards, _user);
 
             // 2. LP token balance
-            uint256 womLpTokenBalance = IERC20(poolInfo.crvRewards).balanceOf(_user);
+            uint256 womLpTokenBalance = ERC20(poolInfo.crvRewards).balanceOf(_user);
             lpTokenBalances[i] = womLpTokenBalance;
             if (womLpTokenBalance == 0) {
                 continue;
@@ -438,7 +420,7 @@ contract WombexLensUI {
 
         for (uint256 i = 0; i < len; i++) {
             IBooster.PoolInfo memory poolInfo = _booster.poolInfo(i);
-            balances[i] = IERC20(poolInfo.crvRewards).balanceOf(_user);
+            balances[i] = ERC20(poolInfo.crvRewards).balanceOf(_user);
         }
     }
 

@@ -77,7 +77,7 @@ contract BoosterMigrator is Ownable {
 
         newBooster.setFeeManager(address(this));
 
-        IBoosterEarmark mewBoosterEarmark = IBoosterEarmark(newBooster.earmarkDelegate());
+        IBoosterEarmark newBoosterEarmark = IBoosterEarmark(newBooster.earmarkDelegate());
 
         uint256 pid;
         for (uint256 i = 0; i < poolLen; i++) {
@@ -85,7 +85,7 @@ contract BoosterMigrator is Ownable {
             if (shutdown) {
                 continue;
             }
-            mewBoosterEarmark.addCreatedPool(lptoken, gauge, token, rewards);
+            newBoosterEarmark.addCreatedPool(lptoken, gauge, token, rewards);
             newBooster.updateLpPendingRewardTokensByGauge(pid);
             pid++;
         }
@@ -103,7 +103,7 @@ contract BoosterMigrator is Ownable {
             for (uint256 j = 0; j < tokenDistroLength; j++) {
                 (distros[j], shares[j], callQueues[j]) = IBoosterEarmark(distrSource).distributionByTokens(distroTokens[i], j);
             }
-            mewBoosterEarmark.updateDistributionByTokens(distroTokens[i], distros, shares, callQueues);
+            newBoosterEarmark.updateDistributionByTokens(distroTokens[i], distros, shares, callQueues);
         }
 
         require(address(newBooster) == tokenFactory.operator(), "!tokenFactory.operator");
@@ -115,8 +115,9 @@ contract BoosterMigrator is Ownable {
         newBooster.setFactories(address(rewardFactory), address(tokenFactory));
         newBooster.setExtraRewardsDistributor(address(Booster(oldBooster).extraRewardsDist()));
         newBooster.setLockRewardContracts(Booster(oldBooster).crvLockRewards(), Booster(oldBooster).cvxLocker());
-        mewBoosterEarmark.setEarmarkConfig(IBoosterEarmark(distrSource).earmarkIncentive());
+        newBoosterEarmark.setEarmarkConfig(IBoosterEarmark(distrSource).earmarkIncentive());
         newBooster.setFeeManager(Booster(oldBooster).feeManager());
+        newBooster.setPaused(true);
 
         IMinter(Booster(oldBooster).cvx()).updateOperator();
 
@@ -129,7 +130,7 @@ contract BoosterMigrator is Ownable {
             Booster(oldBooster).setPoolManager(boosterOwner);
         }
         newBooster.setOwner(boosterOwner);
-        mewBoosterEarmark.transferOwnership(boosterOwner);
+        newBoosterEarmark.transferOwnership(boosterOwner);
 
         emit Migrated(address(newBooster), newBooster.poolLength());
     }

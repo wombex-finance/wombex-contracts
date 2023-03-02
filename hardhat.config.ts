@@ -102,7 +102,7 @@ const config: HardhatUserConfig = {
                 settings: compilerSettings,
             },
             {
-                version: "0.8.17",
+                version: "0.8.11",
                 settings: compilerSettings,
             },
         ],
