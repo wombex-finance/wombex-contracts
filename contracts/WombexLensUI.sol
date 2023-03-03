@@ -418,9 +418,10 @@ contract WombexLensUI {
         (address[] memory rewardTokens, uint256[] memory earnedRewards) = IBaseRewardPool4626(_rewardsPool)
             .claimableRewards(_user);
 
-        resRewardTokens = new address[](rewardTokens.length + 1);
-        resEarnedRewards = new uint256[](rewardTokens.length + 1);
-        resEarnedRewardsUSD = new uint256[](rewardTokens.length + 1);
+        uint256 len = rewardTokens.length;
+        resRewardTokens = new address[](len + 1);
+        resEarnedRewards = new uint256[](len + 1);
+        resEarnedRewardsUSD = new uint256[](len + 1);
         uint256 earnedWom;
         for (uint256 i = 0; i < earnedRewards.length; i++) {
             if (rewardTokens[i] == WOM_TOKEN) {
@@ -429,16 +430,16 @@ contract WombexLensUI {
             resRewardTokens[i] = rewardTokens[i];
             resEarnedRewards[i] = earnedRewards[i];
             if (earnedRewards[i] > 0) {
-                resEarnedRewards[i] = estimateInBUSD(rewardTokens[i], earnedRewards[i]);
+                resEarnedRewardsUSD[i] = estimateInBUSD(rewardTokens[i], earnedRewards[i]);
             }
         }
         if (earnedWom > 0) {
-            resRewardTokens[rewardTokens.length] = WMX_TOKEN;
-            resEarnedRewards[rewardTokens.length] = ITokenMinter(WMX_TOKEN).getFactAmounMint(earnedWom);
+            resRewardTokens[len] = WMX_TOKEN;
+            resEarnedRewards[len] = ITokenMinter(WMX_TOKEN).getFactAmounMint(earnedWom);
             if (mintRatio > 0) {
-                resEarnedRewards[rewardTokens.length] = resEarnedRewards[rewardTokens.length] * mintRatio / 10000;
+                resEarnedRewards[len] = resEarnedRewards[len] * mintRatio / 10000;
             }
-            resEarnedRewardsUSD[rewardTokens.length] = estimateInBUSD(WMX_TOKEN, resEarnedRewards[rewardTokens.length]);
+            resEarnedRewardsUSD[len] = estimateInBUSD(WMX_TOKEN, resEarnedRewards[len]);
         }
     }
 

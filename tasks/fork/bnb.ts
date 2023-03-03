@@ -23,7 +23,7 @@ import {
     WomSwapDepositor__factory,
     WmxClaimZap,
     WmxClaimZap__factory,
-    BoosterEarmark__factory, BoosterEarmark
+    BoosterEarmark__factory, BoosterEarmark, WombexLensUI, WombexLensUI__factory
 } from "../../types/generated";
 import {BN, impersonate, simpleToExactAmount, ZERO_ADDRESS} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
@@ -731,4 +731,17 @@ task("test-fork:booster-earmark").setAction(async function (taskArguments: TaskA
     console.log('earmarkRewards success');
 });
 
+task("test-fork-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
 
+    const lens = await deployContract<WombexLensUI>(
+        hre,
+        new WombexLensUI__factory(deployer),
+        "WombexLensUI",
+        [],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('getUserBalancesDefault', await lens.getUserBalancesDefault('0x561050FFB188420D2605714F84EdA714DA58da69', '0xa3102272d0fb1d92848924794ddb45988cbcc028').then(r => console.log('r.rewardTokens[2]', r.rewardTokens[2], 'r.earnedRewardsUSD[2]', r.earnedRewardsUSD[2])));
+});
