@@ -99,16 +99,19 @@ contract WombexLensUI is Ownable {
     }
 
     struct RewardContractData {
-        uint256 lpBalance;
-        uint256 underlyingBalance;
-        uint256 usdBalance;
-        RewardItem[] rewardTokens;
+        address poolAddress;
+        uint128 lpBalance;
+        uint128 underlyingBalance;
+        uint128 usdBalance;
+        uint8 decimals;
+        RewardItem[] rewards;
     }
 
     struct RewardItem {
         address rewardToken;
-        uint256 amount;
-        uint256 usdAmount;
+        uint128 amount;
+        uint128 usdAmount;
+        uint8 decimals;
     }
 
     function setUsdStableTokens(address[] memory _tokens, bool _isStable) external onlyOwner {
@@ -332,8 +335,8 @@ contract WombexLensUI is Ownable {
     ) public view returns (RewardContractData memory data) {
         RewardItem[] memory rewards = getUserPendingRewards(_booster.mintRatio(), _crvLockRewards, _user);
         uint256 wmxWomBalance = ERC20(_crvLockRewards).balanceOf(_user);
-        data = RewardContractData(wmxWomBalance, wmxWomToWom(wmxWomBalance), 0, rewards);
-        data.usdBalance = estimateInBUSD(WMX_WOM_TOKEN, data.underlyingBalance);
+        data = RewardContractData(_crvLockRewards, uint128(wmxWomBalance), uint128(wmxWomToWom(wmxWomBalance)), uint128(0), uint8(18), rewards);
+        data.usdBalance = uint128(estimateInBUSD(WMX_WOM_TOKEN, data.underlyingBalance));
     }
 
     function getUserLocker(
@@ -342,8 +345,8 @@ contract WombexLensUI is Ownable {
     ) public view returns (RewardContractData memory data) {
         RewardItem[] memory rewards = getUserLockerPendingRewards(_locker, _user);
         (uint256 balance, , , ) = IWmxLocker(_locker).lockedBalances(_user);
-        data = RewardContractData(balance, balance, 0, rewards);
-        data.usdBalance = estimateInBUSD(WMX_TOKEN, data.underlyingBalance);
+        data = RewardContractData(_locker, uint128(balance), uint128(balance), uint128(0), uint8(18), rewards);
+        data.usdBalance = uint128(estimateInBUSD(WMX_TOKEN, data.underlyingBalance));
     }
 
     function getUserBalances(
@@ -364,21 +367,31 @@ contract WombexLensUI is Ownable {
 
             // 2. LP token balance
             uint256 lpTokenBalance = ERC20(poolInfo.crvRewards).balanceOf(_user);
-            rewardContractData[i] = RewardContractData(lpTokenBalance, 0, 0, rewardTokens);
 
             // 3. Underlying balance
             address womPool = IWomAsset(poolInfo.lptoken).pool();
             address underlyingToken = IWomAsset(poolInfo.lptoken).underlyingToken();
+
+            rewardContractData[i] = RewardContractData(poolInfo.crvRewards, uint128(lpTokenBalance), uint128(0), uint128(0), getTokenDecimals(underlyingToken), rewardTokens);
+
             try IWomPool(womPool).quotePotentialWithdraw(underlyingToken, lpTokenBalance) returns (uint256 underlyingBalance) {
-                rewardContractData[i].underlyingBalance = underlyingBalance;
+                rewardContractData[i].underlyingBalance = uint128(underlyingBalance);
 
                 // 4. Usd outs
                 if (stablePoolToStableToken[womPool] != address(0)) {
-                    rewardContractData[i].usdBalance = underlyingBalance;
+                    rewardContractData[i].usdBalance = uint128(underlyingBalance);
                 } else {
-                    rewardContractData[i].usdBalance = getLpUsdOut(womPool, lpTokenBalance);
+                    rewardContractData[i].usdBalance = uint128(getLpUsdOut(womPool, lpTokenBalance));
                 }
             } catch {}
+        }
+    }
+
+    function getTokenDecimals(address _token) public view returns (uint8 decimals) {
+        try ERC20(_token).decimals() returns (uint8 _decimals) {
+            decimals = _decimals;
+        } catch {
+            decimals = uint8(18);
         }
     }
 
@@ -397,14 +410,15 @@ contract WombexLensUI is Ownable {
             }
             rewards[i] = RewardItem(
                 rewardTokens[i],
-                earnedRewards[i],
-                estimateInBUSD(rewardTokens[i], earnedRewards[i])
+                uint128(earnedRewards[i]),
+                uint128(estimateInBUSD(rewardTokens[i], earnedRewards[i])),
+                getTokenDecimals(rewardTokens[i])
             );
         }
         if (earnedWom > 0) {
             uint256 earned = ITokenMinter(WMX_TOKEN).getFactAmounMint(earnedWom);
             earned = mintRatio > 0 ? earned * mintRatio / 10000 : earned;
-            rewards[len] = RewardItem(WMX_TOKEN, earned, estimateInBUSD(WMX_TOKEN, earned));
+            rewards[len] = RewardItem(WMX_TOKEN, uint128(earned), uint128(estimateInBUSD(WMX_TOKEN, earned)), uint8(18));
         }
     }
 
@@ -417,8 +431,9 @@ contract WombexLensUI is Ownable {
         for (uint256 i = 0; i < userRewards.length; i++) {
             rewards[i] = RewardItem(
                 userRewards[i].token,
-                userRewards[i].amount,
-                estimateInBUSD(userRewards[i].token, userRewards[i].amount)
+                uint128(userRewards[i].amount),
+                uint128(estimateInBUSD(userRewards[i].token, userRewards[i].amount)),
+                getTokenDecimals(userRewards[i].token)
             );
         }
     }
