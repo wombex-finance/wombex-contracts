@@ -2,6 +2,7 @@
 pragma solidity 0.8.11;
 
 import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts-0.8/access/Ownable.sol";
 import "./Interfaces.sol";
 
 interface IUniswapV2Router01 {
@@ -44,18 +45,12 @@ interface IBaseRewardPool4626 {
         external view returns (address[] memory tokens, uint256[] memory amounts);
 }
 
-contract WombexLensUI {
+contract WombexLensUI is Ownable {
     // STABLECOIN POOLS
-    address internal constant WOM_STABLE_MAIN_POOL = 0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0;
-    address internal constant WOM_STABLE_SIDE_POOL = 0x0520451B19AD0bb00eD35ef391086A692CFC74B2;
-    address internal constant WOM_INNOVATION_POOL = 0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14;
-    address internal constant WOM_IUSD_POOL = 0x277E777F7687239B092c8845D4d2cd083a33C903;
     address internal constant WOM_CUSD_POOL = 0x4dFa92842d05a790252A7f374323b9C86D7b7E12;
-    address internal constant WOM_AXLUSDC_POOL = 0x8ad47d7ab304272322513eE63665906b64a49dA2;
     address internal constant WOM_USDD_POOL = 0x05f727876d7C123B9Bb41507251E2Afd81EAD09A;
 
     // BNB POOLS
-    address internal constant WOM_BNB_POOL = 0x0029b7e8e9eD8001c868AA09c74A1ac6269D4183;
     address internal constant WOM_BNBx_POOL = 0x8df1126de13bcfef999556899F469d64021adBae;
     address internal constant WOM_STKBNB_POOL = 0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0;
 
@@ -64,16 +59,8 @@ contract WombexLensUI {
 
     // STABLE TOKENS
     address internal constant BUSD_TOKEN = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
-    address internal constant USDT_TOKEN = 0x55d398326f99059fF775485246999027B3197955;
     address internal constant USDC_TOKEN = 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d;
-    address internal constant DAI_TOKEN = 0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3;
     address internal constant HAY_TOKEN = 0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5;
-    address internal constant FRAX_TOKEN = 0x90C97F71E18723b0Cf0dfa30ee176Ab653E89F40;
-    address internal constant TUSD_TOKEN = 0x14016E85a25aeb13065688cAFB43044C2ef86784;
-    address internal constant axlUSDC_TOKEN = 0x4268B8F0B87b6Eae5d897996E6b845ddbD99Adf3;
-    address internal constant CUSD_TOKEN = 0xFa4BA88Cf97e282c505BEa095297786c16070129;
-    address internal constant iUSD_TOKEN = 0x0A3BB08b3a15A19b4De82F8AcFc862606FB69A2D;
-    address internal constant USDD_TOKEN = 0xd17479997F34dd9156Deef8F95A52D81D265be9c;
 
     // OTHER UNDERLYING TOKENS
     address internal constant WOM_TOKEN = 0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1;
@@ -81,14 +68,13 @@ contract WombexLensUI {
     address internal constant WBNB_TOKEN = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address internal constant WMX_WOM_TOKEN = 0x0415023846Ff1C6016c4d9621de12b24B2402979;
 
-    // REWARD TOKENS TOKENS
-    address internal constant SD_TOKEN = 0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8;
-    address internal constant PSTAKE_TOKEN = 0x4C882ec256823eE773B25b414d36F92ef58a7c0C;
-    address internal constant ANKR_TOKEN = 0xf307910A4c7bbc79691fD374889b36d8531B08e3;
-
     // ROUTERS
     address internal constant PANCAKE_ROUTER = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
-    address internal constant APE_ROUTER = 0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7;
+
+    mapping(address => bool) public isUsdStableToken;
+    mapping(address => address) public stablePoolToStableToken;
+    mapping(address => address) public tokenToRouter;
+    mapping(address => bool) public tokenSwapThroughBnb;
 
     struct PoolValues {
         string symbol;
@@ -119,28 +105,28 @@ contract WombexLensUI {
         uint256[] rewards;
     }
 
-    function _isUsdStableToken(address _token) internal pure returns (bool) {
-        if (_token == BUSD_TOKEN || _token == USDT_TOKEN || _token == USDC_TOKEN || _token == DAI_TOKEN ||
-        _token == HAY_TOKEN || _token == FRAX_TOKEN || _token == TUSD_TOKEN || _token == axlUSDC_TOKEN ||
-        _token == CUSD_TOKEN || _token == iUSD_TOKEN || _token == USDD_TOKEN) {
-            return true;
+    function setUsdStableTokens(address[] memory _tokens, bool _isStable) external onlyOwner {
+        for (uint256 i = 0; i < _tokens.length; i++) {
+            isUsdStableToken[_tokens[i]] = _isStable;
         }
-        return false;
     }
 
-    function _isUsdStablePoolWithBUSD(address _womPool) internal pure returns (bool) {
-        if (_womPool == WOM_STABLE_MAIN_POOL || _womPool == WOM_STABLE_SIDE_POOL || _womPool == WOM_INNOVATION_POOL ||
-        _womPool == WOM_AXLUSDC_POOL || _womPool == WOM_IUSD_POOL) {
-            return true;
+    function setUsdStablePoolsForToken(address[] memory _pools, address _token) external onlyOwner {
+        for (uint256 i = 0; i < _pools.length; i++) {
+            stablePoolToStableToken[_pools[i]] = _token;
         }
-        return false;
     }
 
-    function _isUsdStablePool(address _womPool) internal pure returns (bool) {
-        if (_isUsdStablePoolWithBUSD(_womPool) || _womPool == WOM_USDD_POOL || _womPool == WOM_CUSD_POOL) {
-            return true;
+    function setTokensToRouter(address[] memory _tokens, address _router) external onlyOwner {
+        for (uint256 i = 0; i < _tokens.length; i++) {
+            tokenToRouter[_tokens[i]] = _router;
         }
-        return false;
+    }
+
+    function setTokenSwapThroughBnb(address[] memory _tokens, bool _throughBnb) external onlyOwner {
+        for (uint256 i = 0; i < _tokens.length; i++) {
+            tokenSwapThroughBnb[_tokens[i]] = _throughBnb;
+        }
     }
 
     function getRewardRates(
@@ -240,7 +226,7 @@ contract WombexLensUI {
         address _womPool,
         uint256 _lpTokenAmountIn
     ) public view returns (uint256) {
-        if (_isUsdStablePoolWithBUSD(_womPool)) {
+        if (stablePoolToStableToken[_womPool] == BUSD_TOKEN) {
             return _quotePotentialWithdrawalTokenToBUSD(_womPool, BUSD_TOKEN, _lpTokenAmountIn);
         } else if (_womPool == WOM_WMX_POOL) {
             return _quotePotentialWithdrawalTokenToBUSD(_womPool, WOM_TOKEN, _lpTokenAmountIn);
@@ -264,20 +250,21 @@ contract WombexLensUI {
     }
 
     // Estimates a token equivalent in USD (BUSD) using a Uniswap-compatible router
-    function estimateInBUSD(address _token, uint256 _amountIn) public view returns (uint256) {
+    function estimateInBUSD(address _token, uint256 _amountIn) public view returns (uint256 result) {
         // 1. All the USD stable tokens are roughly estimated as $1.
-        if (_isUsdStableToken(_token)) {
+        if (isUsdStableToken[_token]) {
             return _amountIn;
         }
 
         address router = PANCAKE_ROUTER;
-        bool throughBnb = false;
+        bool throughBnb = tokenSwapThroughBnb[_token];
 
-        if (_token == SD_TOKEN) {
-            router = APE_ROUTER;
+        if (tokenToRouter[_token] != address(0)) {
+            router = tokenToRouter[_token];
         }
-        if (_token == ANKR_TOKEN) {
-            throughBnb = true;
+        if (_token == WMX_WOM_TOKEN) {
+            (_amountIn, ) = IWomPool(WOM_WMX_POOL).quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(_amountIn));
+            _token = WOM_TOKEN;
         }
 
         address[] memory path;
@@ -291,8 +278,11 @@ contract WombexLensUI {
             path[0] = _token;
             path[1] = BUSD_TOKEN;
         }
-        uint256[] memory amountsOut = IUniswapV2Router01(router).getAmountsOut(_amountIn, path);
-        return amountsOut[amountsOut.length - 1];
+
+        try IUniswapV2Router01(router).getAmountsOut(_amountIn, path) returns (uint256[] memory amountsOut) {
+            result = amountsOut[amountsOut.length - 1];
+        } catch {
+        }
     }
 
     /*** USER DETAILS ***/
@@ -333,17 +323,7 @@ contract WombexLensUI {
         (address[] memory wmxWomRewardTokens, , uint256[] memory wmxWomRewardsUSD) = getUserPendingRewards(_booster.mintRatio(), _crvLockRewards, _user);
         data = RewardContractData(ERC20(_crvLockRewards).balanceOf(_user), 0, wmxWomRewardTokens, wmxWomRewardsUSD);
         if (data.balance > 0) {
-            (uint256 womAmountOut,) = IWomPool(WOM_WMX_POOL)
-                .quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(data.balance));
-
-            if (womAmountOut > 0) {
-                address[] memory path = new address[](2);
-
-                path[0] = WOM_TOKEN;
-                path[1] = BUSD_TOKEN;
-                uint256[] memory amountsOut = IUniswapV2Router01(PANCAKE_ROUTER).getAmountsOut(womAmountOut, path);
-                data.usdOut = amountsOut[1];
-            }
+            data.usdOut = estimateInBUSD(WMX_WOM_TOKEN, data.balance);
         }
     }
 
@@ -355,11 +335,7 @@ contract WombexLensUI {
         (uint256 balance, , , ) = IWmxLocker(_locker).lockedBalances(_user);
         data = RewardContractData(balance, 0, rewardTokens, rewardsUSD);
         if (data.balance > 0) {
-            address[] memory path = new address[](2);
-            path[0] = WMX_TOKEN;
-            path[1] = BUSD_TOKEN;
-            uint256[] memory amountsOut = IUniswapV2Router01(PANCAKE_ROUTER).getAmountsOut(data.balance, path);
-            data.usdOut = amountsOut[1];
+            data.usdOut = estimateInBUSD(WMX_TOKEN, data.balance);
         }
     }
 
@@ -400,7 +376,7 @@ contract WombexLensUI {
                 underlyingBalances[i] = underlyingBalance;
 
                 // 4. Usd outs
-                if (_isUsdStablePool(womPool)) {
+                if (stablePoolToStableToken[womPool] != address(0)) {
                     usdOuts[i] = underlyingBalance;
                 } else {
                     usdOuts[i] = getLpUsdOut(womPool, womLpTokenBalance);
