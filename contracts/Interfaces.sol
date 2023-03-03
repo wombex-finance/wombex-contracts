@@ -118,6 +118,7 @@ interface ITokenMinter{
     function mint(address,uint256) external;
     function burn(address,uint256) external;
     function setOperator(address) external;
+    function getFactAmounMint(uint256 _amount) external view returns(uint256 amount);
 }
 
 interface IStaker{
@@ -300,6 +301,7 @@ interface IBooster {
     function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
     function voteExecute(address _voting, uint256 _value, bytes calldata _data) external;
     function mintRatio() external view returns (uint256);
+    function customMintRatio(uint256 _pid) external view returns (uint256);
     function crvLockRewards() external view returns (address);
     function cvxLocker() external view returns (address);
 }

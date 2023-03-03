@@ -312,8 +312,8 @@ contract WombexLensUI {
         (lpTokenBalances, underlyingBalances, usdOuts, rewardTokens, earnedRewardsUSD) = getUserBalances(
             _booster, _user, allBoosterPoolIds(_booster)
         );
-        wmxWom = getUserWmxWom(IBooster(_booster).crvLockRewards(), _user);
-        locker = getUserLocker(IBooster(_booster).cvxLocker(), _user);
+        wmxWom = getUserWmxWom(_booster, _booster.crvLockRewards(), _user);
+        locker = getUserLocker(_booster.cvxLocker(), _user);
     }
 
     function allBoosterPoolIds(IBooster _booster) public view returns (uint256[] memory) {
@@ -326,10 +326,11 @@ contract WombexLensUI {
     }
 
     function getUserWmxWom(
+        IBooster _booster,
         address _crvLockRewards,
         address _user
     ) public view returns (RewardContractData memory data) {
-        (address[] memory wmxWomRewardTokens, , uint256[] memory wmxWomRewardsUSD) = getUserPendingRewards(_crvLockRewards, _user);
+        (address[] memory wmxWomRewardTokens, , uint256[] memory wmxWomRewardsUSD) = getUserPendingRewards(_booster.mintRatio(), _crvLockRewards, _user);
         data = RewardContractData(ERC20(_crvLockRewards).balanceOf(_user), 0, wmxWomRewardTokens, wmxWomRewardsUSD);
         if (data.balance > 0) {
             (uint256 womAmountOut,) = IWomPool(WOM_WMX_POOL)
@@ -379,19 +380,18 @@ contract WombexLensUI {
         usdOuts = new uint256[](len);
         rewardTokens = new address[][](len);
         earnedRewardsUSD = new uint256[][](len);
+        uint256 mintRatio = _booster.mintRatio();
 
         for (uint256 i = 0; i < len; i++) {
+            uint256 customMintRatio = _booster.customMintRatio(_poolIds[i]);
             IBooster.PoolInfo memory poolInfo = _booster.poolInfo(_poolIds[i]);
 
             // 1. Earned rewards
-            (rewardTokens[i],,earnedRewardsUSD[i]) = getUserPendingRewards(poolInfo.crvRewards, _user);
+            (rewardTokens[i],,earnedRewardsUSD[i]) = getUserPendingRewards(customMintRatio == 0 ? mintRatio : customMintRatio, poolInfo.crvRewards, _user);
 
             // 2. LP token balance
             uint256 womLpTokenBalance = ERC20(poolInfo.crvRewards).balanceOf(_user);
             lpTokenBalances[i] = womLpTokenBalance;
-            if (womLpTokenBalance == 0) {
-                continue;
-            }
 
             // 3. Underlying balance
             address womPool = IWomAsset(poolInfo.lptoken).pool();
@@ -409,20 +409,36 @@ contract WombexLensUI {
         }
     }
 
-    function getUserPendingRewards(address _rewardsPool, address _user)
+    function getUserPendingRewards(uint256 mintRatio, address _rewardsPool, address _user)
         public view returns (
-            address[] memory rewardTokens,
-            uint256[] memory earnedRewards,
-            uint256[] memory earnedRewardsUSD
+            address[] memory resRewardTokens,
+            uint256[] memory resEarnedRewards,
+            uint256[] memory resEarnedRewardsUSD
     ) {
-        (rewardTokens, earnedRewards) = IBaseRewardPool4626(_rewardsPool)
+        (address[] memory rewardTokens, uint256[] memory earnedRewards) = IBaseRewardPool4626(_rewardsPool)
             .claimableRewards(_user);
 
-        earnedRewardsUSD = new uint256[](rewardTokens.length);
+        resRewardTokens = new address[](rewardTokens.length + 1);
+        resEarnedRewards = new uint256[](rewardTokens.length + 1);
+        resEarnedRewardsUSD = new uint256[](rewardTokens.length + 1);
+        uint256 earnedWom;
         for (uint256 i = 0; i < earnedRewards.length; i++) {
-            if (earnedRewards[i] > 0) {
-                earnedRewardsUSD[i] = estimateInBUSD(rewardTokens[i], earnedRewards[i]);
+            if (rewardTokens[i] == WOM_TOKEN) {
+                earnedWom = earnedRewards[i];
             }
+            resRewardTokens[i] = rewardTokens[i];
+            resEarnedRewards[i] = earnedRewards[i];
+            if (earnedRewards[i] > 0) {
+                resEarnedRewards[i] = estimateInBUSD(rewardTokens[i], earnedRewards[i]);
+            }
+        }
+        if (earnedWom > 0) {
+            resRewardTokens[rewardTokens.length] = WMX_TOKEN;
+            resEarnedRewards[rewardTokens.length] = ITokenMinter(WMX_TOKEN).getFactAmounMint(earnedWom);
+            if (mintRatio > 0) {
+                resEarnedRewards[rewardTokens.length] = resEarnedRewards[rewardTokens.length] * mintRatio / 10000;
+            }
+            resEarnedRewardsUSD[rewardTokens.length] = estimateInBUSD(WMX_TOKEN, resEarnedRewards[rewardTokens.length]);
         }
     }
 
