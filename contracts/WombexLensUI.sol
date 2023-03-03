@@ -99,10 +99,16 @@ contract WombexLensUI is Ownable {
     }
 
     struct RewardContractData {
-        uint256 balance;
-        uint256 usdOut;
-        address[] rewardTokens;
-        uint256[] rewards;
+        uint256 lpBalance;
+        uint256 underlyingBalance;
+        uint256 usdBalance;
+        RewardItem[] rewardTokens;
+    }
+
+    struct RewardItem {
+        address rewardToken;
+        uint256 amount;
+        uint256 usdAmount;
     }
 
     function setUsdStableTokens(address[] memory _tokens, bool _isStable) external onlyOwner {
@@ -249,8 +255,18 @@ contract WombexLensUI is Ownable {
         return 0;
     }
 
+    function wmxWomToWom(uint256 wmxWomAmount) public view returns (uint256 womAmount) {
+        if (wmxWomAmount == 0) {
+            return 0;
+        }
+        (womAmount, ) = IWomPool(WOM_WMX_POOL).quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(wmxWomAmount));
+    }
+
     // Estimates a token equivalent in USD (BUSD) using a Uniswap-compatible router
     function estimateInBUSD(address _token, uint256 _amountIn) public view returns (uint256 result) {
+        if (_amountIn == 0) {
+            return 0;
+        }
         // 1. All the USD stable tokens are roughly estimated as $1.
         if (isUsdStableToken[_token]) {
             return _amountIn;
@@ -263,7 +279,7 @@ contract WombexLensUI is Ownable {
             router = tokenToRouter[_token];
         }
         if (_token == WMX_WOM_TOKEN) {
-            (_amountIn, ) = IWomPool(WOM_WMX_POOL).quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(_amountIn));
+            _amountIn = wmxWomToWom(_amountIn);
             _token = WOM_TOKEN;
         }
 
@@ -291,17 +307,11 @@ contract WombexLensUI is Ownable {
         IBooster _booster,
         address _user
     ) public view returns(
-        uint256[] memory lpTokenBalances,
-        uint256[] memory underlyingBalances,
-        uint256[] memory usdOuts,
-        address[][] memory rewardTokens,
-        uint256[][] memory earnedRewardsUSD,
+        RewardContractData[] memory pools,
         RewardContractData memory wmxWom,
         RewardContractData memory locker
     ) {
-        (lpTokenBalances, underlyingBalances, usdOuts, rewardTokens, earnedRewardsUSD) = getUserBalances(
-            _booster, _user, allBoosterPoolIds(_booster)
-        );
+        pools = getUserBalances(_booster, _user, allBoosterPoolIds(_booster));
         wmxWom = getUserWmxWom(_booster, _booster.crvLockRewards(), _user);
         locker = getUserLocker(_booster.cvxLocker(), _user);
     }
@@ -320,42 +330,29 @@ contract WombexLensUI is Ownable {
         address _crvLockRewards,
         address _user
     ) public view returns (RewardContractData memory data) {
-        (address[] memory wmxWomRewardTokens, , uint256[] memory wmxWomRewardsUSD) = getUserPendingRewards(_booster.mintRatio(), _crvLockRewards, _user);
-        data = RewardContractData(ERC20(_crvLockRewards).balanceOf(_user), 0, wmxWomRewardTokens, wmxWomRewardsUSD);
-        if (data.balance > 0) {
-            data.usdOut = estimateInBUSD(WMX_WOM_TOKEN, data.balance);
-        }
+        RewardItem[] memory rewards = getUserPendingRewards(_booster.mintRatio(), _crvLockRewards, _user);
+        uint256 wmxWomBalance = ERC20(_crvLockRewards).balanceOf(_user);
+        data = RewardContractData(wmxWomBalance, wmxWomToWom(wmxWomBalance), 0, rewards);
+        data.usdBalance = estimateInBUSD(WMX_WOM_TOKEN, data.underlyingBalance);
     }
 
     function getUserLocker(
         address _locker,
         address _user
     ) public view returns (RewardContractData memory data) {
-        (address[] memory rewardTokens, , uint256[] memory rewardsUSD) = getUserLockerPendingRewards(_locker, _user);
+        RewardItem[] memory rewards = getUserLockerPendingRewards(_locker, _user);
         (uint256 balance, , , ) = IWmxLocker(_locker).lockedBalances(_user);
-        data = RewardContractData(balance, 0, rewardTokens, rewardsUSD);
-        if (data.balance > 0) {
-            data.usdOut = estimateInBUSD(WMX_TOKEN, data.balance);
-        }
+        data = RewardContractData(balance, balance, 0, rewards);
+        data.usdBalance = estimateInBUSD(WMX_TOKEN, data.underlyingBalance);
     }
 
     function getUserBalances(
         IBooster _booster,
         address _user,
         uint256[] memory _poolIds
-    ) public view returns(
-        uint256[] memory lpTokenBalances,
-        uint256[] memory underlyingBalances,
-        uint256[] memory usdOuts,
-        address[][] memory rewardTokens,
-        uint256[][] memory earnedRewardsUSD
-    ) {
+    ) public view returns(RewardContractData[] memory rewardContractData) {
         uint256 len = _poolIds.length;
-        lpTokenBalances = new uint256[](len);
-        underlyingBalances = new uint256[](len);
-        usdOuts = new uint256[](len);
-        rewardTokens = new address[][](len);
-        earnedRewardsUSD = new uint256[][](len);
+        rewardContractData = new RewardContractData[](len);
         uint256 mintRatio = _booster.mintRatio();
 
         for (uint256 i = 0; i < len; i++) {
@@ -363,80 +360,66 @@ contract WombexLensUI is Ownable {
             IBooster.PoolInfo memory poolInfo = _booster.poolInfo(_poolIds[i]);
 
             // 1. Earned rewards
-            (rewardTokens[i],,earnedRewardsUSD[i]) = getUserPendingRewards(customMintRatio == 0 ? mintRatio : customMintRatio, poolInfo.crvRewards, _user);
+            RewardItem[] memory rewardTokens = getUserPendingRewards(customMintRatio == 0 ? mintRatio : customMintRatio, poolInfo.crvRewards, _user);
 
             // 2. LP token balance
-            uint256 womLpTokenBalance = ERC20(poolInfo.crvRewards).balanceOf(_user);
-            lpTokenBalances[i] = womLpTokenBalance;
+            uint256 lpTokenBalance = ERC20(poolInfo.crvRewards).balanceOf(_user);
+            rewardContractData[i] = RewardContractData(lpTokenBalance, 0, 0, rewardTokens);
 
             // 3. Underlying balance
             address womPool = IWomAsset(poolInfo.lptoken).pool();
             address underlyingToken = IWomAsset(poolInfo.lptoken).underlyingToken();
-            try IWomPool(womPool).quotePotentialWithdraw(underlyingToken, womLpTokenBalance) returns (uint256 underlyingBalance) {
-                underlyingBalances[i] = underlyingBalance;
+            try IWomPool(womPool).quotePotentialWithdraw(underlyingToken, lpTokenBalance) returns (uint256 underlyingBalance) {
+                rewardContractData[i].underlyingBalance = underlyingBalance;
 
                 // 4. Usd outs
                 if (stablePoolToStableToken[womPool] != address(0)) {
-                    usdOuts[i] = underlyingBalance;
+                    rewardContractData[i].usdBalance = underlyingBalance;
                 } else {
-                    usdOuts[i] = getLpUsdOut(womPool, womLpTokenBalance);
+                    rewardContractData[i].usdBalance = getLpUsdOut(womPool, lpTokenBalance);
                 }
             } catch {}
         }
     }
 
-    function getUserPendingRewards(uint256 mintRatio, address _rewardsPool, address _user)
-        public view returns (
-            address[] memory resRewardTokens,
-            uint256[] memory resEarnedRewards,
-            uint256[] memory resEarnedRewardsUSD
-    ) {
+    function getUserPendingRewards(uint256 mintRatio, address _rewardsPool, address _user) public view
+        returns (RewardItem[] memory rewards)
+    {
         (address[] memory rewardTokens, uint256[] memory earnedRewards) = IBaseRewardPool4626(_rewardsPool)
             .claimableRewards(_user);
 
         uint256 len = rewardTokens.length;
-        resRewardTokens = new address[](len + 1);
-        resEarnedRewards = new uint256[](len + 1);
-        resEarnedRewardsUSD = new uint256[](len + 1);
+        rewards = new RewardItem[](len + 1);
         uint256 earnedWom;
         for (uint256 i = 0; i < earnedRewards.length; i++) {
             if (rewardTokens[i] == WOM_TOKEN) {
                 earnedWom = earnedRewards[i];
             }
-            resRewardTokens[i] = rewardTokens[i];
-            resEarnedRewards[i] = earnedRewards[i];
-            if (earnedRewards[i] > 0) {
-                resEarnedRewardsUSD[i] = estimateInBUSD(rewardTokens[i], earnedRewards[i]);
-            }
+            rewards[i] = RewardItem(
+                rewardTokens[i],
+                earnedRewards[i],
+                estimateInBUSD(rewardTokens[i], earnedRewards[i])
+            );
         }
         if (earnedWom > 0) {
-            resRewardTokens[len] = WMX_TOKEN;
-            resEarnedRewards[len] = ITokenMinter(WMX_TOKEN).getFactAmounMint(earnedWom);
-            if (mintRatio > 0) {
-                resEarnedRewards[len] = resEarnedRewards[len] * mintRatio / 10000;
-            }
-            resEarnedRewardsUSD[len] = estimateInBUSD(WMX_TOKEN, resEarnedRewards[len]);
+            uint256 earned = ITokenMinter(WMX_TOKEN).getFactAmounMint(earnedWom);
+            earned = mintRatio > 0 ? earned * mintRatio / 10000 : earned;
+            rewards[len] = RewardItem(WMX_TOKEN, earned, estimateInBUSD(WMX_TOKEN, earned));
         }
     }
 
     function getUserLockerPendingRewards(address _locker, address _user) public view
-        returns (
-            address[] memory rewardTokens,
-            uint256[] memory earnedRewards,
-            uint256[] memory earnedRewardsUSD
-        )
+        returns (RewardItem[] memory rewards)
     {
         IWmxLocker.EarnedData[] memory userRewards = IWmxLocker(_locker).claimableRewards(_user);
 
-        rewardTokens = new address[](userRewards.length);
-        earnedRewards = new uint256[](userRewards.length);
-        earnedRewardsUSD = new uint256[](userRewards.length);
-        for (uint256 i = 0; i < earnedRewards.length; i++) {
-            rewardTokens[i] = userRewards[i].token;
-            earnedRewards[i] = userRewards[i].amount;
-            if (earnedRewards[i] > 0) {
-                earnedRewardsUSD[i] = estimateInBUSD(rewardTokens[i], earnedRewards[i]);
-            }
+        rewards = new RewardItem[](userRewards.length);
+        for (uint256 i = 0; i < userRewards.length; i++) {
+            rewards[i] = RewardItem(
+                userRewards[i].token,
+                userRewards[i].amount,
+                estimateInBUSD(userRewards[i].token, userRewards[i].amount)
+            );
         }
     }
 

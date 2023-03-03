@@ -749,5 +749,6 @@ task("test-fork-lens:bnb").setAction(async function (taskArguments: TaskArgument
     await lens.setUsdStablePoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0xFa4BA88Cf97e282c505BEa095297786c16070129').then(tx => tx.wait());
     await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
     await lens.setTokenSwapThroughBnb(['0xf307910A4c7bbc79691fD374889b36d8531B08e3'], true).then(tx => tx.wait());
-    console.log('getUserBalancesDefault', await lens.getUserBalancesDefault('0x561050FFB188420D2605714F84EdA714DA58da69', '0xa3102272d0fb1d92848924794ddb45988cbcc028').then(r => console.log('r.locker', r.locker, 'r.earnedRewardsUSD[2]', r.earnedRewardsUSD[2])));
+    console.log('lens deployed');
+    console.log('getUserBalancesDefault', await lens.getUserBalancesDefault('0x561050FFB188420D2605714F84EdA714DA58da69', '0xa3102272d0fb1d92848924794ddb45988cbcc028').then(r => console.log('r.locker', r.locker, 'r.pools[2]', r.pools[2])));
 });
