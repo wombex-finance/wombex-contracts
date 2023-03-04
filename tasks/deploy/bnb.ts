@@ -611,7 +611,7 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     ];
     fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
 
-    // const lens = WombexLensUI__factory.connect('0x573E3E9246E45EE8627fE6b5334d76139Eef0445', deployer);
+    // const lens = WombexLensUI__factory.connect('0x49ce4648979238653be2B45b142BE8bD676BF083', deployer);
     const lens = await deployContract<WombexLensUI>(
         hre,
         new WombexLensUI__factory(deployer),
