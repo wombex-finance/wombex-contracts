@@ -47,14 +47,6 @@ interface IBaseRewardPool4626 {
 }
 
 contract WombexLensUI is Ownable {
-    // STABLECOIN POOLS
-    address internal constant WOM_CUSD_POOL = 0x4dFa92842d05a790252A7f374323b9C86D7b7E12;
-    address internal constant WOM_USDD_POOL = 0x05f727876d7C123B9Bb41507251E2Afd81EAD09A;
-
-    // BNB POOLS
-    address internal constant WOM_BNBx_POOL = 0x8df1126de13bcfef999556899F469d64021adBae;
-    address internal constant WOM_STKBNB_POOL = 0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0;
-
     // OTHER POOLS
     address internal constant WOM_WMX_POOL = 0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e;
 
