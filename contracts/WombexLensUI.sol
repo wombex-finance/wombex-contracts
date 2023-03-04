@@ -232,11 +232,8 @@ contract WombexLensUI is Ownable {
         pValues.wmxApr = wmxApr;
     }
 
-    function getLpUsdOut(
-        address _womPool,
-        uint256 _lpTokenAmountIn
-    ) public view returns (uint256 result) {
-        address tokenOut = poolToToken[_womPool];
+    function getTokenToWithdrawFromPool(address _womPool) public view returns (address tokenOut) {
+        tokenOut = poolToToken[_womPool];
         if (tokenOut == address(0)) {
             address[] memory tokens = IWomPool(_womPool).getTokens();
             for (uint256 i = 0; i < tokens.length; i++) {
@@ -255,17 +252,20 @@ contract WombexLensUI is Ownable {
                 }
             }
         }
+    }
+
+    function getLpUsdOut(
+        address _womPool,
+        uint256 _lpTokenAmountIn
+    ) public view returns (uint256 result) {
+        address tokenOut = getTokenToWithdrawFromPool(_womPool);
         if (tokenOut == address(0)) {
             revert("stable not found for pool");
         }
-        result = _quotePotentialWithdrawalTokenToBUSD(_womPool, tokenOut, _lpTokenAmountIn);
-        if (!isUsdStableToken[tokenOut]) {
-            result = estimateInBUSD(tokenOut, result);
-        }
-        return result;
+        return quotePotentialWithdrawalTokenToBUSD(_womPool, tokenOut, _lpTokenAmountIn);
     }
 
-    function _quotePotentialWithdrawalTokenToBUSD(address _womPool, address _tokenOut, uint256 _lpTokenAmountIn) internal view returns (uint256) {
+    function quotePotentialWithdrawalTokenToBUSD(address _womPool, address _tokenOut, uint256 _lpTokenAmountIn) public view returns (uint256) {
         try IWomPool(_womPool).quotePotentialWithdraw(_tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut) {
             return estimateInBUSD(_tokenOut, tokenAmountOut);
         } catch {
@@ -374,11 +374,14 @@ contract WombexLensUI is Ownable {
         uint256 mintRatio = _booster.mintRatio();
 
         for (uint256 i = 0; i < len; i++) {
-            uint256 customMintRatio = _booster.customMintRatio(_poolIds[i]);
             IBooster.PoolInfo memory poolInfo = _booster.poolInfo(_poolIds[i]);
 
             // 1. Earned rewards
-            RewardItem[] memory rewardTokens = getUserPendingRewards(customMintRatio == 0 ? mintRatio : customMintRatio, poolInfo.crvRewards, _user);
+            RewardItem[] memory rewardTokens = getUserPendingRewards(
+                getPoolMintRatio(_booster, _poolIds[i], mintRatio),
+                poolInfo.crvRewards,
+                _user
+            );
 
             // 2. LP token balance
             uint256 lpTokenBalance = ERC20(poolInfo.crvRewards).balanceOf(_user);
@@ -399,6 +402,14 @@ contract WombexLensUI is Ownable {
                     rewardContractData[i].usdBalance = uint128(getLpUsdOut(womPool, lpTokenBalance));
                 }
             } catch {}
+        }
+    }
+
+    function getPoolMintRatio(IBooster _booster, uint256 pid, uint256 defaultMintRatio) public view returns (uint256 resMintRatio) {
+        resMintRatio = defaultMintRatio;
+        try _booster.customMintRatio(pid) returns (uint256 _customMintRatio) {
+            resMintRatio = _customMintRatio == 0 ? defaultMintRatio : _customMintRatio;
+        } catch {
         }
     }
 

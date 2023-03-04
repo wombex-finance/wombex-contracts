@@ -751,5 +751,7 @@ task("test-fork-lens:bnb").setAction(async function (taskArguments: TaskArgument
     await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
     await lens.setTokenSwapThroughBnb(['0xf307910A4c7bbc79691fD374889b36d8531B08e3'], true).then(tx => tx.wait());
     console.log('lens deployed');
-    console.log('getUserBalancesDefault', await lens.getUserBalancesDefault('0x561050FFB188420D2605714F84EdA714DA58da69', '0x2f667D66dD3145F9cf9665428fd530902b0F7843').then(r => console.log('r.locker', r.locker, 'r.pools[2]', r.pools[2])));
+    console.log('getTokenToWithdrawFromPool', await lens.getTokenToWithdrawFromPool('0x8df1126de13bcfef999556899f469d64021adbae'));
+    console.log('getUserBalancesDefault', await lens.getUserBalancesDefault('0x561050FFB188420D2605714F84EdA714DA58da69', '0x2f667D66dD3145F9cf9665428fd530902b0F7843').then(r => console.log('r.pools[10]', r.pools[10])));
+    console.log('getUserBalances', await lens.getUserBalances('0x9Ac0a3E8864Ea370Bf1A661444f6610dd041Ba1c', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [2,3,4,5,9]));
 });
