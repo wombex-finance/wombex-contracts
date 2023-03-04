@@ -25,6 +25,7 @@ interface IWomPool {
         address toToken,
         int256 fromAmount
     ) external view returns (uint256 potentialOutcome, uint256 haircut);
+    function getTokens() external view returns (address[] memory);
 }
 
 interface IBaseRewardPool4626 {
@@ -72,7 +73,7 @@ contract WombexLensUI is Ownable {
     address internal constant PANCAKE_ROUTER = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
     mapping(address => bool) public isUsdStableToken;
-    mapping(address => address) public stablePoolToStableToken;
+    mapping(address => address) public poolToToken;
     mapping(address => address) public tokenToRouter;
     mapping(address => bool) public tokenSwapThroughBnb;
 
@@ -120,9 +121,9 @@ contract WombexLensUI is Ownable {
         }
     }
 
-    function setUsdStablePoolsForToken(address[] memory _pools, address _token) external onlyOwner {
+    function setPoolsForToken(address[] memory _pools, address _token) external onlyOwner {
         for (uint256 i = 0; i < _pools.length; i++) {
-            stablePoolToStableToken[_pools[i]] = _token;
+            poolToToken[_pools[i]] = _token;
         }
     }
 
@@ -234,20 +235,34 @@ contract WombexLensUI is Ownable {
     function getLpUsdOut(
         address _womPool,
         uint256 _lpTokenAmountIn
-    ) public view returns (uint256) {
-        if (stablePoolToStableToken[_womPool] == BUSD_TOKEN) {
-            return _quotePotentialWithdrawalTokenToBUSD(_womPool, BUSD_TOKEN, _lpTokenAmountIn);
-        } else if (_womPool == WOM_WMX_POOL) {
-            return _quotePotentialWithdrawalTokenToBUSD(_womPool, WOM_TOKEN, _lpTokenAmountIn);
-        } else if (_womPool == WOM_CUSD_POOL) {
-            return _quotePotentialWithdrawalTokenToBUSD(_womPool, HAY_TOKEN, _lpTokenAmountIn);
-        } else if (_womPool == WOM_USDD_POOL) {
-            return _quotePotentialWithdrawalTokenToBUSD(_womPool, USDC_TOKEN, _lpTokenAmountIn);
-        } else if (_womPool == WOM_BNBx_POOL || _womPool == WOM_STKBNB_POOL) {
-            return _quotePotentialWithdrawalTokenToBUSD(_womPool, WBNB_TOKEN, _lpTokenAmountIn);
-        } else {
-            revert("unsupported pool");
+    ) public view returns (uint256 result) {
+        address tokenOut = poolToToken[_womPool];
+        if (tokenOut == address(0)) {
+            address[] memory tokens = IWomPool(_womPool).getTokens();
+            for (uint256 i = 0; i < tokens.length; i++) {
+                if (isUsdStableToken[tokens[i]]) {
+                    tokenOut = tokens[i];
+                    break;
+                }
+            }
+            if (tokenOut == address(0)) {
+                address[] memory tokens = IWomPool(_womPool).getTokens();
+                for (uint256 i = 0; i < tokens.length; i++) {
+                    if (tokens[i] == WOM_TOKEN || tokens[i] == WMX_TOKEN || tokens[i] == WBNB_TOKEN) {
+                        tokenOut = tokens[i];
+                        break;
+                    }
+                }
+            }
         }
+        if (tokenOut == address(0)) {
+            revert("stable not found for pool");
+        }
+        result = _quotePotentialWithdrawalTokenToBUSD(_womPool, tokenOut, _lpTokenAmountIn);
+        if (!isUsdStableToken[tokenOut]) {
+            result = estimateInBUSD(tokenOut, result);
+        }
+        return result;
     }
 
     function _quotePotentialWithdrawalTokenToBUSD(address _womPool, address _tokenOut, uint256 _lpTokenAmountIn) internal view returns (uint256) {
@@ -378,7 +393,7 @@ contract WombexLensUI is Ownable {
                 rewardContractData[i].underlyingBalance = uint128(underlyingBalance);
 
                 // 4. Usd outs
-                if (stablePoolToStableToken[womPool] != address(0)) {
+                if (isUsdStableToken[underlyingToken]) {
                     rewardContractData[i].usdBalance = uint128(underlyingBalance);
                 } else {
                     rewardContractData[i].usdBalance = uint128(getLpUsdOut(womPool, lpTokenBalance));
