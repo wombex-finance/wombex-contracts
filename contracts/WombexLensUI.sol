@@ -374,11 +374,14 @@ contract WombexLensUI is Ownable {
         uint256 mintRatio = _booster.mintRatio();
 
         for (uint256 i = 0; i < len; i++) {
-            uint256 customMintRatio = _booster.customMintRatio(_poolIds[i]);
             IBooster.PoolInfo memory poolInfo = _booster.poolInfo(_poolIds[i]);
 
             // 1. Earned rewards
-            RewardItem[] memory rewardTokens = getUserPendingRewards(customMintRatio == 0 ? mintRatio : customMintRatio, poolInfo.crvRewards, _user);
+            RewardItem[] memory rewardTokens = getUserPendingRewards(
+                getPoolMintRatio(_booster, _poolIds[i], mintRatio),
+                poolInfo.crvRewards,
+                _user
+            );
 
             // 2. LP token balance
             uint256 lpTokenBalance = ERC20(poolInfo.crvRewards).balanceOf(_user);
@@ -399,6 +402,14 @@ contract WombexLensUI is Ownable {
                     rewardContractData[i].usdBalance = uint128(getLpUsdOut(womPool, lpTokenBalance));
                 }
             } catch {}
+        }
+    }
+
+    function getPoolMintRatio(IBooster _booster, uint256 pid, uint256 defaultMintRatio) public view returns (uint256 resMintRatio) {
+        resMintRatio = defaultMintRatio;
+        try _booster.customMintRatio(pid) returns (uint256 _customMintRatio) {
+            resMintRatio = _customMintRatio == 0 ? defaultMintRatio : _customMintRatio;
+        } catch {
         }
     }
 

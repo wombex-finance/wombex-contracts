@@ -753,4 +753,5 @@ task("test-fork-lens:bnb").setAction(async function (taskArguments: TaskArgument
     console.log('lens deployed');
     console.log('getTokenToWithdrawFromPool', await lens.getTokenToWithdrawFromPool('0x8df1126de13bcfef999556899f469d64021adbae'));
     console.log('getUserBalancesDefault', await lens.getUserBalancesDefault('0x561050FFB188420D2605714F84EdA714DA58da69', '0x2f667D66dD3145F9cf9665428fd530902b0F7843').then(r => console.log('r.pools[10]', r.pools[10])));
+    console.log('getUserBalances', await lens.getUserBalances('0x9Ac0a3E8864Ea370Bf1A661444f6610dd041Ba1c', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [2,3,4,5,9]));
 });
