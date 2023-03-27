@@ -627,8 +627,9 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x05f727876d7C123B9Bb41507251E2Afd81EAD09A'], '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
+    await lens.setPoolsForToken(['0x2Ea772346486972E7690219c190dAdDa40Ac5dA4'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
     await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait(3));
-    await lens.setTokenSwapThroughBnb(['0xf307910A4c7bbc79691fD374889b36d8531B08e3'], true).then(tx => tx.wait(3));
+    await lens.setTokenSwapThroughBnb(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], true).then(tx => tx.wait(3));
     console.log('lens', lens.address);
 });
 
