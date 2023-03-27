@@ -62,6 +62,34 @@ interface IWmxLocker {
     function getReward(address _account) external;
 
     function balanceOf(address _account) external view returns (uint256 amount);
+
+    function balances(address _account) external view returns (uint112 locked, uint32 nextUnlockIndex);
+
+    function getVotes(address account) external view returns (uint256);
+
+    function getPastVotes(address account, uint256 timestamp) external view returns (uint256 votes);
+
+    struct LockedBalance {
+        uint112 amount;
+        uint32 unlockTime;
+    }
+
+    function lockedBalances(address _user) external view returns (
+        uint256 total,
+        uint256 unlockable,
+        uint256 locked,
+        LockedBalance[] memory lockData
+    );
+}
+
+interface IBribeVoter {
+    function vote(IERC20[] calldata _lpVote, int256[] calldata _deltas) external returns (uint256[][] memory bribeRewards);
+    function votes(address _user, address _lpToken) external view returns (uint256);
+    function infos(address _lpToken) external view returns (uint104 supplyBaseIndex, uint104 supplyVoteIndex, uint40 nextEpochStartTime, uint128 claimable, bool whitelist, address gaugeManager, address bribe);
+}
+
+interface IMasterWombatRewarder {
+    function rewardTokens() external view returns (address[] memory tokens);
 }
 
 interface IExtraRewardsDistributor {
@@ -79,7 +107,17 @@ interface IWomDepositorWrapper {
     ) external;
 }
 
+interface ITokenFactory{
+    function CreateDepositToken(address) external returns(address);
+    function CreateBribesVotingToken() external returns(address);
+}
+
+interface IBribesRewardFactory {
+    function CreateBribesRewards(address _stakingToken, address _lptoken, bool _callOperatorOnGetReward) external returns (address);
+}
+
 interface IRewards{
+    function asset() external returns(address);
     function stake(address, uint256) external;
     function stakeFor(address, uint256) external;
     function withdraw(address, uint256) external;
@@ -92,13 +130,51 @@ interface IRewards{
     function extraRewardsLength() external view returns (uint256);
     function stakingToken() external view returns (address);
     function rewardToken() external view returns(address);
-    function earned(address account) external view returns (uint256);
+    function earned(address _token, address _account) external view returns (uint256);
+    function updateOperatorData(address operator_, uint256 pid_) external;
+    function setRewardTokenPaused(address token_, bool paused_) external;
+    function balanceOf(address _account) external view returns (uint256 amount);
+    function rewardTokensList() external view returns (address[] memory);
+    function tokenRewards(address _token) external view returns (address token, uint256 periodFinish, uint256 rewardRate, uint256 lastUpdateTime, uint256 rewardPerTokenStored, uint256 queuedRewards, uint256 currentRewards, uint256 historicalRewards, bool paused);
 }
 
-interface ITokenMinter{
+interface IGauge {
+    function notifyRewardAmount(IERC20 token, uint256 amount) external;
+}
+
+interface IBribe {
+    function onVote(
+        address user,
+        uint256 newVote,
+        uint256 originalTotalVotes
+    ) external returns (uint256[] memory rewards);
+
+    function pendingTokens(address _user) external view returns (uint256[] memory rewards);
+
+    function rewardTokens() external view returns (IERC20[] memory tokens);
+
+    function rewardLength() external view returns (uint256);
+}
+
+interface IVe {
+    function vote(address user, int256 voteDelta) external;
+}
+
+interface INftLocker {
+    function voteBoost(address _account) external view returns (uint256);
+}
+
+interface IBribeRewardsPool is IRewards {
+    function withdrawAndUnwrapFrom(address _from, uint256 _amount, address _claimRecipient) external returns(bool);
+    function updateBribesConfig(bool _callOperatorOnGetReward) external;
+    function updateRatioConfig(uint256 _duration, uint256 _maxRewardRatio) external;
+}
+
+interface ITokenMinter is IERC20 {
     function mint(address,uint256) external;
     function burn(address,uint256) external;
     function setOperator(address) external;
+    function updateOperator(address) external;
 }
 
 interface IStaker{
@@ -113,6 +189,7 @@ interface IStaker{
     function balanceOfPool(address, address) external view returns (uint256);
     function operator() external view returns (address);
     function depositor() external view returns (address);
+    function veWom() external view returns (address);
     function execute(address _to, uint256 _value, bytes calldata _data) external returns (bool, bytes memory);
     function setVote(bytes32 hash, bool valid) external;
     function setDepositor(address _depositor) external;
@@ -279,7 +356,7 @@ interface IBooster {
     function shutdownPool(uint256 _pid) external returns (bool);
     function forceShutdownPool(uint256 _pid) external returns (bool);
     function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
-    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external;
+    function voteExecute(address _voting, uint256 _value, bytes calldata _data) external returns (bytes memory);
 }
 
 interface IBoosterEarmark {

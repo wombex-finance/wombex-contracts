@@ -612,6 +612,7 @@ contract VeWom is ERC20 {
 
     /// @notice user info mapping
     mapping(address => UserInfo) internal users;
+    mapping(address => uint256) public usedVote;
 
     event Enter(address addr, uint256 unlockTime, uint256 womAmount, uint256 veWomAmount);
     event Exit(address addr, uint256 unlockTime, uint256 womAmount, uint256 veWomAmount);
@@ -751,5 +752,19 @@ contract VeWom is ERC20 {
 
     function getBreeding(address _account, uint256 slot) public view returns (Breeding memory) {
         return users[_account].breedings[slot];
+    }
+
+    function _verifyVoteIsEnough(address _user) internal view {
+        require(balanceOf(_user) >= usedVote[_user], 'VeWom: not enough vote');
+    }
+
+    function vote(address _user, int256 _voteDelta) external {
+        if (_voteDelta >= 0) {
+            usedVote[_user] += uint256(_voteDelta);
+            _verifyVoteIsEnough(_user);
+        } else {
+            // reverts if usedVote[_user] < -_voteDelta
+            usedVote[_user] -= uint256(-_voteDelta);
+        }
     }
 }
