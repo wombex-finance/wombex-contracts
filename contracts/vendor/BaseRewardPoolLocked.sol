@@ -52,6 +52,7 @@ contract BaseRewardPoolLocked is BaseRewardPool4626 {
     }
 
     function _withdrawAndUnwrapTo(uint256 amount, address from, address receiver) internal override returns (bool result) {
+        require(from != address(0), "!zero");
         result = super._withdrawAndUnwrapTo(amount, from, receiver);
         _checkLockedBalance(from);
         return result;
