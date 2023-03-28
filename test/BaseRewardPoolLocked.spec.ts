@@ -132,9 +132,11 @@ describe("BaseRewardPoolLocked", () => {
             const totalSupplyBefore = await crvRewards.totalSupply();
 
             expect(await lockedRewards.lockManager()).eq(deployerAddress);
+            expect(await lockedRewards.setLockFinished()).eq(false);
             expect(await lockedRewards.lockedBalance(aliceAddress)).eq(0);
             await lockedRewards.setLock([aliceAddress], [lockedAmount], true);
-            expect(await lockedRewards.lockManager()).eq(ZERO_ADDRESS);
+            expect(await lockedRewards.lockManager()).eq(deployerAddress);
+            expect(await lockedRewards.setLockFinished()).eq(true);
             expect(await lockedRewards.lockedBalance(aliceAddress)).eq(lockedAmount);
 
             await lptoken.approve(multiStaker.address, ethers.utils.parseEther("30"));

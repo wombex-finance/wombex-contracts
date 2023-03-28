@@ -9,6 +9,7 @@ import "./BaseRewardPool4626.sol";
 contract BaseRewardPoolLocked is BaseRewardPool4626 {
     uint256 public unlockAt;
     address public lockManager;
+    bool public setLockFinished;
 
     mapping(address => uint256) public lockedBalance;
 
@@ -30,6 +31,7 @@ contract BaseRewardPoolLocked is BaseRewardPool4626 {
     }
 
     function setLock(address[] calldata _accounts, uint256[] calldata _amounts, bool _finish) external {
+        require(!setLockFinished, "finished");
         require(msg.sender == lockManager, "!authorized");
         uint256 len = _accounts.length;
         require(len == _amounts.length, "!len");
@@ -41,7 +43,7 @@ contract BaseRewardPoolLocked is BaseRewardPool4626 {
 
         if (_finish) {
             emit SetLockFinished(lockManager);
-            lockManager = address(0);
+            setLockFinished = true;
         }
     }
 
