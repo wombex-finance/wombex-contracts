@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.17;
+pragma solidity 0.8.11;
 
 interface IMasterWombat {
     struct PoolInfo {
@@ -16,7 +16,33 @@ interface IMasterWombat {
         uint40 lastRewardTimestamp; // Last timestamp that WOMs distribution occurs.
     }
 
+    struct PoolInfoV3 {
+        address lpToken; // Address of LP token contract.
+        ////
+        address rewarder;
+        uint40 periodFinish;
+        ////
+        uint128 sumOfFactors; // 20.18 fixed point. the sum of all boosted factors by all of the users in the pool
+        uint128 rewardRate; // 20.18 fixed point.
+        ////
+        uint104 accWomPerShare; // 19.12 fixed point. Accumulated WOM per share, times 1e12.
+        uint104 accWomPerFactorShare; // 19.12 fixed point. Accumulated WOM per factor share
+        uint40 lastRewardTimestamp;
+    }
+
+    // Info of each user.
+    struct UserInfo {
+        // storage slot 1
+        uint128 amount; // 20.18 fixed point. How many LP tokens the user has provided.
+        uint128 factor; // 20.18 fixed point. boosted factor = sqrt (lpAmount * veWom.balanceOf())
+        // storage slot 2
+        uint128 rewardDebt; // 20.18 fixed point. Reward debt. See explanation below.
+        uint128 pendingWom; // 20.18 fixed point. Amount of pending wom
+    }
+
     function poolInfo(uint256 _index) external view returns (PoolInfo memory);
+    function poolInfoV3(uint256 _index) external view returns (PoolInfoV3 memory);
+    function userInfo(uint256 _pid, address _user) external view returns (UserInfo memory);
 }
 
 interface IVotingProxy {
@@ -57,9 +83,9 @@ interface IBaseRewardPool4626 {
 
 contract LensPoker {
     address internal constant WOM_TOKEN = 0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1;
-    address internal constant WMX_BOOSTER = 0x9Ac0a3E8864Ea370Bf1A661444f6610dd041Ba1c;
+    address internal constant WMX_BOOSTER = 0x561050FFB188420D2605714F84EdA714DA58da69;
     address internal constant WMX_VOTING_PROXY = 0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569;
-    address internal constant WOM_MASTER_WOMBAT = 0xE2C07d20AF0Fb50CAE6cDD615CA44AbaAA31F9c8;
+    address internal constant WOM_MASTER_WOMBAT = 0x489833311676B566f888119c29bd997Dc6C95830;
 
     function getPoolsToPoke1() public view returns(uint256[] memory) {
         return getPokeRequiredPoolIds(false);
@@ -83,8 +109,9 @@ contract LensPoker {
 
             // 1. Ignore if reward distribution paused
             uint256 womPid = IVotingProxy(WMX_VOTING_PROXY).lpTokenToPid(poolInfo.gauge, poolInfo.lptoken);
-            IMasterWombat.PoolInfo memory womPoolInfo = IMasterWombat(WOM_MASTER_WOMBAT).poolInfo(womPid);
-            if (womPoolInfo.allocPoint == 0) {
+            IMasterWombat.PoolInfoV3 memory womPoolInfoV3 = IMasterWombat(WOM_MASTER_WOMBAT).poolInfoV3(womPid);
+            if (womPoolInfoV3.rewardRate == 0 &&
+                IMasterWombat(WOM_MASTER_WOMBAT).userInfo(womPid, WMX_VOTING_PROXY).pendingWom == 0) {
                 continue;
             }
 

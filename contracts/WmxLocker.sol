@@ -43,10 +43,6 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
         uint128 rewardPerTokenPaid;
         uint128 rewards;
     }
-    struct EarnedData {
-        address token;
-        uint256 amount;
-    }
     struct Balances {
         uint112 locked;
         uint32 nextUnlockIndex;

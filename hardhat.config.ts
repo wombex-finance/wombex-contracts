@@ -53,7 +53,7 @@ const config: HardhatUserConfig = {
         currency: "USD",
         enabled: false,
         excludeContracts: [],
-        src: "./contracts",
+        src: process.env.SRC || "./contracts",
     },
     networks: {
         hardhat: {
@@ -92,7 +92,7 @@ const config: HardhatUserConfig = {
     paths: {
         artifacts: "./artifacts",
         cache: "./cache",
-        sources: "./contracts",
+        sources: process.env.SRC || "./contracts",
         tests: "./test",
     },
     solidity: {

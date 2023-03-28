@@ -45,6 +45,15 @@ interface IAsset is IERC20 {
 }
 
 interface IWmxLocker {
+    struct EarnedData {
+        address token;
+        uint256 amount;
+    }
+    struct LockedBalance {
+        uint112 amount;
+        uint32 unlockTime;
+    }
+
     function lock(address _account, uint256 _amount) external;
 
     function checkpointEpoch() external;
@@ -65,14 +74,11 @@ interface IWmxLocker {
 
     function balances(address _account) external view returns (uint112 locked, uint32 nextUnlockIndex);
 
+    function claimableRewards(address _account) external view returns (EarnedData[] memory userRewards);
+
     function getVotes(address account) external view returns (uint256);
 
     function getPastVotes(address account, uint256 timestamp) external view returns (uint256 votes);
-
-    struct LockedBalance {
-        uint112 amount;
-        uint32 unlockTime;
-    }
 
     function lockedBalances(address _user) external view returns (
         uint256 total,
@@ -175,6 +181,7 @@ interface ITokenMinter is IERC20 {
     function burn(address,uint256) external;
     function setOperator(address) external;
     function updateOperator(address) external;
+    function getFactAmounMint(uint256 _amount) external view returns(uint256 amount);
 }
 
 interface IStaker{
@@ -357,6 +364,10 @@ interface IBooster {
     function forceShutdownPool(uint256 _pid) external returns (bool);
     function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
     function voteExecute(address _voting, uint256 _value, bytes calldata _data) external returns (bytes memory);
+    function mintRatio() external view returns (uint256);
+    function customMintRatio(uint256 _pid) external view returns (uint256);
+    function crvLockRewards() external view returns (address);
+    function cvxLocker() external view returns (address);
 }
 
 interface IBoosterEarmark {
