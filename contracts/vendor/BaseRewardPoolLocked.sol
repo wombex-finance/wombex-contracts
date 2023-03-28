@@ -24,6 +24,7 @@ contract BaseRewardPoolLocked is BaseRewardPool4626 {
         address lockManager_,
         uint256 unlockAt_
     ) public BaseRewardPool4626(pid_, stakingToken_, rewardToken_, operator_, lptoken_) {
+        require(lockManager_ != address(0), "!zero");
         lockManager = lockManager_;
         unlockAt = unlockAt_;
     }
