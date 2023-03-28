@@ -57,6 +57,6 @@ contract BaseRewardPoolLocked is BaseRewardPool4626 {
     }
 
     function _checkLockedBalance(address _account) internal {
-        require(block.timestamp > unlockAt || _balances[msg.sender] >= lockedBalance[msg.sender], "locked");
+        require(block.timestamp > unlockAt || _balances[_account] >= lockedBalance[_account], "locked");
     }
 }
