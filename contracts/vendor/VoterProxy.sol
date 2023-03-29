@@ -64,9 +64,6 @@ contract VoterProxy {
         weth = _weth;
         owner = msg.sender;
 
-        protectedTokens[_wom] = true;
-        protectedTokens[_veWom] = true;
-
         IERC20(_wom).safeApprove(_veWom, type(uint256).max);
     }
 
@@ -176,9 +173,6 @@ contract VoterProxy {
         require(msg.sender == operator, "!auth");
         if (!protectedTokens[_lptoken]){
             protectedTokens[_lptoken] = true;
-        }
-        if (!protectedTokens[_gauge]){
-            protectedTokens[_gauge] = true;
         }
         uint256 balance = IERC20(_lptoken).balanceOf(address(this));
         if (balance > 0) {

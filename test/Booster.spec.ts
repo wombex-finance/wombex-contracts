@@ -46,7 +46,7 @@ type Pool = {
     shutdown: boolean;
 };
 
-describe("Booster", () => {
+describe.only("Booster", () => {
     let accounts: Signer[];
     let booster: Booster, boosterEarmark: BoosterEarmark;
     let crv, cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, underlying;
@@ -801,13 +801,15 @@ describe("Booster", () => {
 
             expect(await mockVoting.votesFor('1'), 'votesFor zero').eq(1);
 
-            expect(await contracts.voterProxy.protectedTokens(mocks.masterWombat.address), 'masterWombat protected').eq(true);
-            expect(await contracts.voterProxy.protectedTokens(veWom.address), 'veWom protected').eq(true);
+            expect(await contracts.voterProxy.protectedTokens(mocks.masterWombat.address), 'masterWombat not protected').eq(false);
+            expect(await contracts.voterProxy.protectedTokens(veWom.address), 'veWom not protected').eq(false);
 
             await booster.connect(daoSigner).setVotingValid(veWom.address, true).then(tx => tx.wait(1));
             await booster.connect(daoSigner).setVotingValid(mocks.masterWombat.address, true).then(tx => tx.wait(1));
-            await expect(booster.connect(voteDelegate).voteExecute(veWom.address, 0, voteData)).to.be.revertedWith("protected");
-            await expect(booster.connect(voteDelegate).voteExecute(mocks.masterWombat.address, 0, voteData)).to.be.revertedWith("protected");
+
+            const poolInfo = await booster.poolInfo('0');
+            await booster.connect(daoSigner).setVotingValid(poolInfo.lptoken, true).then(tx => tx.wait(1));
+            await expect(booster.connect(voteDelegate).voteExecute(poolInfo.lptoken, 0, voteData)).to.be.revertedWith("protected");
 
             await expect(contracts.voterProxy.connect(voteDelegate).execute(mockVoting.address, 0, voteData)).to.be.revertedWith("!auth");
         });
