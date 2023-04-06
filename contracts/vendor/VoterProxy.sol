@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable-0.6/proxy/Initializable.sol";
 
 /**
  * @title   VoterProxy
@@ -14,13 +15,13 @@ import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
  *          participates in Wombat governance. Also handles all deposits since this is
  *          the address that has the voting power.
  */
-contract VoterProxy {
+contract VoterProxy is Initializable {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
 
-    address public immutable wom;
-    address public immutable veWom;
+    address public wom;
+    address public veWom;
     address public weth;
 
     address public rewardDeposit;
@@ -30,7 +31,6 @@ contract VoterProxy {
     address public operator;
     address public depositor;
 
-    mapping (address => bool) public protectedTokens;
     mapping (bytes32 => bool) public votes;
     mapping (address => mapping (address => uint256)) public lpTokenToPid;
     mapping (address => mapping (address => bool)) public lpTokenPidSet;
@@ -49,23 +49,23 @@ contract VoterProxy {
     event Withdraw(address asset, uint256 balance);
     event VoteSet(bytes32 hash, bool valid);
 
+    constructor( ) public { }
+
     /**
      * @param _wom              WOM Token address
      * @param _veWom            veWOM address
-     *
+     * @param _weth             WETH address
      */
-    constructor(
+    function initialize(
         address _wom,
         address _veWom,
-        address _weth
-    ) public {
+        address _weth,
+        address _owner
+    ) initializer external {
         wom = _wom;
         veWom = _veWom;
         weth = _weth;
-        owner = msg.sender;
-
-        protectedTokens[_wom] = true;
-        protectedTokens[_veWom] = true;
+        owner = _owner;
 
         IERC20(_wom).safeApprove(_veWom, type(uint256).max);
     }
@@ -174,12 +174,6 @@ contract VoterProxy {
     function deposit(address _lptoken, address _gauge) external returns(bool){
         require(lpTokenPidSet[_gauge][_lptoken], "!lp_token_set");
         require(msg.sender == operator, "!auth");
-        if (!protectedTokens[_lptoken]){
-            protectedTokens[_lptoken] = true;
-        }
-        if (!protectedTokens[_gauge]){
-            protectedTokens[_gauge] = true;
-        }
         uint256 balance = IERC20(_lptoken).balanceOf(address(this));
         if (balance > 0) {
             IERC20(_lptoken).safeApprove(_gauge, 0);
@@ -230,7 +224,6 @@ contract VoterProxy {
      */
     function withdraw(IERC20 _asset) external returns (uint256 balance) {
         require(msg.sender == withdrawer, "!auth");
-        require(protectedTokens[address(_asset)] == false, "protected");
 
         balance = _asset.balanceOf(address(this));
         _asset.safeApprove(rewardDeposit, 0);
@@ -324,7 +317,6 @@ contract VoterProxy {
         bytes calldata _data
     ) external payable returns (bool, bytes memory) {
         require(msg.sender == operator, "!auth");
-        require(!protectedTokens[_to], "protected");
 
         (bool success, bytes memory result) = _to.call{value:_value}(_data);
         require(success, "!success");

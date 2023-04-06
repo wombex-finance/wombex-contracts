@@ -465,7 +465,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
 
     // const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
 
-    const newBoosterArgs = [bnbConfig.voterProxy, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 1500, 15000];
+    const newBoosterArgs = [bnbConfig.voterProxy, ZERO_ADDRESS, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 1500, 15000];
     fs.writeFileSync('./args/booster.js', 'module.exports = ' + JSON.stringify(newBoosterArgs));
 
     const newBooster = await deployContract<Booster>(
@@ -610,9 +610,14 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
         gasPrice: ethers.BigNumber.from(5000000000),
     })) as any;
 
-    // const bnbtConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
-
     const args = [
+        '0x10ED43C718714eb63d5aA57B78B54704E256024E',
+        '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
+        '0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1',
+        '0xa75d9ca2a0a1D547409D82e1B06618EC284A2CeD',
+        '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
+        '0x0415023846Ff1C6016c4d9621de12b24B2402979',
+        '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'
     ];
     fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
 

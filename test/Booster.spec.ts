@@ -35,7 +35,7 @@ import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
 import {simpleToExactAmount} from "../test-utils/math";
 import {DEAD_ADDRESS, impersonateAccount, ZERO_ADDRESS} from "../test-utils";
-import {deployContract, waitForTx} from "../tasks/utils";
+import {deployContract} from "../tasks/utils";
 import {BigNumber as BN} from "@ethersproject/bignumber/lib/bignumber";
 
 type Pool = {
@@ -297,11 +297,15 @@ describe("Booster", () => {
 
             await boosterEarmark.earmarkRewards(0).then(tx => tx.wait());
 
-            await expect(booster.setMintRatio(8000)).to.be.revertedWith("!auth");
-            await expect(booster.connect(daoSigner).setMintRatio(4999)).to.be.revertedWith("!boundaries");
-            await expect(booster.connect(daoSigner).setMintRatio(15001)).to.be.revertedWith("!boundaries");
+            await expect(booster.setMintParams(8000, aliceAddress)).to.be.revertedWith("!auth");
+            await expect(booster.connect(daoSigner).setMintParams(4999, aliceAddress)).to.be.revertedWith("!boundaries");
+            await expect(booster.connect(daoSigner).setMintParams(15001, aliceAddress)).to.be.revertedWith("!boundaries");
             const mintRatio = 8000;
-            await booster.connect(daoSigner).setMintRatio(mintRatio).then(tx => tx.wait());
+            expect(await booster.reservoirMinter()).eq(ZERO_ADDRESS);
+            await booster.connect(daoSigner).setMintParams(mintRatio, aliceAddress).then(tx => tx.wait());
+            expect(await booster.reservoirMinter()).eq(aliceAddress);
+            await booster.connect(daoSigner).setMintParams(mintRatio, ZERO_ADDRESS).then(tx => tx.wait());
+            expect(await booster.reservoirMinter()).eq(ZERO_ADDRESS);
 
             const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
 
@@ -346,7 +350,7 @@ describe("Booster", () => {
             await crvRewards.claimableRewards(bobAddress);
 
             await boosterEarmark.earmarkRewards(0).then(tx => tx.wait());
-            await booster.connect(daoSigner).setMintRatio(0).then(tx => tx.wait());
+            await booster.connect(daoSigner).setMintParams(0, ZERO_ADDRESS).then(tx => tx.wait());
 
             const penaltyShare = 100;
             await expect(booster.setRewardClaimedPenalty(penaltyShare)).to.be.revertedWith("!auth");
@@ -556,7 +560,7 @@ describe("Booster", () => {
 
             const mintRatio = 8000;
             const customMintRatio = 9000;
-            await booster.connect(daoSigner).setMintRatio(mintRatio).then(tx => tx.wait());
+            await booster.connect(daoSigner).setMintParams(mintRatio, ZERO_ADDRESS).then(tx => tx.wait());
             await booster.connect(daoSigner).setCustomMintRatioMultiple([0], [customMintRatio]).then(tx => tx.wait());
 
             cvxBalanceBefore = await cvx.balanceOf(bobAddress);
@@ -592,6 +596,24 @@ describe("Booster", () => {
             ).eq(
                 lockerBalanceBefore.add(factMint.mul(customMintRatio).div(10000))
             );
+        });
+    });
+
+    describe("managing pool ratio data", async () => {
+        it("booster owner should have rights to call setRewardParams", async () => {
+            const poolInfo = await booster.poolInfo(0);
+            const crvRewards = BaseRewardPool__factory.connect(poolInfo.crvRewards, bob);
+
+            await expect(crvRewards.setRewardParams(1, 2)).to.be.revertedWith("!authorized");
+
+            await crvRewards.connect(daoSigner).setRewardParams(1, 2);
+            expect(await crvRewards.duration()).eq(1);
+            expect(await crvRewards.newRewardRatio()).eq(2);
+
+            await crvRewards.connect(daoSigner).setRewardParams(604800, 830);
+
+            expect(await crvRewards.duration()).eq(604800);
+            expect(await crvRewards.newRewardRatio()).eq(830);
         });
     });
 
@@ -801,14 +823,11 @@ describe("Booster", () => {
 
             expect(await mockVoting.votesFor('1'), 'votesFor zero').eq(1);
 
-            expect(await contracts.voterProxy.protectedTokens(mocks.masterWombat.address), 'masterWombat protected').eq(true);
-            expect(await contracts.voterProxy.protectedTokens(veWom.address), 'veWom protected').eq(true);
-
             await booster.connect(daoSigner).setVotingValid(veWom.address, true).then(tx => tx.wait(1));
             await booster.connect(daoSigner).setVotingValid(mocks.masterWombat.address, true).then(tx => tx.wait(1));
-            await expect(booster.connect(voteDelegate).voteExecute(veWom.address, 0, voteData)).to.be.revertedWith("protected");
-            await expect(booster.connect(voteDelegate).voteExecute(mocks.masterWombat.address, 0, voteData)).to.be.revertedWith("protected");
 
+            const poolInfo = await booster.poolInfo('0');
+            await booster.connect(daoSigner).setVotingValid(poolInfo.lptoken, true).then(tx => tx.wait(1));
             await expect(contracts.voterProxy.connect(voteDelegate).execute(mockVoting.address, 0, voteData)).to.be.revertedWith("!auth");
         });
     });
@@ -1036,7 +1055,7 @@ describe("Booster", () => {
                 hre,
                 new Booster__factory(deployer),
                 "Booster",
-                [contracts.voterProxy.address, contracts.cvx.address, mocks.crv.address, mocks.weth.address, 2000, 15000],
+                [contracts.voterProxy.address, ZERO_ADDRESS, contracts.cvx.address, mocks.crv.address, mocks.weth.address, 2000, 15000],
                 {},
                 true,
             );

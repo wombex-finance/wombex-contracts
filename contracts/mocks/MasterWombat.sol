@@ -771,6 +771,10 @@ contract MasterWombatV2 {
         }
     }
 
+    function notifyRewardAmount(address _lpToken, uint256 _amount) external {
+
+    }
+
     /// @notice Helper function to migrate fund from multiple pools to the new MasterWombat.
     /// @notice user must initiate transaction from masterchef
     /// @dev Assume the orginal MasterWombat has stopped emisions

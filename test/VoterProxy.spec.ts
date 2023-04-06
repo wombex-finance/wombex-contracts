@@ -15,7 +15,7 @@ import {
     MockERC20__factory,
     ExtraRewardsDistributor,
     WmxLocker,
-    Wmx,
+    Wmx, ProxyAdmin__factory, VoterProxyV2Mock, VoterProxyV2Mock__factory,
 } from "../types/generated";
 import { Signer } from "ethers";
 import { hashMessage } from "@ethersproject/hash";
@@ -55,6 +55,8 @@ describe("VoterProxy", () => {
 
     let deployer: Signer;
     let deployerAddress: string;
+    let alice: Signer;
+    let aliceAddress: string;
     let daoMultisig: Signer;
 
     before(async () => {
@@ -63,6 +65,9 @@ describe("VoterProxy", () => {
 
         deployer = accounts[0];
         deployerAddress = await deployer.getAddress();
+
+        alice = accounts[1];
+        aliceAddress = await alice.getAddress();
 
         mocks = await deployTestFirstStage(hre, deployer);
         const multisigs = await getMockMultisigs(accounts[1], accounts[2], accounts[3]);
@@ -83,6 +88,31 @@ describe("VoterProxy", () => {
         await contracts.cvx
             .connect(operatorAccount.signer)
             .transfer(await deployer.getAddress(), simpleToExactAmount(1000));
+    });
+
+    describe("update voterProxy with proxy", async () => {
+        it("set new implementation", async () => {
+            const proxyAdmin = ProxyAdmin__factory.connect(await mocks.proxyFactory.proxyAdmin(), deployer);
+            expect(await proxyAdmin.owner()).to.equal(deployerAddress);
+
+            const newImplementation = await deployContract<VoterProxyV2Mock>(
+                hre,
+                new VoterProxyV2Mock__factory(deployer),
+                "VoterProxyV2Mock",
+                [],
+                {},
+                false,
+            );
+            expect(await proxyAdmin.getProxyImplementation(voterProxy.address)).to.not.equal(newImplementation.address);
+
+            await expect(proxyAdmin.connect(alice).upgrade(voterProxy.address, newImplementation.address)).to.revertedWith("Ownable: caller is not the owner");
+
+            await proxyAdmin.connect(deployer).upgrade(voterProxy.address, newImplementation.address).then(tx => tx.wait());
+            expect(await proxyAdmin.getProxyImplementation(voterProxy.address)).to.equal(newImplementation.address);
+
+            const voterProxyV2 = VoterProxyV2Mock__factory.connect(voterProxy.address, deployer);
+            expect(await voterProxyV2.v2Method()).to.equal("test");
+        });
     });
 
     describe("validates vote hash from Snapshot Hub", async () => {
@@ -172,12 +202,12 @@ describe("VoterProxy", () => {
     });
 
     describe("when withdrawing tokens", () => {
-        it("can not withdraw protected tokens", async () => {
-            let tx = voterProxy.connect(daoMultisig)["withdraw(address)"](mocks.crv.address);
-            await expect(tx).to.revertedWith("protected");
-        });
+        it("can withdraw tokens", async () => {
+            const poolInfo = await booster.poolInfo('0');
+            await voterProxy.connect(daoMultisig).setOperator(await daoMultisig.getAddress());
+            await voterProxy.connect(daoMultisig).deposit(poolInfo.lptoken, poolInfo.gauge);
+            await voterProxy.connect(daoMultisig).setOperator(booster.address);
 
-        it("can withdraw unprotected tokens", async () => {
             const deployerAddress = await deployer.getAddress();
             const randomToken = await deployContract<MockERC20>(
                 hre,

@@ -35,6 +35,7 @@ contract Booster{
     address public earmarkDelegate;
     address public crvLockRewards;
     address public cvxLocker;
+    address public reservoirMinter;
 
     mapping(address => bool) public voteDelegate;
 
@@ -85,7 +86,7 @@ contract Booster{
     event EarmarkDelegateUpdated(address newEarmarkDelegate);
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
-    event MintRatioUpdated(uint256 mintRatio);
+    event MintParamsUpdated(uint256 mintRatio, address reservoirMinter);
     event SetPaused(bool paused);
     event CustomMintRatioUpdated(uint256 indexed pid, uint256 mintRatio);
     event SetEarmarkOnDeposit(bool earmarkOnDeposit);
@@ -100,6 +101,7 @@ contract Booster{
      * @dev Constructor doing what constructors do. It is noteworthy that
      *      a lot of basic config is set to 0 - expecting subsequent calls to setFeeInfo etc.
      * @param _voterProxy             VoterProxy (locks the crv and adds to all gauges)
+     * @param _reservoirMinter        Reservoir
      * @param _cvx                    CVX/WMX token
      * @param _crv                    CRV/WOM
      * @param _weth                   WETH
@@ -108,6 +110,7 @@ contract Booster{
      */
     constructor(
         address _voterProxy,
+        address _reservoirMinter,
         address _cvx,
         address _crv,
         address _weth,
@@ -115,6 +118,7 @@ contract Booster{
         uint256 _maxMintRatio
     ) public {
         voterProxy = _voterProxy;
+        reservoirMinter = _reservoirMinter;
         cvx = _cvx;
         crv = _crv;
         weth = _weth;
@@ -283,14 +287,15 @@ contract Booster{
     /**
      * @notice Change mint ratio in boundaries
      */
-    function setMintRatio(uint256 _mintRatio) external {
+    function setMintParams(uint256 _mintRatio, address _reservoirMinter) external {
         require(msg.sender == owner, "!auth");
         if (_mintRatio != 0) {
             require(_mintRatio >= minMintRatio && _mintRatio <= maxMintRatio, "!boundaries");
         }
 
         mintRatio = _mintRatio;
-        emit MintRatioUpdated(_mintRatio);
+        reservoirMinter = _reservoirMinter;
+        emit MintParamsUpdated(_mintRatio, _reservoirMinter);
     }
 
     /**
@@ -704,19 +709,20 @@ contract Booster{
             mintAmount = mintAmount.mul(poolMintRatio).div(DENOMINATOR);
         }
 
+        ITokenMinter tokenMinter = reservoirMinter == address(0) ? ITokenMinter(cvx) : ITokenMinter(reservoirMinter);
         uint256 penalty;
         if (_lock) {
             uint256 balanceBefore = IERC20(cvx).balanceOf(address(this));
-            ITokenMinter(cvx).mint(address(this), mintAmount);
+            tokenMinter.mint(address(this), mintAmount);
             ICvxLocker(cvxLocker).lock(_address, IERC20(cvx).balanceOf(address(this)).sub(balanceBefore));
         } else {
             penalty = mintAmount.mul(penaltyShare).div(DENOMINATOR);
             mintAmount = mintAmount.sub(penalty);
             //mint reward to user, except the penalty
-            ITokenMinter(cvx).mint(_address, mintAmount);
+            tokenMinter.mint(_address, mintAmount);
             if (penalty > 0) {
                 uint256 balanceBefore = IERC20(cvx).balanceOf(address(this));
-                ITokenMinter(cvx).mint(address(this), penalty);
+                tokenMinter.mint(address(this), penalty);
                 extraRewardsDist.addReward(cvx, IERC20(cvx).balanceOf(address(this)).sub(balanceBefore));
             }
         }

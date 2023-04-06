@@ -1,7 +1,6 @@
 import { expect } from "chai";
 import { ContractTransaction, Signer } from "ethers";
 import hre, { ethers } from "hardhat";
-import {Account, BoosterEarmark, WomStakingProxy} from "types";
 import {
     deployTestFirstStage,
     getMockDistro,
@@ -33,6 +32,10 @@ import {
     MockWmxLocker__factory,
     MockERC20,
     MockERC20__factory,
+    BoosterEarmark,
+    ProxyAdmin__factory,
+    WmxLockerV2Mock, WmxLockerV2Mock__factory,
+    WomStakingProxy
 } from "../types/generated";
 interface UserLock {
     amount: BN;
@@ -89,10 +92,11 @@ describe("WmxLocker", () => {
     let wmx: Wmx;
     let wmxWom: CvxCrvToken;
     let crvDepositor: WomDepositor;
-    let mocks;
+    let mocks, contracts, multisigs;
 
     let deployer: Signer;
 
+    let daoMultisig: Signer;
     let alice: Signer;
     let aliceInitialBalance: BN;
     let aliceAddress: string;
@@ -222,15 +226,17 @@ describe("WmxLocker", () => {
 
     const setup = async (addMultiRewarder = true) => {
         mocks = await deployTestFirstStage(hre, deployer, addMultiRewarder);
-        const multisigs = await getMockMultisigs(accounts[5], accounts[6], accounts[7]);
+        multisigs = await getMockMultisigs(accounts[5], accounts[6], accounts[7]);
         const distro = getMockDistro();
 
-        const contracts = await deploy(hre, deployer, accounts[7], mocks, distro, multisigs, mocks.namingConfig, mocks);
+        contracts = await deploy(hre, deployer, accounts[7], mocks, distro, multisigs, mocks.namingConfig, mocks);
 
         alice = accounts[1];
         aliceAddress = await alice.getAddress();
         bob = accounts[2];
         bobAddress = await bob.getAddress();
+
+        daoMultisig = accounts[7];
 
         booster = contracts.booster;
         boosterEarmark = contracts.boosterEarmark;
@@ -268,6 +274,31 @@ describe("WmxLocker", () => {
         deployer = accounts[0];
 
         await setup();
+    });
+
+    describe("update voterProxy with proxy", async () => {
+        it("set new implementation", async () => {
+            const proxyAdmin = ProxyAdmin__factory.connect(await contracts.proxyFactory.proxyAdmin(), deployer);
+            expect(await proxyAdmin.owner()).to.equal(multisigs.daoMultisig);
+
+            const newImplementation = await deployContract<WmxLockerV2Mock>(
+                hre,
+                new WmxLockerV2Mock__factory(deployer),
+                "WmxLockerV2Mock",
+                [],
+                {},
+                false,
+            );
+            expect(await proxyAdmin.getProxyImplementation(contracts.cvxLocker.address)).to.not.equal(newImplementation.address);
+
+            await expect(proxyAdmin.connect(alice).upgrade(contracts.cvxLocker.address, newImplementation.address)).to.revertedWith("Ownable: caller is not the owner");
+
+            await proxyAdmin.connect(daoMultisig).upgrade(contracts.cvxLocker.address, newImplementation.address).then(tx => tx.wait());
+            expect(await proxyAdmin.getProxyImplementation(contracts.cvxLocker.address)).to.equal(newImplementation.address);
+
+            const wmxLockerV2 = WmxLockerV2Mock__factory.connect(contracts.cvxLocker.address, deployer);
+            expect(await wmxLockerV2.v2Method()).to.equal("test 2");
+        });
     });
 
     it("checks all initial config", async () => {
@@ -923,7 +954,7 @@ describe("WmxLocker", () => {
             await cvxCrvConnected.approve(cvxStakingProxyAccount.address, simpleToExactAmount(amount));
         }
         // let dataBefore: SnapshotData;
-        let cvxStakingProxyAccount: Account;
+        let cvxStakingProxyAccount;
         // t = 0.5, Lock, delegate to self, wait 15 weeks (1.5 weeks before lockup)
         beforeEach(async () => {
             await setup(false);
