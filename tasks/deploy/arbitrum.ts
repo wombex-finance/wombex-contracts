@@ -289,7 +289,7 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     console.log('getUserBalancesDefault', await lens.callStatic.getUserBalancesDefault('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843'));
 });
 
-task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+task("gauge-voting:arbitrum").setAction(async function (taskArguments: TaskArguments, hre) {
     const bnbConfig = JSON.parse(fs.readFileSync('./arbitrum.json', {encoding: 'utf8'}));
     const deployer = await getSigner(hre);
 
