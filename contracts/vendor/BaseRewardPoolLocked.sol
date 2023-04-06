@@ -9,6 +9,7 @@ import "./BaseRewardPool4626.sol";
 contract BaseRewardPoolLocked is BaseRewardPool4626 {
     uint256 public unlockAt;
     address public lockManager;
+    bool public setLockFinished;
 
     mapping(address => uint256) public lockedBalance;
 
@@ -24,11 +25,13 @@ contract BaseRewardPoolLocked is BaseRewardPool4626 {
         address lockManager_,
         uint256 unlockAt_
     ) public BaseRewardPool4626(pid_, stakingToken_, rewardToken_, operator_, lptoken_) {
+        require(lockManager_ != address(0), "!zero");
         lockManager = lockManager_;
         unlockAt = unlockAt_;
     }
 
     function setLock(address[] calldata _accounts, uint256[] calldata _amounts, bool _finish) external {
+        require(!setLockFinished, "finished");
         require(msg.sender == lockManager, "!authorized");
         uint256 len = _accounts.length;
         require(len == _amounts.length, "!len");
@@ -40,7 +43,7 @@ contract BaseRewardPoolLocked is BaseRewardPool4626 {
 
         if (_finish) {
             emit SetLockFinished(lockManager);
-            lockManager = address(0);
+            setLockFinished = true;
         }
     }
 
@@ -51,12 +54,13 @@ contract BaseRewardPoolLocked is BaseRewardPool4626 {
     }
 
     function _withdrawAndUnwrapTo(uint256 amount, address from, address receiver) internal override returns (bool result) {
+        require(from != address(0), "!zero");
         result = super._withdrawAndUnwrapTo(amount, from, receiver);
         _checkLockedBalance(from);
         return result;
     }
 
     function _checkLockedBalance(address _account) internal {
-        require(block.timestamp > unlockAt || _balances[msg.sender] >= lockedBalance[msg.sender], "locked");
+        require(block.timestamp > unlockAt || _balances[_account] >= lockedBalance[_account], "locked");
     }
 }
