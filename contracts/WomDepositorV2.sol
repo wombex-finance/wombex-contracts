@@ -17,7 +17,11 @@ contract WomDepositorV2 is WomDepositor {
         address _booster,
         address _oldDepositor
     ) public WomDepositor(_wom, _staker, _minter, _booster) {
-        oldDepositor = WomDepositor(_oldDepositor);
+        if (_oldDepositor == address(0)) {
+            migrated = true;
+        } else {
+            oldDepositor = WomDepositor(_oldDepositor);
+        }
     }
 
     function _smartLock(uint256 _amount) internal override {

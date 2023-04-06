@@ -89,6 +89,7 @@ contract BaseRewardPool {
     mapping(address => mapping(address => uint256)) public rewards;
 
     event UpdateOperatorData(address indexed sender, address indexed operator, uint256 indexed pid);
+    event UpdateRatioData(address indexed sender, uint256 duration, uint256 newRewardRatio);
     event SetRewardTokenPaused(address indexed sender, address indexed token, bool indexed paused);
     event RewardAdded(address indexed token, uint256 currentRewards, uint256 newRewards);
     event Staked(address indexed user, uint256 amount);
@@ -123,6 +124,14 @@ contract BaseRewardPool {
         _onOperatorUpdate();
 
         emit UpdateOperatorData(msg.sender, operator_, pid_);
+    }
+
+    function setRewardParams(uint256 duration_, uint256 newRewardRatio_) external {
+        require(msg.sender == IBooster(operator).owner(), "!authorized");
+        duration = duration_;
+        newRewardRatio = newRewardRatio_;
+
+        emit UpdateRatioData(msg.sender, duration_, newRewardRatio_);
     }
 
     function setRewardTokenPaused(address token_, bool paused_) external {

@@ -106,7 +106,7 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
         hre,
         new Booster__factory(deployer),
         "Booster",
-        [bnbConfig.voterProxy, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 2000, 15000],
+        [bnbConfig.voterProxy, ZERO_ADDRESS, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 2000, 15000],
         {},
         true,
     );
@@ -373,7 +373,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         hre,
         new Booster__factory(deployer),
         "Booster",
-        [bnbConfig.voterProxy, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 2000, 15000],
+        [bnbConfig.voterProxy, ZERO_ADDRESS, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 2000, 15000],
         {},
         true,
     );

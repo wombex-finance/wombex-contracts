@@ -29,6 +29,7 @@ yarn-error.log*
 contracts.json
 bnbt.json
 bnb.json
+arbitrum.json
 
 # types
 types/generated/**/*

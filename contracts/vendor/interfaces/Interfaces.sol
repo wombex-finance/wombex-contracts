@@ -16,6 +16,10 @@ interface IMasterWombatRewarder {
     function rewardTokens() external view returns (address[] memory tokens);
 }
 
+interface IBooster {
+    function owner() external view returns(address);
+}
+
 interface IVeWom {
     function mint(uint256 amount, uint256 lockDays) external returns (uint256 veWomAmount);
     function burn(uint256 slot) external;
@@ -87,6 +91,7 @@ interface IRewards{
     function stakingToken() external view returns (address);
     function rewardToken() external view returns(address);
     function earned(address account) external view returns (uint256);
+    function setRatioData(uint256 duration_, uint256 newRewardRatio_) external;
 }
 
 interface ITokenMinter{

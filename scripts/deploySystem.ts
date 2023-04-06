@@ -31,8 +31,6 @@ import {
     WmxVestedEscrow__factory,
     WmxMerkleDrop,
     WmxMerkleDrop__factory,
-    WomDepositor__factory,
-    WomDepositor,
     IMasterWombatRewarder__factory,
     VeWom,
     MasterWombatV2,
@@ -41,12 +39,18 @@ import {
     Pool,
     PoolDepositor,
     PoolDepositor__factory,
-    BoosterEarmark, BoosterEarmark__factory
+    BoosterEarmark,
+    BoosterEarmark__factory,
+    ReservoirMinter,
+    ReservoirMinter__factory,
+    ProxyFactory,
+    ProxyFactory__factory, WomDepositorV3__factory, WomDepositorV3
 } from "../types/generated";
 import { deployContract, waitForTx } from "../tasks/utils";
 import { ZERO_ADDRESS, ONE_WEEK } from "../test-utils/constants";
 import { simpleToExactAmount } from "../test-utils/math";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
+const {approvePoolDepositor} = require('../tasks/helpers');
 
 interface AirdropData {
     merkleRoot: string;
@@ -113,8 +117,8 @@ interface ExtSystemConfig {
 }
 
 interface NamingConfig {
-    cvxName: string;
-    cvxSymbol: string;
+    cvxName?: string;
+    cvxSymbol?: string;
     vlCvxName: string;
     vlCvxSymbol: string;
     cvxCrvName: string;
@@ -183,6 +187,8 @@ interface SystemDeployed extends Phase3Deployed {
     feeCollector: any;
     rewardDepositWrapper: any;
     poolDepositor: PoolDepositor;
+    reservoirMinter?: any;
+    proxyFactory?: any;
 }
 
 /**
@@ -416,7 +422,7 @@ async function deployFirstStage(
         hre,
         new Booster__factory(deployer),
         "Booster",
-        [voterProxy.address, cvx.address, token, deployment.weth.address, 5000, 15000],
+        [voterProxy.address, ZERO_ADDRESS, cvx.address, token, deployment.weth.address, 5000, 15000],
         {},
         debug,
         waitForBlocks,
@@ -467,6 +473,7 @@ async function deployFirstStage(
         debug,
         waitForBlocks,
     );
+    console.log('tokenFactory', tokenFactory.address);
 
     const cvxCrv = await deployContract<CvxCrvToken>(
         hre,
@@ -477,16 +484,18 @@ async function deployFirstStage(
         debug,
         waitForBlocks,
     );
+    console.log('cvxCrv', cvxCrv.address);
 
-    const womDepositor = await deployContract<WomDepositor>(
+    const womDepositor = await deployContract<WomDepositorV3>(
         hre,
-        new WomDepositor__factory(deployer),
-        "WomDepositor",
-        [token, voterProxy.address, cvxCrv.address, booster.address],
+        new WomDepositorV3__factory(deployer),
+        "WomDepositorV3",
+        [token, voterProxy.address, cvxCrv.address, booster.address, ZERO_ADDRESS],
         {},
         debug,
         waitForBlocks,
     );
+    console.log('womDepositor', womDepositor.address);
 
     const cvxCrvRewards = await deployContract<BaseRewardPool>(
         hre,
@@ -497,16 +506,38 @@ async function deployFirstStage(
         debug,
         waitForBlocks,
     );
+    console.log('cvxCrvRewards', cvxCrvRewards.address);
 
-    const wmxLocker = await deployContract<WmxLocker>(
+    const proxyFactory = await deployContract<ProxyFactory>(
         hre,
-        new WmxLocker__factory(deployer),
-        "WmxLocker",
-        [naming.vlCvxName, naming.vlCvxSymbol, cvx.address, cvxCrv.address, cvxCrvRewards.address],
+        new ProxyFactory__factory(deployer),
+        "ProxyFactory",
+        [ZERO_ADDRESS],
         {},
         debug,
         waitForBlocks,
     );
+    await proxyFactory.createProxyAdmin(multisigs.daoMultisig).then(tx => tx.wait());
+    console.log('proxyFactory', proxyFactory.address);
+
+    let wmxLocker = await deployContract<WmxLocker>(
+        hre,
+        new WmxLocker__factory(deployer),
+        "WmxLocker",
+        [],
+        {},
+        debug,
+        waitForBlocks,
+    );
+
+    const res = await proxyFactory.build(
+        wmxLocker.address,
+        wmxLocker.interface.encodeFunctionData('initialize', [naming.vlCvxName, naming.vlCvxSymbol, cvx.address, cvxCrv.address, cvxCrvRewards.address, await deployer.getAddress()])
+    ).then(tx => tx.wait());
+    const {proxy} = res.events.filter(e => e.event === 'BuildProxy')[0].args;
+
+    wmxLocker = WmxLocker__factory.connect(proxy, deployer);
+    console.log('wmxLocker', wmxLocker.address);
 
     const wmxStakingProxy = await deployContract<WomStakingProxy>(
         hre,
@@ -523,6 +554,7 @@ async function deployFirstStage(
         debug,
         waitForBlocks,
     );
+    console.log('wmxStakingProxy', wmxStakingProxy.address);
     const extraRewardsDistributor = await deployContract<ExtraRewardsDistributor>(
         hre,
         new ExtraRewardsDistributor__factory(deployer),
@@ -532,6 +564,7 @@ async function deployFirstStage(
         debug,
         waitForBlocks,
     );
+    console.log('extraRewardsDistributor', extraRewardsDistributor.address);
     const penaltyForwarder = await deployContract<WmxPenaltyForwarder>(
         hre,
         new WmxPenaltyForwarder__factory(deployer),
@@ -541,6 +574,7 @@ async function deployFirstStage(
         debug,
         waitForBlocks,
     );
+    console.log('penaltyForwarder', penaltyForwarder.address);
 
     let tx = await wmxLocker.addReward(cvxCrv.address, wmxStakingProxy.address);
     await waitForTx(tx, debug, waitForBlocks);
@@ -553,7 +587,7 @@ async function deployFirstStage(
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('womDepositor.setLockConfig')
-    tx = await womDepositor.setLockConfig(1461, 24 * 60 * 60);
+    tx = await womDepositor.setLockConfig(1461, 2 * 60 * 60);
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('cvxCrv.setOperator')
@@ -609,6 +643,8 @@ async function deployFirstStage(
         cvxStakingProxy: wmxStakingProxy}
     );
 
+    await proxyFactory.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+
     tx = await boosterEarmark.transferOwnership(multisigs.daoMultisig);
     await waitForTx(tx, debug, waitForBlocks);
 
@@ -618,7 +654,7 @@ async function deployFirstStage(
     tx = await wmxStakingProxy.transferOwnership(multisigs.daoMultisig);
     await waitForTx(tx, debug, waitForBlocks);
 
-    console.log('voterProxy.setDepositor')
+    console.log('voterProxy.setOwner')
     tx = await voterProxy.setOwner(multisigs.daoMultisig);
     await waitForTx(tx, debug, waitForBlocks);
 
@@ -655,6 +691,7 @@ async function deployFirstStage(
         booster,
         boosterEarmark,
         poolDepositor,
+        proxyFactory,
         boosterOwner: null,
         cvxCrvBpt: null,
         cvxStakingProxy: wmxStakingProxy,
@@ -671,7 +708,304 @@ async function deployFirstStage(
         cvxCrv,
         cvxCrvRewards,
         initialCvxCrvStaking: null,
-        crvDepositor: (womDepositor as unknown) as WomDepositor,
+        crvDepositor: womDepositor as any,
+        crvDepositorWrapper: null,
+        poolManager: null,
+        cvxLocker: wmxLocker,
+        vestedEscrows: [],
+        drops: [],
+        feeCollector: null,
+        claimZap,
+        penaltyForwarder,
+        extraRewardsDistributor,
+        poolManagerProxy: null,
+        poolManagerSecondaryProxy: null,
+        rewardDepositWrapper: null,
+        pool8020Bpt: null,
+    };
+}
+
+async function deploySideChain(
+    hre: HardhatRuntimeEnvironment,
+    signer: Signer,
+    deployment: Phase1Deployed,
+    cvx: IERC20,
+    proxyFactory: ProxyFactory,
+    multisigs: MultisigConfig,
+    naming: NamingConfig,
+    config: ExtSystemConfig,
+    debug = false,
+    waitForBlocks = 0,
+): Promise<SystemDeployed> {
+    const deployer = signer;
+    const deployerAddress = await deployer.getAddress();
+
+    const { token } = config;
+    const { voterProxy, masterWombat } = deployment;
+
+    // -----------------------------
+    // 2: cvx, booster, factories, cvxCrv, crvDepositor, poolManager, vlCVX + stakerProxy
+    //        - Schedule: Vesting streams
+    //        - Schedule: 2% emission for cvxCrv staking
+    //        - Create:   cvxCRV/CRV BPT Stableswap
+    //        - Schedule: chef (or other) & cvxCRV/CRV incentives
+    //        - Schedule: Airdrop(s)
+    //        - Schedule: LBP
+    // -----------------------------
+    // POST-2: TreasuryDAO: LBP.updateWeightsGradually
+    //         TreasuryDAO: LBP.setSwapEnabled
+
+    // -----------------------------
+    // 2.1 Core system:
+    //     - cvx
+    //     - booster
+    //     - factories (reward, token, proxy, stash)
+    //     - cvxCrv (cvxCrv, crvDepositor)
+    //     - pool management (poolManager + 2x proxies)
+    //     - vlCVX + ((stkCVX && stakerProxy) || fix)
+    // -----------------------------
+
+    const reservoirMinter = await deployContract<ReservoirMinter>(
+        hre,
+        new ReservoirMinter__factory(deployer),
+        'ReservoirMinter',
+        [cvx.address, '58752703517148923654981765'],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    console.log('reservoirMinter', reservoirMinter.address);
+
+    const booster = await deployContract<Booster>(
+        hre,
+        new Booster__factory(deployer),
+        "Booster",
+        [voterProxy.address, reservoirMinter.address, cvx.address, token, deployment.weth.address, 5000, 15000],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    console.log('booster', booster.address);
+
+    await reservoirMinter.setMinter(booster.address, true).then(tx => tx.wait());
+
+    const boosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        [booster.address, deployment.weth.address],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    console.log('boosterEarmark', boosterEarmark.address);
+
+    await booster.setEarmarkDelegate(boosterEarmark.address);
+
+    const poolDepositor = await deployContract<PoolDepositor>(
+        hre,
+        new PoolDepositor__factory(deployer),
+        "PoolDepositor",
+        [deployment.weth.address, booster.address, masterWombat.address],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    console.log('poolDeposior', poolDepositor.address);
+
+    await approvePoolDepositor(masterWombat, poolDepositor, signer);
+
+    const rewardFactory = await deployContract<RewardFactory>(
+        hre,
+        new RewardFactory__factory(deployer),
+        "RewardFactory",
+        [booster.address, token],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    console.log('rewardFactory', rewardFactory.address, [booster.address, token]);
+
+    const tokenFactory = await deployContract<TokenFactory>(
+        hre,
+        new TokenFactory__factory(deployer),
+        "TokenFactory",
+        [booster.address, naming.tokenFactoryNamePostfix, naming.cvxSymbol.toLowerCase()],
+        {},
+        debug,
+        waitForBlocks,
+    );
+
+    const cvxCrv = await deployContract<CvxCrvToken>(
+        hre,
+        new CvxCrvToken__factory(deployer),
+        "CvxCrv",
+        [naming.cvxCrvName, naming.cvxCrvSymbol],
+        {},
+        debug,
+        waitForBlocks,
+    );
+
+    const womDepositor = await deployContract<WomDepositorV3>(
+        hre,
+        new WomDepositorV3__factory(deployer),
+        "WomDepositorV3",
+        [token, voterProxy.address, cvxCrv.address, booster.address, ZERO_ADDRESS],
+        {},
+        debug,
+        waitForBlocks,
+    );
+
+    const cvxCrvRewards = await deployContract<BaseRewardPool>(
+        hre,
+        new BaseRewardPool__factory(deployer),
+        "BaseRewardPool",
+        [0, cvxCrv.address, token, booster.address],
+        {},
+        debug,
+        waitForBlocks,
+    );
+
+    let wmxLocker = await deployContract<WmxLocker>(
+        hre,
+        new WmxLocker__factory(deployer),
+        "WmxLocker",
+        [],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    const res = await proxyFactory.build(
+        wmxLocker.address,
+        wmxLocker.interface.encodeFunctionData('initialize', [naming.vlCvxName, naming.vlCvxSymbol, cvx.address, cvxCrv.address, cvxCrvRewards.address, await deployer.getAddress()])
+    ).then(tx => tx.wait());
+    const {proxy} = res.events.filter(e => e.event === 'BuildProxy')[0].args;
+
+    wmxLocker = WmxLocker__factory.connect(proxy, deployer);
+
+    const wmxStakingProxy = await deployContract<WomStakingProxy>(
+        hre,
+        new WomStakingProxy__factory(deployer),
+        "WomStakingProxy",
+        [
+            config.token,
+            cvx.address,
+            cvxCrv.address,
+            womDepositor.address,
+            wmxLocker.address,
+        ],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    const extraRewardsDistributor = await deployContract<ExtraRewardsDistributor>(
+        hre,
+        new ExtraRewardsDistributor__factory(deployer),
+        "ExtraRewardsDistributor",
+        [wmxLocker.address],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    const penaltyForwarder = await deployContract<WmxPenaltyForwarder>(
+        hre,
+        new WmxPenaltyForwarder__factory(deployer),
+        "WmxPenaltyForwarder",
+        [extraRewardsDistributor.address, cvx.address, ONE_WEEK.mul(7).div(2), multisigs.daoMultisig],
+        {},
+        debug,
+        waitForBlocks,
+    );
+
+    await booster.setMintParams(6000, reservoirMinter.address).then(tx => tx.wait());
+    await booster.setLockRewardContracts(cvxCrvRewards.address, wmxLocker.address).then(tx => tx.wait());
+    console.log('booster.setFactories')
+    await booster.setFactories(rewardFactory.address, tokenFactory.address).then(tx => tx.wait());
+    console.log('booster.setVoteDelegate')
+    await booster.setVoteDelegate(multisigs.daoMultisig, true).then(tx => tx.wait());
+    console.log('booster.setExtraRewardsDistributor')
+    await booster.setExtraRewardsDistributor(extraRewardsDistributor.address).then(tx => tx.wait());
+    console.log('booster.setFeeManager')
+    await booster.setFeeManager(multisigs.daoMultisig).then(tx => tx.wait());
+    await wmxLocker.addReward(cvxCrv.address, wmxStakingProxy.address).then(tx => tx.wait());
+    await wmxLocker.setApprovals().then(tx => tx.wait());
+    console.log('voterProxy.setOperator')
+    await voterProxy.setOperator(booster.address).then(tx => tx.wait());
+    console.log('voterProxy.setDepositor')
+    await voterProxy.setDepositor(womDepositor.address).then(tx => tx.wait());
+    console.log('womDepositor.setLockConfig')
+    await womDepositor.setLockConfig(1461, 24 * 60 * 60).then(tx => tx.wait());
+    console.log('cvxCrv.setOperator')
+    await cvxCrv.setOperator(womDepositor.address).then(tx => tx.wait());
+    console.log('boosterEarmark.setEarmarkConfig')
+    await boosterEarmark.setEarmarkConfig(10).then(tx => tx.wait());
+    console.log('extraRewardsDistributor.modifyWhitelist')
+    await extraRewardsDistributor.modifyWhitelist(penaltyForwarder.address, true).then(tx => tx.wait());
+    await extraRewardsDistributor.modifyWhitelist(booster.address, true).then(tx => tx.wait());
+    await booster.setPoolManager(deployerAddress).then(tx => tx.wait());
+    await booster.setPoolManager(boosterEarmark.address).then(tx => tx.wait());
+
+    await updateDistributionByTokens(signer, {
+        booster,
+        boosterEarmark,
+        voterProxy,
+        cvxCrvRewards,
+        masterWombat: deployment.masterWombat,
+        cvxLocker: wmxLocker,
+        weth: deployment.weth,
+        crv: deployment.crv,
+        cvxStakingProxy: wmxStakingProxy}
+    );
+
+    await proxyFactory.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    await boosterEarmark.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    await wmxLocker.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    await wmxStakingProxy.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    console.log('voterProxy.setOwner')
+    await voterProxy.setOwner(multisigs.daoMultisig).then(tx => tx.wait());
+    await booster.setOwner(multisigs.daoMultisig).then(tx => tx.wait());
+    await womDepositor.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    await reservoirMinter.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    console.log('booster.transferOwnership')
+    await extraRewardsDistributor.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    await poolDepositor.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+
+    const claimZap = await deployContract<WmxClaimZap>(
+        hre,
+        new WmxClaimZap__factory(deployer),
+        "WmxClaimZap",
+        [token, cvx.address, cvxCrv.address, womDepositor.address, cvxCrvRewards.address, extraRewardsDistributor.address, wmxLocker.address, wmxLocker.address, multisigs.daoMultisig],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    console.log('claimZap', claimZap.address)
+
+    return {
+        ...deployment,
+        cvx,
+        minter: null,
+        booster,
+        reservoirMinter,
+        boosterEarmark,
+        poolDepositor,
+        boosterOwner: null,
+        cvxCrvBpt: null,
+        cvxStakingProxy: wmxStakingProxy,
+        chef: null,
+        lbpBpt: null,
+        balLiquidityProvider: null,
+        factories: {
+            rewardFactory,
+            stashFactory: null,
+            tokenFactory,
+            proxyFactory: null,
+        },
+        arbitratorVault: null,
+        cvxCrv,
+        cvxCrvRewards,
+        initialCvxCrvStaking: null,
+        crvDepositor: womDepositor as any,
         crvDepositorWrapper: null,
         poolManager: null,
         cvxLocker: wmxLocker,
@@ -754,6 +1088,7 @@ export {
     NamingConfig,
     deploy,
     deployFirstStage,
+    deploySideChain,
     updateDistributionByTokens,
     Phase1Deployed,
     Phase2Deployed,
