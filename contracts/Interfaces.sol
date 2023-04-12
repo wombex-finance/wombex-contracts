@@ -456,3 +456,32 @@ interface IMasterWombatV2 {
 
     function poolInfo(uint256 _pid) external view returns (address lpToken, uint96 allocPoint, IMasterWombatRewarder rewarder, uint256 sumOfFactors, uint104 accWomPerShare, uint104 accWomPerFactorShare, uint40 lastRewardTimestamp);
 }
+
+interface IMasterWombatV3 {
+    struct PoolInfoV3 {
+        address lpToken; // Address of LP token contract.
+        ////
+        address rewarder;
+        uint40 periodFinish;
+        ////
+        uint128 sumOfFactors; // 20.18 fixed point. the sum of all boosted factors by all of the users in the pool
+        uint128 rewardRate; // 20.18 fixed point.
+        ////
+        uint104 accWomPerShare; // 19.12 fixed point. Accumulated WOM per share, times 1e12.
+        uint104 accWomPerFactorShare; // 19.12 fixed point. Accumulated WOM per factor share
+        uint40 lastRewardTimestamp;
+    }
+
+    function poolInfoV3(uint256 _index) external view returns (PoolInfoV3 memory);
+
+    // Info of each user.
+    struct UserInfo {
+        // storage slot 1
+        uint128 amount; // 20.18 fixed point. How many LP tokens the user has provided.
+        uint128 factor; // 20.18 fixed point. boosted factor = sqrt (lpAmount * veWom.balanceOf())
+        // storage slot 2
+        uint128 rewardDebt; // 20.18 fixed point. Reward debt. See explanation below.
+        uint128 pendingWom; // 20.18 fixed point. Amount of pending wom
+    }
+    function userInfo(uint256 _pid, address _user) external view returns (UserInfo memory);
+}

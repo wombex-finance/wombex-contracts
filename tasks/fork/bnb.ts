@@ -1,7 +1,7 @@
 import { task } from "hardhat/config";
-import { HardhatRuntimeEnvironment, TaskArguments } from "hardhat/types";
+import { TaskArguments } from "hardhat/types";
 import { getSigner } from "../utils";
-import { deployContract, logContracts, waitForTx } from "./../utils/deploy-utils";
+import { deployContract } from "./../utils/deploy-utils";
 import {
     VoterProxy__factory,
     MasterWombatV2__factory,
@@ -23,11 +23,19 @@ import {
     WomSwapDepositor__factory,
     WmxClaimZap,
     WmxClaimZap__factory,
-    BoosterEarmark__factory, BoosterEarmark, WombexLensUI, WombexLensUI__factory,
+    BoosterEarmark__factory,
+    BoosterEarmark,
+    WombexLensUI,
+    WombexLensUI__factory,
     GaugeVoting,
     GaugeVoting__factory,
     BribesRewardFactory,
-    BribesRewardFactory__factory, GaugeVotingLens__factory, GaugeVotingLens
+    BribesRewardFactory__factory,
+    GaugeVotingLens__factory,
+    GaugeVotingLens,
+    EarmarkRewardsLens__factory,
+    LensPoker,
+    LensPoker__factory
 } from "../../types/generated";
 import {BN, impersonate, simpleToExactAmount, ZERO_ADDRESS, increaseTime} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
@@ -39,6 +47,7 @@ import {expect} from "chai";
 
 const fs = require('fs');
 const ethers = require('ethers');
+const orderBy = require('lodash/orderBy');
 const {approvePoolDepositor, getBoosterValues} = require('../helpers');
 
 const waitForBlocks = undefined;
@@ -577,38 +586,47 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 });
 
 task("test-fork:check-earmark").setAction(async function (taskArguments: TaskArguments, hre) {
-    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
+    const deployer = await getSigner(hre);
+    // const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
     const deployerAddress = await deployer.getAddress();
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
         maxPriorityFeePerGas: null,
-        gasPrice: ethers.BigNumber.from(5000000000),
+        gasPrice: ethers.BigNumber.from(100000000),
     })) as any;
 
     console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
-    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const bnbConfig = JSON.parse(fs.readFileSync(`./${process.env.NETWORK || hre.network.name}.json`, {encoding: 'utf8'}));
 
     const booster = Booster__factory.connect(bnbConfig.booster, deployer);
-    const voterProxy = VoterProxy__factory.connect(bnbConfig.voterProxy, deployer);
-    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
-    const wom = ERC20__factory.connect(bnbConfig.wom, deployer);
+    const boosterEarmark = BoosterEarmark__factory.connect(await booster.earmarkDelegate(), deployer);
+    const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xBc502Eb6c9bAD77929dabeF3155967E0ABfA9209', deployer);
 
-    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
-    let totalPending = BN.from('0');
-    for (let i = 0; i < poolLength; i++) {
-        const pool = await booster.poolInfo(i);
-        const pendingCrvRewards = await booster.lpPendingRewards(pool.lptoken, bnbConfig.wom);
-        console.log(i, "   Pending           ", pendingCrvRewards.toString());
-        totalPending = pendingCrvRewards.add(totalPending);
+    // const lensPoker = await deployContract<LensPoker>(
+    //     hre,
+    //     new LensPoker__factory(deployer),
+    //     "LensPoker",
+    //     [bnbConfig.voterProxy],
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // console.log('lensPoker', lensPoker.address);
+    const lensPoker = LensPoker__factory.connect('0x35957CA3D9e0e870D7B66DfBc643D56e3c203fa4', deployer);
+
+    const pendingPools = await lensPoker.getPokeRequiredPendingPools(false);
+    const pools = orderBy(pendingPools.pools, [p => parseFloat(ethers.utils.formatEther(p.womDiff))], ['desc']);
+    console.log('pools', pools, 'pendingPools.pools', pendingPools.pools.map(p => ({pid: p.pid.toString(), womDiff: parseFloat(ethers.utils.formatEther(p.womDiff))})));
+    // return;
+    for (let i = 0; i < pools.length; i++) {
+        const pool = await booster.poolInfo(pools[i].pid);
+        const lensRewards = await earmarkRewardsLens.getRewards();
+        console.log(pools[i].pid.toString(), 'before pending', await booster.lpPendingRewards(pool.lptoken, bnbConfig.wom).then(r => r.toString()), 'diff', lensRewards.diffBalances[0].toString());
+        await boosterEarmark.earmarkRewards(pools[i].pid).then(tx => tx.wait());
+        console.log(pools[i].pid.toString(), 'after pending', await lensPoker.getPokeRequiredPendingPools(false).then(res => res.pools.map(p => ({pid: p.pid.toString(), womDiff: parseFloat(ethers.utils.formatEther(p.womDiff))}))));
     }
-    const pool5 = await booster.poolInfo(5);
-    const womBoosterBalanceBefore = await wom.balanceOf(booster.address);
-    console.log('womBoosterBalanceBefore', womBoosterBalanceBefore.toString());
-    const voterProxyBalanceBefore = await wom.balanceOf(voterProxy.address);
-    console.log('voterProxyBalanceBefore', voterProxyBalanceBefore.toString());
-    console.log('totalPending           ', totalPending.toString());
-    console.log('totalBalance           ', womBoosterBalanceBefore.add(voterProxyBalanceBefore).toString());
+
 });
 
 task("test-fork:wom-swap-depositor").setAction(async function (taskArguments: TaskArguments, hre) {
