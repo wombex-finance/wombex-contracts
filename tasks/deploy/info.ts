@@ -3,7 +3,7 @@ import { TaskArguments } from "hardhat/types";
 import {
     BaseRewardPool4626__factory,
     BaseRewardPool__factory,
-    Booster__factory, BoosterEarmark__factory,
+    Booster__factory, BoosterEarmark__factory, BribesRewardPool__factory,
     CvxCrvToken__factory,
     DepositToken__factory,
     ExtraRewardsDistributor__factory, GaugeVoting__factory, GaugeVotingLens__factory,
@@ -310,6 +310,16 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         await gaugeVoting.booster(),
         await gaugeVoting.bribeVoter()
     ]);
+    const lpTokensAdded = await gaugeVoting.getLpTokensAdded();
+    if (lpTokensAdded.length) {
+        const bribeRewards = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lpTokensAdded[0]), hre.ethers.provider);
+        await writeArgsAndVerify(hre,'bribeRewards', bribeRewards.address, [
+            await bribeRewards.stakingToken(),
+            await bribeRewards.operator(),
+            await bribeRewards.asset(),
+            await bribeRewards.callOperatorOnGetReward(),
+        ]);
+    }
     await writeArgsAndVerify(hre,'gaugeVotingLens', bnbtConfig.gaugeVotingLens, [
         bnbtConfig.gaugeVoting
     ]);

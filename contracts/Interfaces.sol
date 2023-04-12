@@ -194,6 +194,7 @@ interface IStaker{
     function getGaugeRewardTokens(address _lptoken, address _gauge) external returns (address[] memory tokens);
     function claimCrv(address, uint256) external returns (address[] memory tokens, uint256[] memory balances);
     function balanceOfPool(address, address) external view returns (uint256);
+    function lpTokenToPid(address, address) external view returns (uint256);
     function operator() external view returns (address);
     function depositor() external view returns (address);
     function veWom() external view returns (address);
@@ -347,6 +348,7 @@ interface IBooster {
     function crv() external view returns (address);
     function owner() external view returns (address);
     function voterProxy() external view returns (address);
+    function earmarkDelegate() external view returns (address);
     function poolLength() external view returns (uint256);
     function poolInfo(uint256 _pid) external view returns (PoolInfo memory);
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
@@ -358,7 +360,7 @@ interface IBooster {
     function approveDistribution(address _distro, address[] memory _distributionTokens, uint256 _amount) external;
     function approvePoolsCrvRewardsDistribution(address _token) external;
     function distributeRewards(uint256 _pid, address _lpToken, address _rewardToken, address[] memory _transferTo, uint256[] memory _transferAmount, bool[] memory _callQueue) external;
-    function lpPendingRewards(address _lptoken, address _token) external returns (uint256);
+    function lpPendingRewards(address _lptoken, address _token) external view returns (uint256);
     function earmarkRewards(uint256 _pid) external;
     function shutdownPool(uint256 _pid) external returns (bool);
     function forceShutdownPool(uint256 _pid) external returns (bool);
@@ -451,4 +453,6 @@ interface IMasterWombatV2 {
     ) external;
 
     function updateFactor(address _user, uint256 _newVeWomBalance) external;
+
+    function poolInfo(uint256 _pid) external view returns (address lpToken, uint96 allocPoint, IMasterWombatRewarder rewarder, uint256 sumOfFactors, uint104 accWomPerShare, uint104 accWomPerFactorShare, uint40 lastRewardTimestamp);
 }

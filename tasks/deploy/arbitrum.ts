@@ -3,7 +3,11 @@ import {TaskArguments} from "hardhat/types";
 import {deployContract, getSigner} from "../utils";
 import {
     BaseRewardPool__factory,
-    BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory, BribesTokenFactory__factory,
+    BribesRewardFactory,
+    BribesRewardFactory__factory,
+    BribesTokenFactory,
+    BribesTokenFactory__factory,
+    EarmarkRewardsLens, EarmarkRewardsLens__factory,
     GaugeVoting,
     GaugeVoting__factory,
     GaugeVotingLens,
@@ -362,4 +366,30 @@ task("gauge-voting:arbitrum").setAction(async function (taskArguments: TaskArgum
 
     await gaugeVoting.setFactories(bribesTokenFactory.address, bribesRewardFactory.address, ZERO_ADDRESS).then(tx => tx.wait());
     await gaugeVoting.transferOwnership(treasuryMultisig).then(tx => tx.wait());
+});
+
+task("earmark-rewards-lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(100000000),
+    })) as any;
+
+    const earmarkRewardsLensArgs = ['0x24D2f6be2bF9cdf3627f720cf09D4551580C1eC1'];
+    fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
+    const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
+        hre,
+        new EarmarkRewardsLens__factory(deployer),
+        "EarmarkRewardsLens",
+        earmarkRewardsLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    // const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xb76591973f0649a1978D7Caf3B93f7aa8Da5E162', deployer);
+    console.log('earmarkRewardsLens', earmarkRewardsLens.address);
+    const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
+    tokensSymbols.map((symbol, index) => {
+        console.log(symbol, diffBalances[index]);
+    })
 });

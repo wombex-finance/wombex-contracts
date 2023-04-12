@@ -32,20 +32,29 @@ import {
     PoolDepositor,
     PoolDepositor__factory,
     Asset__factory,
-    WomSwapDepositor, WomSwapDepositor__factory,
-    WomStakingProxy, WomStakingProxy__factory,
-    LpVestedEscrow__factory, LpVestedEscrow,
-    WombexLensUI, WombexLensUI__factory,
+    WomSwapDepositor,
+    WomSwapDepositor__factory,
+    WomStakingProxy,
+    WomStakingProxy__factory,
+    LpVestedEscrow__factory,
+    LpVestedEscrow,
+    WombexLensUI,
+    WombexLensUI__factory,
     BoosterEarmark,
     BoosterEarmark__factory,
     WmxRewardPoolFactory__factory,
     WmxRewardPoolFactory,
-    WmxRewardPoolLens__factory, WmxRewardPoolLens,
+    WmxRewardPoolLens__factory,
+    WmxRewardPoolLens,
     GaugeVoting,
     GaugeVoting__factory,
     GaugeVotingLens__factory,
     GaugeVotingLens,
-    BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory__factory, BribesTokenFactory
+    BribesRewardFactory,
+    BribesRewardFactory__factory,
+    BribesTokenFactory__factory,
+    BribesTokenFactory,
+    EarmarkRewardsLens__factory, EarmarkRewardsLens
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -722,6 +731,32 @@ task("wmx-reward-pool-lens:bnb").setAction(async function (taskArguments: TaskAr
         waitForBlocks,
     );
     console.log('wmxRewardPoolLens', wmxRewardPoolLens.address);
+});
+
+task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const earmarkRewardsLensArgs = ['0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569'];
+    fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
+    const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
+        hre,
+        new EarmarkRewardsLens__factory(deployer),
+        "EarmarkRewardsLens",
+        earmarkRewardsLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    // const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xb76591973f0649a1978D7Caf3B93f7aa8Da5E162', deployer);
+    console.log('earmarkRewardsLens', earmarkRewardsLens.address);
+    const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
+    tokensSymbols.map((symbol, index) => {
+        console.log(symbol, diffBalances[index]);
+    })
 });
 
 task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
