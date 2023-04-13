@@ -593,7 +593,7 @@ task("test-fork:check-earmark").setAction(async function (taskArguments: TaskArg
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
         maxPriorityFeePerGas: null,
-        gasPrice: ethers.BigNumber.from(100000000),
+        gasPrice: ethers.BigNumber.from(5000000000),
     })) as any;
 
     console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
@@ -603,28 +603,29 @@ task("test-fork:check-earmark").setAction(async function (taskArguments: TaskArg
     const boosterEarmark = BoosterEarmark__factory.connect(await booster.earmarkDelegate(), deployer);
     const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xBc502Eb6c9bAD77929dabeF3155967E0ABfA9209', deployer);
 
-    // const lensPoker = await deployContract<LensPoker>(
-    //     hre,
-    //     new LensPoker__factory(deployer),
-    //     "LensPoker",
-    //     [bnbConfig.voterProxy],
-    //     {},
-    //     true,
-    //     waitForBlocks,
-    // );
-    // console.log('lensPoker', lensPoker.address);
-    const lensPoker = LensPoker__factory.connect('0x35957CA3D9e0e870D7B66DfBc643D56e3c203fa4', deployer);
+    const lensPoker = await deployContract<LensPoker>(
+        hre,
+        new LensPoker__factory(deployer),
+        "LensPoker",
+        [bnbConfig.voterProxy],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lensPoker', lensPoker.address);
+    // const lensPoker = LensPoker__factory.connect('0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569', deployer);
 
-    const pendingPools = await lensPoker.getPokeRequiredPendingPools(false);
+    const useBalanceToDiff = true;
+    const pendingPools = await lensPoker.getPokeRequiredPendingPools(false, useBalanceToDiff);
     const pools = orderBy(pendingPools.pools, [p => parseFloat(ethers.utils.formatEther(p.womDiff))], ['desc']);
     console.log('pools', pools, 'pendingPools.pools', pendingPools.pools.map(p => ({pid: p.pid.toString(), womDiff: parseFloat(ethers.utils.formatEther(p.womDiff))})));
-    // return;
+    return;
     for (let i = 0; i < pools.length; i++) {
         const pool = await booster.poolInfo(pools[i].pid);
         const lensRewards = await earmarkRewardsLens.getRewards();
         console.log(pools[i].pid.toString(), 'before pending', await booster.lpPendingRewards(pool.lptoken, bnbConfig.wom).then(r => r.toString()), 'diff', lensRewards.diffBalances[0].toString());
         await boosterEarmark.earmarkRewards(pools[i].pid).then(tx => tx.wait());
-        console.log(pools[i].pid.toString(), 'after pending', await lensPoker.getPokeRequiredPendingPools(false).then(res => res.pools.map(p => ({pid: p.pid.toString(), womDiff: parseFloat(ethers.utils.formatEther(p.womDiff))}))));
+        console.log(pools[i].pid.toString(), 'after pending', await lensPoker.getPokeRequiredPendingPools(false, useBalanceToDiff).then(res => res.pools.map(p => ({pid: p.pid.toString(), womDiff: parseFloat(ethers.utils.formatEther(p.womDiff))}))));
     }
 
 });

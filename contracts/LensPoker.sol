@@ -76,7 +76,7 @@ contract LensPoker {
         return result;
     }
 
-    function getPokeRequiredPendingPools(bool checkPeriodFinished) public view returns(uint256 availableBalance, PokerPool[] memory pools) {
+    function getPokeRequiredPendingPools(bool checkPeriodFinished, bool useBalanceToDiff) public view returns(uint256 availableBalance, PokerPool[] memory pools) {
         uint256[] memory pids = getPokeRequiredPoolIds(checkPeriodFinished);
         uint256 len = pids.length;
 
@@ -84,13 +84,28 @@ contract LensPoker {
 
         availableBalance = IERC20(wom).balanceOf(address(booster)) + IERC20(wom).balanceOf(address(voterProxy));
 
+        uint256 balanceToUse = useBalanceToDiff ? availableBalance : 0;
         for (uint256 i = 0; i < len; i++) {
             IBooster.PoolInfo memory poolInfo = booster.poolInfo(pids[i]);
             uint256 womPending = getWomRewardsByPool(poolInfo);
 
             uint256 womToDistribute = booster.lpPendingRewards(poolInfo.lptoken, wom);
             int256 diff = int256(womPending) - int256(womToDistribute);
+            if (useBalanceToDiff) {
+                if (womToDistribute > 0) {
+                    balanceToUse -= (womToDistribute > balanceToUse ? balanceToUse : womToDistribute);
+                }
+                if (diff < 0) {
+                    uint256 newBalanceToUse = balanceToUse - (uint256(diff * -1) > balanceToUse ? balanceToUse : uint256(diff * -1));
+                    diff += int256(balanceToUse);
+                    balanceToUse = newBalanceToUse;
+                }
+            }
             pools[i] = PokerPool(pids[i], womPending, womToDistribute, diff);
+        }
+
+        if (useBalanceToDiff) {
+            availableBalance = balanceToUse;
         }
     }
 
