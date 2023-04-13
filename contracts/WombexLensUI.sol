@@ -270,6 +270,56 @@ contract WombexLensUI is Ownable {
         pValues.wmxApr = wmxApr;
     }
 
+    function getTvl(IBooster _booster) public returns(uint256 tvlSum) {
+        uint256 mintRatio = _booster.mintRatio();
+        uint256 len = _booster.poolLength();
+
+        for (uint256 i = 0; i < len; i++) {
+            IBooster.PoolInfo memory poolInfo = _booster.poolInfo(i);
+            address pool = IWomAsset(poolInfo.lptoken).pool();
+            tvlSum += ERC20(poolInfo.crvRewards).totalSupply() * getLpUsdOut(pool, 1 ether) / 1 ether;
+        }
+        address voterProxy = _booster.voterProxy();
+        tvlSum += estimateInBUSD(WOM_TOKEN, ERC20(IStaker(voterProxy).veWom()).balanceOf(voterProxy), 18);
+        tvlSum += estimateInBUSD(WMX_TOKEN, ERC20(WMX_TOKEN).balanceOf(_booster.cvxLocker()), 18);
+    }
+
+    function getTotalRevenue(IBooster _booster) public returns(uint256 totalRevenueSum, uint256 totalWomSum) {
+        uint256 mintRatio = _booster.mintRatio();
+        uint256 len = _booster.poolLength();
+
+        for (uint256 i = 0; i < len; i++) {
+            IBooster.PoolInfo memory poolInfo = _booster.poolInfo(i);
+            (uint256 revenueSum, uint256 womSum) = getPoolRewardsInUsd(poolInfo.crvRewards);
+            totalRevenueSum += revenueSum;
+            totalWomSum += womSum;
+        }
+        (uint256 revenueSum, uint256 womSum) = getPoolRewardsInUsd(_booster.crvLockRewards());
+        totalRevenueSum += revenueSum;
+        totalWomSum += womSum;
+    }
+
+    function getPoolRewardsInUsd(address _crvRewards) public returns(uint256 revenueSum, uint256 womSum) {
+        address[] memory rewardTokensList = IBaseRewardPool4626(_crvRewards).rewardTokensList();
+
+        for (uint256 j = 0; j < rewardTokensList.length; j++) {
+            address t = rewardTokensList[j];
+            IBaseRewardPool4626.RewardState memory tRewards = IBaseRewardPool4626(_crvRewards).tokenRewards(t);
+            revenueSum += estimateInBUSD(t, tRewards.historicalRewards + tRewards.queuedRewards, getTokenDecimals(t));
+            if (t == WOM_TOKEN) {
+                womSum += tRewards.historicalRewards + tRewards.queuedRewards;
+            }
+        }
+    }
+
+    function getProtocolStats(IBooster _booster) public returns(uint256 tvl, uint256 totalRevenue, uint256 earnedWomSum, uint256 veWomShare) {
+        tvl = getTvl(_booster);
+        (totalRevenue, earnedWomSum) = getTotalRevenue(_booster);
+        address voterProxy = _booster.voterProxy();
+        ERC20 veWom = ERC20(IStaker(voterProxy).veWom());
+        veWomShare = (veWom.balanceOf(voterProxy) * 1 ether) / veWom.totalSupply();
+    }
+
     function getTokenToWithdrawFromPool(address _womPool) public view returns (address tokenOut) {
         tokenOut = poolToToken[_womPool];
         if (tokenOut == address(0)) {
@@ -305,7 +355,10 @@ contract WombexLensUI is Ownable {
 
     function quotePotentialWithdrawalTokenToBUSD(address _womPool, address _tokenOut, uint256 _lpTokenAmountIn) public returns (uint256) {
         try IWomPool(_womPool).quotePotentialWithdraw(_tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut) {
-            return estimateInBUSD(_tokenOut, tokenAmountOut, getTokenDecimals(_tokenOut));
+            uint8 decimals = getTokenDecimals(_tokenOut);
+            uint256 result = estimateInBUSD(_tokenOut, tokenAmountOut, decimals);
+            result *= 10 ** (18 - decimals);
+            return result;
         } catch {
         }
         return 0;
