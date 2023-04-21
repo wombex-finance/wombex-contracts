@@ -502,6 +502,8 @@ contract WombexLensUI is Ownable {
 
                 // 4. Usd outs
                 if (isUsdStableToken[underlyingToken]) {
+                    uint8 decimals = getTokenDecimals(underlyingToken);
+                    underlyingBalance *= 10 ** (18 - decimals);
                     rewardContractData[i].usdBalance = uint128(underlyingBalance);
                 } else {
                     rewardContractData[i].usdBalance = uint128(getLpUsdOut(womPool, lpTokenBalance));
