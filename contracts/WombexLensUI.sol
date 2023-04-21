@@ -284,7 +284,7 @@ contract WombexLensUI is Ownable {
         tvlSum += estimateInBUSD(WMX_TOKEN, ERC20(WMX_TOKEN).balanceOf(_booster.cvxLocker()), 18);
     }
 
-    function getTotalRevenue(IBooster _booster) public returns(uint256 totalRevenueSum, uint256 totalWomSum) {
+    function getTotalRevenue(IBooster _booster, address[] memory _oldCrvRewards, uint256 _revenueRatio) public returns(uint256 totalRevenueSum, uint256 totalWomSum) {
         uint256 mintRatio = _booster.mintRatio();
         uint256 len = _booster.poolLength();
 
@@ -294,9 +294,17 @@ contract WombexLensUI is Ownable {
             totalRevenueSum += revenueSum;
             totalWomSum += womSum;
         }
+        for (uint256 i = 0; i < _oldCrvRewards.length; i++) {
+            (uint256 revenueSum, uint256 womSum) = getPoolRewardsInUsd(_oldCrvRewards[i]);
+            totalRevenueSum += revenueSum;
+            totalWomSum += womSum;
+        }
         (uint256 revenueSum, uint256 womSum) = getPoolRewardsInUsd(_booster.crvLockRewards());
         totalRevenueSum += revenueSum;
         totalWomSum += womSum;
+
+        totalRevenueSum += totalRevenueSum * _revenueRatio / 1 ether; // due to locker inaccessible rewards
+        totalWomSum += totalWomSum * _revenueRatio / 1 ether; // due to locker inaccessible rewards
     }
 
     function getPoolRewardsInUsd(address _crvRewards) public returns(uint256 revenueSum, uint256 womSum) {
@@ -306,15 +314,15 @@ contract WombexLensUI is Ownable {
             address t = rewardTokensList[j];
             IBaseRewardPool4626.RewardState memory tRewards = IBaseRewardPool4626(_crvRewards).tokenRewards(t);
             revenueSum += estimateInBUSD(t, tRewards.historicalRewards + tRewards.queuedRewards, getTokenDecimals(t));
-            if (t == WOM_TOKEN) {
+            if (t == WOM_TOKEN || t == WMX_WOM_TOKEN) {
                 womSum += tRewards.historicalRewards + tRewards.queuedRewards;
             }
         }
     }
 
-    function getProtocolStats(IBooster _booster) public returns(uint256 tvl, uint256 totalRevenue, uint256 earnedWomSum, uint256 veWomShare) {
+    function getProtocolStats(IBooster _booster, address[] memory _oldCrvRewards, uint256 _revenueRatio) public returns(uint256 tvl, uint256 totalRevenue, uint256 earnedWomSum, uint256 veWomShare) {
         tvl = getTvl(_booster);
-        (totalRevenue, earnedWomSum) = getTotalRevenue(_booster);
+        (totalRevenue, earnedWomSum) = getTotalRevenue(_booster, _oldCrvRewards, _revenueRatio);
         address voterProxy = _booster.voterProxy();
         ERC20 veWom = ERC20(IStaker(voterProxy).veWom());
         veWomShare = (veWom.balanceOf(voterProxy) * 1 ether) / veWom.totalSupply();
