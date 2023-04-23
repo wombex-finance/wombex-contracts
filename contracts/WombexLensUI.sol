@@ -9,6 +9,10 @@ interface IUniswapV2Router01 {
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
 }
 
+interface FraxRouter {
+    function getAmountsOutWithTwamm(uint amountIn, address[] memory path) external returns (uint[] memory amounts);
+}
+
 interface QuoterV2 {
     struct QuoteExactInputSingleParams {
         address tokenIn;
@@ -59,6 +63,7 @@ interface IBaseRewardPool4626 {
         uint256 historicalRewards;
         bool paused;
     }
+    function asset() external view returns (address);
     function rewardTokensList() external view returns (address[] memory);
     function tokenRewards(address _token) external view returns (RewardState memory);
     function claimableRewards(address _account)
@@ -84,7 +89,8 @@ contract WombexLensUI is Ownable {
     mapping(address => address) public poolToToken;
     mapping(address => address) public tokenToRouter;
     mapping(address => bool) public tokenUniV3;
-    mapping(address => bool) public tokenSwapThroughBnb;
+    mapping(address => address) public tokenSwapThroughToken;
+    mapping(address => address) public tokenSwapToTargetStable;
 
     struct PoolValues {
         string symbol;
@@ -93,6 +99,7 @@ contract WombexLensUI is Ownable {
         uint256 lpTokenBalance;
         uint256 tvl;
         uint256 wmxApr;
+        uint256 itemApr;
         uint256 totalApr;
         address rewardPool;
         PoolValuesTokenApr[] tokenAprs;
@@ -171,9 +178,15 @@ contract WombexLensUI is Ownable {
         }
     }
 
-    function setTokenSwapThroughBnb(address[] memory _tokens, bool _throughBnb) external onlyOwner {
+    function setTokenSwapThroughToken(address[] memory _tokens, address _throughToken) external onlyOwner {
         for (uint256 i = 0; i < _tokens.length; i++) {
-            tokenSwapThroughBnb[_tokens[i]] = _throughBnb;
+            tokenSwapThroughToken[_tokens[i]] = _throughToken;
+        }
+    }
+
+    function setTokensTargetStable(address[] memory _tokens, address _targetStable) external onlyOwner {
+        for (uint256 i = 0; i < _tokens.length; i++) {
+            tokenSwapToTargetStable[_tokens[i]] = _targetStable;
         }
     }
 
@@ -225,7 +238,7 @@ contract WombexLensUI is Ownable {
 
             // 2. Calculate APYs
             if (pValues.tvl > 10) {
-                _setApys(crvRewards, wmxUsdPrice, mintRatio, pValues.tvl, pValues);
+                (pValues.tokenAprs, pValues.totalApr, pValues.itemApr, pValues.wmxApr) = getRewardPoolApys(crvRewards, pValues.tvl, wmxUsdPrice, mintRatio);
             }
 
             result[i] = pValues;
@@ -234,12 +247,20 @@ contract WombexLensUI is Ownable {
         return result;
     }
 
-    function _setApys(IBaseRewardPool4626 crvRewards, uint256 wmxUsdPrice, uint256 mintRatio, uint256 poolTvl, PoolValues memory pValues) internal {
+    function getRewardPoolApys(
+        IBaseRewardPool4626 crvRewards,
+        uint256 poolTvl,
+        uint256 wmxUsdPrice,
+        uint256 mintRatio
+    ) public returns(
+        PoolValuesTokenApr[] memory aprs,
+        uint256 aprTotal,
+        uint256 aprItem,
+        uint256 wmxApr
+    ) {
         address[] memory rewardTokens = crvRewards.rewardTokensList();
         uint256 len = rewardTokens.length;
-        PoolValuesTokenApr[] memory aprs = new PoolValuesTokenApr[](len);
-        uint256 aprTotal;
-        uint256 wmxApr;
+        aprs = new PoolValuesTokenApr[](len);
 
         for (uint256 i = 0; i < len; i++) {
             address token = rewardTokens[i];
@@ -258,16 +279,95 @@ contract WombexLensUI is Ownable {
             uint256 usdPrice = estimateInBUSD(token, 1 ether, getTokenDecimals(token));
             uint256 apr = rewardState.rewardRate * 365 days * usdPrice * 100 / poolTvl / 1e16;
             aprTotal += apr;
+            aprItem += rewardState.rewardRate * 365 days * usdPrice / 1e16;
 
             aprs[i].token = token;
             aprs[i].apr = apr;
         }
 
         aprTotal += wmxApr;
+    }
 
-        pValues.tokenAprs = aprs;
-        pValues.totalApr = aprTotal;
-        pValues.wmxApr = wmxApr;
+    function getRewardPoolTotalApr(
+        IBaseRewardPool4626 crvRewards,
+        uint256 poolTvl,
+        uint256 wmxUsdPrice,
+        uint256 mintRatio
+    ) public returns(uint256 aprItem, uint256 aprTotal) {
+        (, aprTotal, aprItem, ) = getRewardPoolApys(crvRewards, poolTvl, wmxUsdPrice, mintRatio);
+    }
+
+    function getRewardPoolTotalApr128(
+        IBaseRewardPool4626 crvRewards,
+        uint256 poolTvl,
+        uint256 wmxUsdPrice,
+        uint256 mintRatio
+    ) public returns(uint128 aprItem128, uint128 aprTotal128) {
+        (uint256 aprItem, uint256 aprTotal) = getRewardPoolTotalApr(crvRewards, poolTvl, wmxUsdPrice, mintRatio);
+        aprTotal128 = uint128(aprTotal);
+        aprItem128 = uint128(aprItem);
+    }
+
+    function getBribeApys(
+        address voterProxy,
+        IBribeVoter bribesVoter,
+        address lpToken,
+        uint256 poolTvl,
+        uint256 allPoolsTvl,
+        uint256 veWomBalance
+    ) public returns(
+        PoolValuesTokenApr[] memory aprs,
+        uint256 aprItem,
+        uint256 aprTotal
+    ) {
+        (, , , , , , address bribe) = bribesVoter.infos(lpToken);
+        if (bribe == address(0)) {
+            return (new PoolValuesTokenApr[](0), 0, 0);
+        }
+        (, uint128 voteWeight) = bribesVoter.weights(lpToken);
+        uint256 userVotes = bribesVoter.getUserVotes(voterProxy, lpToken);
+        if (userVotes == 0) {
+            userVotes = 1 ether;
+        }
+        IERC20[] memory rewardTokens = IBribe(bribe).rewardTokens();
+        aprs = new PoolValuesTokenApr[](rewardTokens.length);
+
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            aprs[i].token = address(rewardTokens[i]);
+
+            (, uint96 tokenPerSec, , ) = IBribe(bribe).rewardInfo(i);
+            uint256 usdPerSec = estimateInBUSD(aprs[i].token, tokenPerSec, getTokenDecimals(aprs[i].token));
+            if (voteWeight / poolTvl > 0) {
+                aprs[i].apr = usdPerSec * 365 days * 10e3 / (voteWeight * allPoolsTvl / veWomBalance);
+                // 365 * 24 * 60 * 60 * rewardInfo.tokenPerSec * tokenUsdcPrice * userVotes / weight / (rewardPoolTotalSupply * wmxPrice) * 100,
+                aprItem += usdPerSec * 365 days * userVotes * 100 / voteWeight;
+            }
+            aprTotal += aprs[i].apr;
+        }
+    }
+
+    function getBribeTotalApr(
+        address voterProxy,
+        IBribeVoter bribesVoter,
+        address lpToken,
+        uint256 poolTvl,
+        uint256 allPoolsTvl,
+        uint256 veWomBalance
+    ) public returns(uint256 aprItem, uint256 aprTotal) {
+        (, aprItem, aprTotal) = getBribeApys(voterProxy, bribesVoter, lpToken, poolTvl, allPoolsTvl, veWomBalance);
+    }
+
+    function getBribeTotalApr128(
+        address voterProxy,
+        IBribeVoter bribesVoter,
+        address lpToken,
+        uint256 poolTvl,
+        uint256 allPoolsTvl,
+        uint256 veWomBalance
+    ) public returns(uint128 aprItem128, uint128 aprTotal128) {
+        (uint256 aprItem, uint256 aprTotal) = getBribeTotalApr(voterProxy, bribesVoter, lpToken, poolTvl, allPoolsTvl, veWomBalance);
+        aprItem128 = uint128(aprItem);
+        aprTotal128 = uint128(aprTotal);
     }
 
     function getTvl(IBooster _booster) public returns(uint256 tvlSum) {
@@ -394,7 +494,6 @@ contract WombexLensUI is Ownable {
         }
 
         address router = UNISWAP_ROUTER;
-        bool throughBnb = tokenSwapThroughBnb[_token];
 
         if (tokenToRouter[_token] != address(0)) {
             router = tokenToRouter[_token];
@@ -404,22 +503,35 @@ contract WombexLensUI is Ownable {
             _token = WOM_TOKEN;
         }
 
+        address targetStable = MAIN_STABLE_TOKEN;
+        uint8 targetStableDecimals = MAIN_STABLE_TOKEN_DECIMALS;
+        if (tokenSwapToTargetStable[_token] != address(0)) {
+            targetStable = tokenSwapToTargetStable[_token];
+            targetStableDecimals = getTokenDecimals(targetStable);
+        }
+
         address[] memory path;
-        if (throughBnb) {
+        address throughToken = tokenSwapThroughToken[_token];
+        if (throughToken != address(0)) {
             path = new address[](3);
             path[0] = _token;
-            path[1] = WETH_TOKEN;
-            path[2] = MAIN_STABLE_TOKEN;
+            path[1] = throughToken;
+            path[2] = targetStable;
         } else {
             path = new address[](2);
             path[0] = _token;
-            path[1] = MAIN_STABLE_TOKEN;
+            path[1] = targetStable;
         }
 
         uint256 oneUnit = 10 ** _decimals;
-        _amountIn = _amountIn * 10 ** (_decimals - MAIN_STABLE_TOKEN_DECIMALS);
-        if (tokenUniV3[_token]) {
-            QuoterV2.QuoteExactInputSingleParams memory params = QuoterV2.QuoteExactInputSingleParams(_token, MAIN_STABLE_TOKEN, oneUnit, 3000, 0);
+        _amountIn = _amountIn * 10 ** (_decimals - targetStableDecimals);
+        if (router == 0xCAAaB0A72f781B92bA63Af27477aA46aB8F653E7) { // frax router
+            try FraxRouter(router).getAmountsOutWithTwamm(oneUnit, path) returns (uint256[] memory amountsOut) {
+                result = _amountIn * amountsOut[amountsOut.length - 1] / oneUnit;
+            } catch {
+            }
+        } else if (tokenUniV3[_token]) {
+            QuoterV2.QuoteExactInputSingleParams memory params = QuoterV2.QuoteExactInputSingleParams(_token, targetStable, oneUnit, 3000, 0);
             try QuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(params) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate) {
                 result = _amountIn * amountOut / oneUnit;
             } catch {

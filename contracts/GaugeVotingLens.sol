@@ -2,7 +2,9 @@
 pragma solidity 0.8.11;
 
 import "./GaugeVoting.sol";
+import "./WombexLensUI.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
+import "./GaugeVotingLens.sol";
 
 /**
  * @title   GaugeVotingLens
@@ -10,17 +12,31 @@ import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
  */
 contract GaugeVotingLens {
     GaugeVoting public gaugeVoting;
+    address public wmx;
+    IERC20 public veWom;
+    address public stakingToken;
+    address public voterProxy;
+    IBribeVoter public bribeVoter;
+    WombexLensUI public wombexLensUI;
 
     struct Pool {
         address lpToken;
         address rewards;
-        uint256 vlVotes;
-        int256 vlDelta;
+        PoolVotes votes;
         bool isActive;
-        int256 veWomVotes;
-        int256 veWomDelta;
         string name;
         string symbol;
+        uint128 rewardsApr;
+        uint128 rewardsAprItem;
+        uint128 bribeApr;
+        uint128 bribeAprItem;
+    }
+
+    struct PoolVotes {
+        uint128 vlVotes;
+        int128 vlDelta;
+        int128 veWomVotes;
+        int128 veWomDelta;
     }
 
     struct UserReward {
@@ -30,11 +46,17 @@ contract GaugeVotingLens {
         uint256 rewardAmount;
     }
 
-    constructor(GaugeVoting _gaugeVoting) {
+    constructor(GaugeVoting _gaugeVoting, WombexLensUI _wombexLensUI) {
         gaugeVoting = _gaugeVoting;
+        wmx = _wombexLensUI.WMX_TOKEN();
+        stakingToken = address(_gaugeVoting.stakingToken());
+        veWom = _gaugeVoting.veWom();
+        voterProxy = _gaugeVoting.voterProxy();
+        bribeVoter = _gaugeVoting.bribeVoter();
+        wombexLensUI = _wombexLensUI;
     }
 
-    function getPools() public view returns (Pool[] memory pools) {
+    function getPools() public returns (Pool[] memory pools) {
         address[] memory lpTokens = gaugeVoting.getLpTokensAdded();
         (int256[] memory deltas, int256[] memory votes) = gaugeVoting.getVotesDelta();
         if (deltas.length == 0) {
@@ -42,17 +64,37 @@ contract GaugeVotingLens {
             votes = new int256[](lpTokens.length);
         }
         pools = new Pool[](lpTokens.length);
+        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSD(wmx, 1 ether, 18);
+        uint256 stakingTotalSupply = IERC20(stakingToken).totalSupply();
+        uint256 veWomBalance = veWom.balanceOf(voterProxy);
         for (uint256 i = 0; i < lpTokens.length; i++) {
-            address rewards = gaugeVoting.lpTokenRewards(lpTokens[i]);
-            uint256 vlVotes = IERC20(rewards).totalSupply();
-            int256 ratio;
-            int256 vlDelta;
-            if (votes[i] != 0) {
-                ratio = int256(vlVotes) * int256(1 ether) / votes[i];
-                vlDelta = deltas[i] * ratio / int256(1 ether);
+            pools[i].rewards = gaugeVoting.lpTokenRewards(lpTokens[i]);
+            uint256 vlVotes = IERC20(pools[i].rewards).totalSupply();
+            if (vlVotes == 0) {
+                vlVotes = 1 ether;
             }
-            pools[i] = Pool(lpTokens[i], rewards, vlVotes, vlDelta, uint256(gaugeVoting.lpTokenStatus(lpTokens[i])) == 2, votes[i], deltas[i], ERC20(lpTokens[i]).name(), ERC20(lpTokens[i]).symbol());
+            if (votes[i] != 0) {
+                int256 ratio = int256(vlVotes) * int256(1 ether) / votes[i];
+                pools[i].votes = PoolVotes(
+                    uint128(vlVotes),
+                    int128(deltas[i] * ratio / int256(1 ether)),
+                    int128(votes[i]),
+                    int128(deltas[i])
+                );
+            }
+            uint256 tvl = (stakingTokenPrice * vlVotes) / 1 ether;
+            (pools[i].rewardsAprItem, pools[i].rewardsApr) = wombexLensUI.getRewardPoolTotalApr128(IBaseRewardPool4626(pools[i].rewards), tvl, 0, 0);
+            (pools[i].bribeAprItem, pools[i].bribeApr) = wombexLensUI.getBribeTotalApr128(voterProxy, bribeVoter, lpTokens[i], tvl, (stakingTotalSupply * stakingTokenPrice) / 1 ether, veWomBalance);
+
+            pools[i].lpToken = lpTokens[i];
+            pools[i].isActive = isLpActive(lpTokens[i]);
+            pools[i].name = ERC20(lpTokens[i]).name();
+            pools[i].symbol = ERC20(lpTokens[i]).symbol();
         }
+    }
+
+    function isLpActive(address _lpToken) public view returns(bool) {
+        return gaugeVoting.lpTokenStatus(_lpToken) == GaugeVoting.LpTokenStatus.ACTIVE;
     }
 
     function getUserVotes(address _user) public view returns (uint256[] memory votes) {
