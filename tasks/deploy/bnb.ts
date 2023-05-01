@@ -32,20 +32,30 @@ import {
     PoolDepositor,
     PoolDepositor__factory,
     Asset__factory,
-    WomSwapDepositor, WomSwapDepositor__factory,
-    WomStakingProxy, WomStakingProxy__factory,
-    LpVestedEscrow__factory, LpVestedEscrow,
-    WombexLensUI, WombexLensUI__factory,
+    WomSwapDepositor,
+    WomSwapDepositor__factory,
+    WomStakingProxy,
+    WomStakingProxy__factory,
+    LpVestedEscrow__factory,
+    LpVestedEscrow,
+    WombexLensUI,
+    WombexLensUI__factory,
     BoosterEarmark,
     BoosterEarmark__factory,
     WmxRewardPoolFactory__factory,
     WmxRewardPoolFactory,
-    WmxRewardPoolLens__factory, WmxRewardPoolLens,
+    WmxRewardPoolLens__factory,
+    WmxRewardPoolLens,
     GaugeVoting,
     GaugeVoting__factory,
     GaugeVotingLens__factory,
     GaugeVotingLens,
-    BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory__factory, BribesTokenFactory
+    BribesRewardFactory,
+    BribesRewardFactory__factory,
+    BribesTokenFactory__factory,
+    BribesTokenFactory,
+    DepositToken,
+    DepositToken__factory, BaseRewardPoolLocked, BaseRewardPoolLocked__factory, MultiStaker__factory, MultiStaker
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -599,6 +609,109 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
     console.log('poolDepositor', poolDepositor.address);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+});
+
+function csvToAccountsAndAmounts(csvName) {
+    const bnbLockCsv = fs.readFileSync('./tasks/data/' + csvName, {encoding: 'utf8'});
+    const lines = bnbLockCsv.split(/\r?\n/);
+    const accounts = [];
+    const amounts = [];
+    lines.forEach(line => {
+        accounts.push(line.split(',')[0]);
+        amounts.push(simpleToExactAmount(line.split(',')[1]));
+    });
+    return {accounts, amounts};
+}
+
+task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('Ankr_locks - BNB_final_lock.csv');
+    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('Ankr_locks - ankrBNB_final_lock.csv');
+
+    // console.log('bnbAccounts', bnbAccounts);
+    // console.log('bnbAmounts', bnbAmounts);
+    //
+    // console.log('ankrBnbAccounts', ankrBnbAccounts);
+    // console.log('ankrBnbAmounts', ankrBnbAmounts);
+    // return;
+    const deployer = await getSigner(hre);
+    const deployerAddress = await deployer.getAddress();
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+    })) as any;
+
+    // fs.writeFileSync('./args/multiStaker.js', 'module.exports = ' + JSON.stringify([]));
+    // const multiStaker = await deployContract<MultiStaker>(
+    //     hre,
+    //     new MultiStaker__factory(deployer),
+    //     "MultiStaker",
+    //     [],
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // console.log('multiStaker', multiStaker.address);
+    // return;
+
+
+    const bnbPool = BaseRewardPoolLocked__factory.connect('', deployer);
+    console.log('bnbPool', bnbPool.address);
+    await bnbPool.setLock(bnbAccounts, bnbAmounts, false).then(tx => tx.wait());
+    console.log('ankrBnbPool', ankrBnbPool.address);
+    await ankrBnbPool.setLock(ankrBnbAccounts, ankrBnbAmounts, false).then(tx => tx.wait());
+
+    const bnbLpAddress = '0x0e99fBfD04c255124A168c6Ae68CcE3c7dCC5760';
+    const ankrBnbLpAddress = '0xB6D83F199b361403BDa2c44712a77F55E7f8855f';
+    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
+    const tokenFactory = TokenFactory__factory.connect(await booster.tokenFactory(), deployer);
+    const namePostfix = await tokenFactory.namePostfix();
+    const symbolPrefix = await tokenFactory.symbolPrefix();
+
+    const bnbStakingToken = await deployContract<DepositToken>(
+        hre,
+        new DepositToken__factory(deployer),
+        "DepositToken",
+        [bnbConfig.booster, bnbLpAddress, namePostfix, symbolPrefix],
+        {},
+        true,
+        waitForBlocks,
+    );
+    const ankrBnbStakingToken = await deployContract<DepositToken>(
+        hre,
+        new DepositToken__factory(deployer),
+        "DepositToken",
+        [bnbConfig.booster, ankrBnbLpAddress, namePostfix, symbolPrefix],
+        {},
+        true,
+        waitForBlocks,
+    );
+
+    const bnbPoolLockedArgs = ['0', bnbStakingToken.address, bnbConfig.wom, bnbConfig.booster, bnbLpAddress, deployerAddress, 1712639772];
+    fs.writeFileSync('./args/bnbPoolLocked.js', 'module.exports = ' + JSON.stringify(bnbPoolLockedArgs));
+    const bnbPool = await deployContract<BaseRewardPoolLocked>(
+        hre,
+        new BaseRewardPoolLocked__factory(deployer),
+        "BaseRewardPoolLocked",
+        bnbPoolLockedArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bnbPool', bnbPool.address);
+    await bnbPool.setLock(bnbAccounts, bnbAmounts, false).then(tx => tx.wait());
+
+    const ankrBnbPoolLockedArgs = ['0', ankrBnbStakingToken.address, bnbConfig.wom, bnbConfig.booster, ankrBnbLpAddress, deployerAddress, 1712639772];
+    const ankrBnbPool = await deployContract<BaseRewardPoolLocked>(
+        hre,
+        new BaseRewardPoolLocked__factory(deployer),
+        "BaseRewardPoolLocked",
+        ankrBnbPoolLockedArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('ankrBnbPool', ankrBnbPool.address);
+    await ankrBnbPool.setLock(ankrBnbAccounts, ankrBnbAmounts, false).then(tx => tx.wait());
 });
 
 task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
