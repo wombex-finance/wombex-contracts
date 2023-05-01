@@ -651,14 +651,6 @@ task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArgu
     //     waitForBlocks,
     // );
     // console.log('multiStaker', multiStaker.address);
-    // return;
-
-
-    const bnbPool = BaseRewardPoolLocked__factory.connect('', deployer);
-    console.log('bnbPool', bnbPool.address);
-    await bnbPool.setLock(bnbAccounts, bnbAmounts, false).then(tx => tx.wait());
-    console.log('ankrBnbPool', ankrBnbPool.address);
-    await ankrBnbPool.setLock(ankrBnbAccounts, ankrBnbAmounts, false).then(tx => tx.wait());
 
     const bnbLpAddress = '0x0e99fBfD04c255124A168c6Ae68CcE3c7dCC5760';
     const ankrBnbLpAddress = '0xB6D83F199b361403BDa2c44712a77F55E7f8855f';
