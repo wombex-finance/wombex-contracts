@@ -64,12 +64,14 @@ import {
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
+import assert from "assert";
 
 const {approvePoolDepositor} = require('../helpers');
 
 const fs = require('fs');
 const ethers = require('ethers');
 const _ = require('lodash');
+const pIteration = require('p-iteration');
 
 const forking = false;
 const waitForBlocks = forking ? undefined : 3;
@@ -629,12 +631,6 @@ task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArgu
     const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('BNB_lock_v1.csv');
     const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('ankrBNB_lock_v1.csv');
 
-    // console.log('bnbAccounts', bnbAccounts);
-    // console.log('bnbAmounts', bnbAmounts);
-    //
-    // console.log('ankrBnbAccounts', ankrBnbAccounts);
-    // console.log('ankrBnbAmounts', ankrBnbAmounts);
-    // return;
     const deployer = await getSigner(hre);
     const deployerAddress = await deployer.getAddress();
     deployer.getFeeData = () => new Promise((resolve) => resolve({
@@ -714,12 +710,6 @@ task("reset-pool-locked:bnb").setAction(async function (taskArguments: TaskArgum
     const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('BNB_lock_v2.csv');
     const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('ankrBNB_lock_v2.csv');
 
-    // console.log('bnbAccounts', bnbAccounts[bnbAccounts.length - 1]);
-    // console.log('bnbAmounts', bnbAmounts[bnbAmounts.length - 1]);
-    //
-    // console.log('ankrBnbAccounts', ankrBnbAccounts[ankrBnbAccounts.length - 1]);
-    // console.log('ankrBnbAmounts', ankrBnbAmounts[ankrBnbAmounts.length - 1]);
-    // return;
     const deployer = await getSigner(hre);
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
@@ -733,6 +723,34 @@ task("reset-pool-locked:bnb").setAction(async function (taskArguments: TaskArgum
 
     await deployedBnbPool.setLock(bnbAccounts, bnbAmounts, false).then(tx => tx.wait());
     await deployedAnkrBnbPool.setLock(ankrBnbAccounts, ankrBnbAmounts, false).then(tx => tx.wait());
+});
+
+task("check-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const {accounts: oldBnbAccounts} = csvToAccountsAndAmounts('BNB_lock_v1.csv');
+    const {accounts: oldAnkrBnbAccounts} = csvToAccountsAndAmounts('ankrBNB_lock_v1.csv');
+
+    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('BNB_lock_v2.csv');
+    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('ankrBNB_lock_v2.csv');
+
+    const signer = await getSigner(hre);
+    const deployedBnbPool = BaseRewardPoolLocked__factory.connect('0x383A773c9bcaD46E94010D8bb704FF3E450701Ba', signer);
+    const deployedAnkrBnbPool = BaseRewardPoolLocked__factory.connect('0x8fC093fe17C7b74970277D66Cb85232D3041AdE6', signer);
+
+    await pIteration.forEachSeries([bnbAccounts, ankrBnbAccounts], (accounts, accIndex) => {
+        const amounts = accIndex ? ankrBnbAmounts : bnbAmounts;
+        return pIteration.forEachSeries(_.chunk(accounts, 10), (chunk, i) => {
+            return pIteration.forEach(chunk, async (address, j) => {
+                const index = i * 10 + j;
+                const balance = await (accIndex ? deployedAnkrBnbPool : deployedBnbPool).lockedBalance(address).then(r => r.toString());
+                console.log('\n' + address);
+                console.log(accIndex + ' amount', amounts[index].toString());
+                console.log('balance ', balance);
+                assert(amounts[index].toString() === balance);
+            });
+        });
+    })
+    console.log('v1 bnbAccounts not persist in v2', oldBnbAccounts.filter(acc => bnbAccounts.indexOf(acc) === -1));
+    console.log('v1 ankrBnbAccounts not persist in v2', oldAnkrBnbAccounts.filter(acc => ankrBnbAccounts.indexOf(acc) === -1));
 });
 
 task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
