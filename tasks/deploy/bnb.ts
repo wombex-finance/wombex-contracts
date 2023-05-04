@@ -625,6 +625,7 @@ function csvToAccountsAndAmounts(csvName) {
 
 task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
     const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('Ankr_locks - BNB_final_lock.csv');
     const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('Ankr_locks - ankrBNB_final_lock.csv');
 
@@ -640,17 +641,17 @@ task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArgu
         maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
     })) as any;
 
-    // fs.writeFileSync('./args/multiStaker.js', 'module.exports = ' + JSON.stringify([]));
-    // const multiStaker = await deployContract<MultiStaker>(
-    //     hre,
-    //     new MultiStaker__factory(deployer),
-    //     "MultiStaker",
-    //     [],
-    //     {},
-    //     true,
-    //     waitForBlocks,
-    // );
-    // console.log('multiStaker', multiStaker.address);
+    fs.writeFileSync('./args/multiStaker.js', 'module.exports = ' + JSON.stringify([]));
+    const multiStaker = await deployContract<MultiStaker>(
+        hre,
+        new MultiStaker__factory(deployer),
+        "MultiStaker",
+        [],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('multiStaker', multiStaker.address);
 
     const bnbLpAddress = '0x0e99fBfD04c255124A168c6Ae68CcE3c7dCC5760';
     const ankrBnbLpAddress = '0xB6D83F199b361403BDa2c44712a77F55E7f8855f';
@@ -704,6 +705,34 @@ task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArgu
     );
     console.log('ankrBnbPool', ankrBnbPool.address);
     await ankrBnbPool.setLock(ankrBnbAccounts, ankrBnbAmounts, false).then(tx => tx.wait());
+});
+
+task("reset-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const {accounts: oldBnbAccounts} = csvToAccountsAndAmounts('Ankr_locks - BNB_final_lock.csv');
+    const {accounts: oldAnkrBnbAccounts} = csvToAccountsAndAmounts('Ankr_locks - ankrBNB_final_lock.csv');
+
+    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('Locked pools - ankrBNB locks final.csv');
+    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('Locked pools - BNB locks final.csv');
+
+    // console.log('bnbAccounts', bnbAccounts);
+    // console.log('bnbAmounts', bnbAmounts);
+    //
+    // console.log('ankrBnbAccounts', ankrBnbAccounts);
+    // console.log('ankrBnbAmounts', ankrBnbAmounts);
+    // return;
+    const deployer = await getSigner(hre);
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+    })) as any;
+
+    const deployedBnbPool = BaseRewardPoolLocked__factory.connect('0x383A773c9bcaD46E94010D8bb704FF3E450701Ba', deployer);
+    const deployedAnkrBnbPool = BaseRewardPoolLocked__factory.connect('0x8fC093fe17C7b74970277D66Cb85232D3041AdE6', deployer);
+
+    await deployedBnbPool.setLock(oldBnbAccounts, oldBnbAccounts.map(() => '0'), false).then(tx => tx.wait());
+    await deployedAnkrBnbPool.setLock(oldAnkrBnbAccounts, oldAnkrBnbAccounts.map(() => '0'), false).then(tx => tx.wait());
+
+    await deployedBnbPool.setLock(bnbAccounts, bnbAmounts, false).then(tx => tx.wait());
+    await deployedAnkrBnbPool.setLock(ankrBnbAccounts, ankrBnbAmounts, false).then(tx => tx.wait());
 });
 
 task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
