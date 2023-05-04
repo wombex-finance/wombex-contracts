@@ -626,8 +626,8 @@ function csvToAccountsAndAmounts(csvName) {
 task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
 
-    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('Ankr_locks - BNB_final_lock.csv');
-    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('Ankr_locks - ankrBNB_final_lock.csv');
+    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('BNB_lock_v1.csv');
+    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('ankrBNB_lock_v1.csv');
 
     // console.log('bnbAccounts', bnbAccounts);
     // console.log('bnbAmounts', bnbAmounts);
@@ -708,17 +708,17 @@ task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArgu
 });
 
 task("reset-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
-    const {accounts: oldBnbAccounts} = csvToAccountsAndAmounts('Ankr_locks - BNB_final_lock.csv');
-    const {accounts: oldAnkrBnbAccounts} = csvToAccountsAndAmounts('Ankr_locks - ankrBNB_final_lock.csv');
+    const {accounts: oldBnbAccounts} = csvToAccountsAndAmounts('BNB_lock_v1.csv');
+    const {accounts: oldAnkrBnbAccounts} = csvToAccountsAndAmounts('ankrBNB_lock_v1.csv');
 
-    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('Locked pools - ankrBNB locks final.csv');
-    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('Locked pools - BNB locks final.csv');
+    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('BNB_lock_v2.csv');
+    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('ankrBNB_lock_v2.csv');
 
-    // console.log('bnbAccounts', bnbAccounts);
-    // console.log('bnbAmounts', bnbAmounts);
+    // console.log('bnbAccounts', bnbAccounts[bnbAccounts.length - 1]);
+    // console.log('bnbAmounts', bnbAmounts[bnbAmounts.length - 1]);
     //
-    // console.log('ankrBnbAccounts', ankrBnbAccounts);
-    // console.log('ankrBnbAmounts', ankrBnbAmounts);
+    // console.log('ankrBnbAccounts', ankrBnbAccounts[ankrBnbAccounts.length - 1]);
+    // console.log('ankrBnbAmounts', ankrBnbAmounts[ankrBnbAmounts.length - 1]);
     // return;
     const deployer = await getSigner(hre);
     deployer.getFeeData = () => new Promise((resolve) => resolve({
