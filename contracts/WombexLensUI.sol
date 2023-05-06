@@ -108,6 +108,7 @@ contract WombexLensUI is Ownable {
     struct PoolValuesTokenApr {
         address token;
         uint256 apr;
+        bool isPeriodFinish;
     }
 
     struct PoolRewardRate {
@@ -265,7 +266,8 @@ contract WombexLensUI is Ownable {
         for (uint256 i = 0; i < len; i++) {
             aprs[i].token = rewardTokens[i];
             IBaseRewardPool4626.RewardState memory rewardState = crvRewards.tokenRewards(aprs[i].token);
-            if (rewardState.periodFinish < block.timestamp) {
+            aprs[i].isPeriodFinish = rewardState.periodFinish < block.timestamp;
+            if (aprs[i].isPeriodFinish) {
                 continue;
             }
 
