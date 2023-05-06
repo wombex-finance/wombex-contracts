@@ -263,10 +263,13 @@ contract WombexLensUI is Ownable {
         aprs = new PoolValuesTokenApr[](len);
 
         for (uint256 i = 0; i < len; i++) {
-            address token = rewardTokens[i];
-            IBaseRewardPool4626.RewardState memory rewardState = crvRewards.tokenRewards(token);
+            aprs[i].token = rewardTokens[i];
+            IBaseRewardPool4626.RewardState memory rewardState = crvRewards.tokenRewards(aprs[i].token);
+            if (rewardState.periodFinish < block.timestamp) {
+                continue;
+            }
 
-            if (token == WOM_TOKEN) {
+            if (aprs[i].token == WOM_TOKEN) {
                 uint256 factAmountMint = IWmx(WMX_MINTER).getFactAmounMint(rewardState.rewardRate * 365 days);
                 uint256 wmxRate = factAmountMint;
                 if (mintRatio > 0) {
@@ -276,12 +279,10 @@ contract WombexLensUI is Ownable {
                 wmxApr = wmxRate * wmxUsdPrice * 100 / poolTvl / 1e16;
             }
 
-            uint256 usdPrice = estimateInBUSD(token, 1 ether, getTokenDecimals(token));
+            uint256 usdPrice = estimateInBUSD(aprs[i].token, 1 ether, getTokenDecimals(aprs[i].token));
             uint256 apr = rewardState.rewardRate * 365 days * usdPrice * 100 / poolTvl / 1e16;
             aprTotal += apr;
             aprItem += rewardState.rewardRate * 365 days * usdPrice / 1e16;
-
-            aprs[i].token = token;
             aprs[i].apr = apr;
         }
 
