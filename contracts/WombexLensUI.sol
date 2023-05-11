@@ -13,6 +13,16 @@ interface FraxRouter {
     function getAmountsOutWithTwamm(uint amountIn, address[] memory path) external returns (uint[] memory amounts);
 }
 
+interface ThenaRouter {
+    struct Route {
+        address from;
+        address to;
+        bool stable;
+    }
+
+    function getAmountsOut(uint amountIn, Route[] memory routes) external view returns (uint[] memory amounts);
+}
+
 interface QuoterV2 {
     struct QuoteExactInputSingleParams {
         address tokenIn;
@@ -278,16 +288,14 @@ contract WombexLensUI is Ownable {
                     wmxRate = factAmountMint * mintRatio / 10_000;
                 }
 
-                wmxApr = wmxRate * wmxUsdPrice * 100 / poolTvl / 1e16;
+                wmxApr += wmxRate * wmxUsdPrice * 100 / poolTvl / 1e16;
             }
 
             uint256 usdPrice = estimateInBUSD(aprs[i].token, 1 ether, getTokenDecimals(aprs[i].token));
-            uint256 apr = rewardState.rewardRate * 365 days * usdPrice * 100 / poolTvl / 1e16;
-            aprTotal += apr;
+            aprs[i].apr = rewardState.rewardRate * 365 days * usdPrice * 100 / poolTvl / 1e16;
             aprItem += rewardState.rewardRate * 365 days * usdPrice / 1e16;
-            aprs[i].apr = apr;
+            aprTotal += aprs[i].apr;
         }
-
         aprTotal += wmxApr;
     }
 
@@ -530,6 +538,15 @@ contract WombexLensUI is Ownable {
         _amountIn = _amountIn * 10 ** (_decimals - targetStableDecimals);
         if (router == 0xCAAaB0A72f781B92bA63Af27477aA46aB8F653E7) { // frax router
             try FraxRouter(router).getAmountsOutWithTwamm(oneUnit, path) returns (uint256[] memory amountsOut) {
+                result = _amountIn * amountsOut[amountsOut.length - 1] / oneUnit;
+            } catch {
+            }
+        } else if (router == 0x20a304a7d126758dfe6B243D0fc515F83bCA8431) { // thena router
+            ThenaRouter.Route[] memory thenaPath = new ThenaRouter.Route[](path.length - 1);
+            for (uint256 i = 0; i < path.length - 1; i++) {
+                thenaPath[i] = ThenaRouter.Route(path[i], path[i + 1], false);
+            }
+            try ThenaRouter(router).getAmountsOut(oneUnit, thenaPath) returns (uint256[] memory amountsOut) {
                 result = _amountIn * amountsOut[amountsOut.length - 1] / oneUnit;
             } catch {
             }
