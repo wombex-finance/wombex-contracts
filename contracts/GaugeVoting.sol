@@ -298,7 +298,7 @@ contract GaugeVoting is Ownable {
         deltas = new int256[](lpTokensAdded.length);
         votes = new int256[](lpTokensAdded.length);
 
-        int256 activeTokensCount = 0;
+        int256 activeVotes = 0;
         int256 unusedVotes = 0;
         int256 unusedDelta = 0;
         for (uint256 i = 0; i < deltas.length; i++) {
@@ -312,7 +312,7 @@ contract GaugeVoting is Ownable {
             if (lpTokenStatus[lpToken] == LpTokenStatus.ACTIVE) {
                 votes[i] = lpTokenVotes;
                 deltas[i] = lpTokenDelta;
-                activeTokensCount++;
+                activeVotes += lpTokenVotes;
             } else {
                 votes[i] = 0;
                 deltas[i] = -1 * bribeVotes;
@@ -320,7 +320,7 @@ contract GaugeVoting is Ownable {
                 unusedDelta += lpTokenDelta - bribeVotes;
             }
         }
-        if (activeTokensCount == 0 || unusedVotes == 0) {
+        if (activeVotes == 0 || unusedVotes == 0) {
             return (deltas, votes);
         }
         for (uint256 i = 0; i < deltas.length; i++) {
@@ -328,8 +328,8 @@ contract GaugeVoting is Ownable {
             if (lpTokenStatus[lpToken] != LpTokenStatus.ACTIVE) {
                 continue;
             }
-            votes[i] += unusedVotes / activeTokensCount;
-            deltas[i] -= unusedDelta / activeTokensCount;
+            votes[i] += (unusedVotes * votes[i]) / activeVotes;
+            deltas[i] -= (unusedDelta * votes[i]) / activeVotes;
         }
     }
 
