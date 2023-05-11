@@ -43,6 +43,7 @@ import "./interfaces/Interfaces.sol";
 import "./interfaces/MathUtil.sol";
 import "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-0.6/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
 
@@ -67,6 +68,7 @@ contract BaseRewardPool {
     address public operator;
     uint256 public pid;
 
+    mapping(address => uint8) public tokenDecimals;
     mapping(address => uint256) internal _balances;
     uint256 internal _totalSupply;
 
@@ -360,6 +362,7 @@ contract BaseRewardPool {
         if (rState.lastUpdateTime == 0) {
             rState.token = _token;
             allRewardTokens.push(_token);
+            tokenDecimals[_token] = ERC20(_token).decimals();
             require(allRewardTokens.length <= MAX_TOKENS, "!`max_tokens`");
         }
         _rewards = _rewards.add(rState.queuedRewards);
@@ -413,7 +416,7 @@ contract BaseRewardPool {
         return
         balanceOf(account)
             .mul(_rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account]))
-            .div(1e18)
+            .div(10 ** tokenDecimals[_rState.token])
             .add(rewards[_rState.token][account]);
     }
 
@@ -426,7 +429,7 @@ contract BaseRewardPool {
                 _lastTimeRewardApplicable(_rState)
                 .sub(_rState.lastUpdateTime)
                 .mul(_rState.rewardRate)
-                .mul(1e18)
+                .mul(10 ** tokenDecimals[_rState.token])
                 .div(totalSupply())
             );
     }

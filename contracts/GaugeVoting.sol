@@ -201,7 +201,7 @@ contract GaugeVoting is Ownable {
         int256 lastDelta = 0;
 
         for (uint256 i = 0; i < len; i++) {
-            require(lpTokenStatus[_lpTokens[i]] == LpTokenStatus.ACTIVE, "only active");
+            require(_deltas[i] <= 0 || lpTokenStatus[_lpTokens[i]] == LpTokenStatus.ACTIVE, "only negative delta for inactive");
             require(i == 0 || _deltas[i] >= lastDelta, "< lastDelta");
             lastDelta = _deltas[i];
             address rewards = lpTokenRewards[_lpTokens[i]];
@@ -297,12 +297,39 @@ contract GaugeVoting is Ownable {
         uint256 ratio = veWom.balanceOf(voterProxy) * 1 ether / totalVotesAmount;
         deltas = new int256[](lpTokensAdded.length);
         votes = new int256[](lpTokensAdded.length);
+
+        int256 activeTokensCount = 0;
+        int256 unusedVotes = 0;
+        int256 unusedDelta = 0;
         for (uint256 i = 0; i < deltas.length; i++) {
             address lpToken = lpTokensAdded[i];
             address rewardsPool = lpTokenRewards[lpToken];
             int256 bribeVotes = int256(bribeVoter.votes(voterProxy, lpToken));
-            votes[i] = int256(IERC20(rewardsPool).totalSupply() * ratio) / 1 ether;
-            deltas[i] = votes[i] - bribeVotes;
+            uint256 supply = IERC20(rewardsPool).totalSupply();
+
+            int256 lpTokenVotes = int256(supply * ratio) / 1 ether;
+            int256 lpTokenDelta = lpTokenVotes - bribeVotes;
+            if (lpTokenStatus[lpToken] == LpTokenStatus.ACTIVE) {
+                votes[i] = lpTokenVotes;
+                deltas[i] = lpTokenDelta;
+                activeTokensCount++;
+            } else {
+                votes[i] = 0;
+                deltas[i] = -1 * bribeVotes;
+                unusedVotes += lpTokenVotes;
+                unusedDelta += lpTokenDelta - bribeVotes;
+            }
+        }
+        if (activeTokensCount == 0 || unusedVotes == 0) {
+            return (deltas, votes);
+        }
+        for (uint256 i = 0; i < deltas.length; i++) {
+            address lpToken = lpTokensAdded[i];
+            if (lpTokenStatus[lpToken] != LpTokenStatus.ACTIVE) {
+                continue;
+            }
+            votes[i] += unusedVotes / activeTokensCount;
+            deltas[i] -= unusedDelta / activeTokensCount;
         }
     }
 
