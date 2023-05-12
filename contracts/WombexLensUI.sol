@@ -281,7 +281,8 @@ contract WombexLensUI is Ownable {
                 wmxApr += wmxRate * wmxUsdPrice * 100 / poolTvl / 1e16;
             }
 
-            uint256 usdPrice = estimateInBUSD(aprs[i].token, 1 ether, getTokenDecimals(aprs[i].token));
+            uint8 decimals = getTokenDecimals(aprs[i].token);
+            uint256 usdPrice = estimateInBUSDEther(aprs[i].token, 10 ** decimals, decimals);
             aprs[i].apr = rewardState.rewardRate * 365 days * usdPrice * 100 / poolTvl / 1e16;
             aprItem += rewardState.rewardRate * 365 days * usdPrice / 1e16;
             aprTotal += aprs[i].apr;
@@ -337,7 +338,7 @@ contract WombexLensUI is Ownable {
             aprs[i].token = address(rewardTokens[i]);
 
             (, uint96 tokenPerSec, , ) = IBribe(bribe).rewardInfo(i);
-            uint256 usdPerSec = estimateInBUSD(aprs[i].token, tokenPerSec, getTokenDecimals(aprs[i].token));
+            uint256 usdPerSec = estimateInBUSDEther(aprs[i].token, tokenPerSec, getTokenDecimals(aprs[i].token));
             if (voteWeight / poolTvl > 0) {
                 aprs[i].apr = usdPerSec * 365 days * 10e3 / (voteWeight * allPoolsTvl / veWomBalance);
                 // 365 * 24 * 60 * 60 * rewardInfo.tokenPerSec * tokenUsdcPrice * userVotes / weight / (rewardPoolTotalSupply * wmxPrice) * 100,
@@ -465,9 +466,7 @@ contract WombexLensUI is Ownable {
     function quotePotentialWithdrawalTokenToBUSD(address _womPool, address _tokenOut, uint256 _lpTokenAmountIn) public returns (uint256) {
         try IWomPool(_womPool).quotePotentialWithdraw(_tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut) {
             uint8 decimals = getTokenDecimals(_tokenOut);
-            uint256 result = estimateInBUSD(_tokenOut, tokenAmountOut, decimals);
-            result *= 10 ** (18 - decimals);
-            return result;
+            return estimateInBUSDEther(_tokenOut, tokenAmountOut, decimals);
         } catch {
         }
         return 0;
@@ -482,6 +481,10 @@ contract WombexLensUI is Ownable {
         } catch {
             womAmount = wmxWomAmount;
         }
+    }
+
+    function estimateInBUSDEther(address _token, uint256 _amountIn, uint256 _decimals) public returns (uint256 result) {
+        return estimateInBUSD(_token, _amountIn, _decimals) * 10 ** (18 - _decimals);
     }
 
     // Estimates a token equivalent in USD (BUSD) using a Uniswap-compatible router
