@@ -416,7 +416,7 @@ contract WombexLensUI is Ownable {
         for (uint256 j = 0; j < rewardTokensList.length; j++) {
             address t = rewardTokensList[j];
             IBaseRewardPool4626.RewardState memory tRewards = IBaseRewardPool4626(_crvRewards).tokenRewards(t);
-            revenueSum += estimateInBUSD(t, tRewards.historicalRewards + tRewards.queuedRewards, getTokenDecimals(t));
+            revenueSum += estimateInBUSDEther(t, tRewards.historicalRewards + tRewards.queuedRewards, getTokenDecimals(t));
             if (t == WOM_TOKEN || t == WMX_WOM_TOKEN) {
                 womSum += tRewards.historicalRewards + tRewards.queuedRewards;
             }
@@ -670,7 +670,7 @@ contract WombexLensUI is Ownable {
             rewards[i] = RewardItem(
                 rewardTokens[i],
                 uint128(earnedRewards[i]),
-                uint128(estimateInBUSD(rewardTokens[i], earnedRewards[i], decimals)),
+                uint128(estimateInBUSDEther(rewardTokens[i], earnedRewards[i], decimals)),
                 decimals
             );
         }
@@ -692,7 +692,7 @@ contract WombexLensUI is Ownable {
             rewards[i] = RewardItem(
                 userRewards[i].token,
                 uint128(userRewards[i].amount),
-                uint128(estimateInBUSD(userRewards[i].token, userRewards[i].amount, decimals)),
+                uint128(estimateInBUSDEther(userRewards[i].token, userRewards[i].amount, decimals)),
                 decimals
             );
         }

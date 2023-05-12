@@ -43,7 +43,9 @@ contract GaugeVotingLens {
         address lpToken;
         address rewards;
         address rewardToken;
+        uint8 decimals;
         uint256 rewardAmount;
+        uint256 usdAmount;
     }
 
     constructor(GaugeVoting _gaugeVoting, WombexLensUI _wombexLensUI) {
@@ -105,7 +107,7 @@ contract GaugeVotingLens {
         }
     }
 
-    function getUserRewards(address _user, uint256 _rewardsPerLpToken) public view returns (UserReward[] memory rewards) {
+    function getUserRewards(address _user, uint256 _rewardsPerLpToken) public returns (UserReward[] memory rewards) {
         address[] memory lpTokens = gaugeVoting.getLpTokensAdded();
         rewards = new UserReward[](lpTokens.length * _rewardsPerLpToken);
         uint256 rIndex = 0;
@@ -128,18 +130,22 @@ contract GaugeVotingLens {
                 if (added) {
                     continue;
                 }
+                uint8 decimals = wombexLensUI.getTokenDecimals(bribeRewardTokens[i]);
+                uint256 earned = rewardPoolBalance == 0 ? 0 : IBribeRewardsPool(rewardPool).earned(bribeRewardTokens[i], _user);
                 rewards[rIndex] = UserReward(
                     lpTokens[j],
                     rewardPool,
                     bribeRewardTokens[i],
-                    rewardPoolBalance == 0 ? 0 : IBribeRewardsPool(rewardPool).earned(bribeRewardTokens[i], _user)
+                    decimals,
+                    earned,
+                    earned == 0 ? earned : wombexLensUI.estimateInBUSDEther(bribeRewardTokens[i], earned, decimals)
                 );
                 rIndex++;
             }
         }
     }
 
-    function getTotalRewards(uint256 _rewardsPerLpToken) public view returns (UserReward[] memory rewards) {
+    function getTotalRewards(uint256 _rewardsPerLpToken) public returns (UserReward[] memory rewards) {
         address[] memory lpTokens = gaugeVoting.getLpTokensAdded();
         rewards = new UserReward[](lpTokens.length * _rewardsPerLpToken);
         uint256 rIndex = 0;
@@ -149,11 +155,16 @@ contract GaugeVotingLens {
             address[] memory bribeRewardTokens = IBribeRewardsPool(rewardPool).rewardTokensList();
             for (uint256 j = 0; j < bribeRewardTokens.length; j++) {
                 (, , , , , uint256 queuedRewards, , uint256 historicalRewards, ) = IBribeRewardsPool(rewardPool).tokenRewards(bribeRewardTokens[j]);
+                uint8 decimals = wombexLensUI.getTokenDecimals(bribeRewardTokens[i]);
+                uint256 amount = queuedRewards + historicalRewards;
+
                 rewards[rIndex] = UserReward(
                     lpTokens[i],
                     rewardPool,
                     bribeRewardTokens[j],
-                    queuedRewards + historicalRewards
+                    decimals,
+                    amount,
+                    wombexLensUI.estimateInBUSDEther(bribeRewardTokens[i], amount, decimals)
                 );
                 rIndex++;
             }
