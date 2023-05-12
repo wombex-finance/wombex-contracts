@@ -46,7 +46,6 @@ import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
-import "hardhat/console.sol";
 
 /**
  * @title   BaseRewardPool
@@ -424,29 +423,25 @@ contract BaseRewardPool {
     }
 
     function _earned(RewardState storage _rState, address account) internal view returns (uint256) {
-        console.log("balanceOf(account)", balanceOf(account));
-        console.log("_rewardPerToken(_rState)", _rewardPerToken(_rState));
-        console.log("_rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account])", _rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account]));
+        uint256 divider = 36 - tokenDecimals[_rState.token];
         return
-        balanceOf(account)
-            .mul(_rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account]))
-            .div(1e18)
-            .add(rewards[_rState.token][account]);
+            balanceOf(account)
+                .mul(_rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account]))
+                .div(10 ** divider)
+                .add(rewards[_rState.token][account]);
     }
 
     function _rewardPerToken(RewardState storage _rState) internal view returns (uint256) {
         if (totalSupply() == 0) {
             return _rState.rewardPerTokenStored;
         }
-        console.log("_rState.rewardPerTokenStored", _rState.rewardPerTokenStored);
-        console.log("_lastTimeRewardApplicable(_rState).sub(_rState.lastUpdateTime)", _lastTimeRewardApplicable(_rState).sub(_rState.lastUpdateTime));
-        console.log("_rState.rewardRate", _rState.rewardRate);
+        uint256 multiplier = 36 - tokenDecimals[_rState.token];
         return
             _rState.rewardPerTokenStored.add(
                 _lastTimeRewardApplicable(_rState)
                 .sub(_rState.lastUpdateTime)
                 .mul(_rState.rewardRate)
-                .mul(1e18)
+                .mul(10 ** multiplier)
                 .div(totalSupply())
             );
     }

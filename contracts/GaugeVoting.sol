@@ -322,14 +322,14 @@ contract GaugeVoting is Ownable {
         if (activeVotes == 0 || unusedVotes == 0) {
             return (deltas, votes);
         }
-        for (uint256 i = 0; i < deltas.length; i++) {
-            address lpToken = lpTokensAdded[i];
-            if (lpTokenStatus[lpToken] != LpTokenStatus.ACTIVE) {
-                continue;
-            }
-            votes[i] += (unusedVotes * votes[i]) / activeVotes;
-            deltas[i] -= (unusedDelta * votes[i]) / activeVotes;
-        }
+//        for (uint256 i = 0; i < deltas.length; i++) {
+//            address lpToken = lpTokensAdded[i];
+//            if (lpTokenStatus[lpToken] != LpTokenStatus.ACTIVE) {
+//                continue;
+//            }
+//            votes[i] += (unusedVotes * votes[i]) / activeVotes;
+//            deltas[i] -= (unusedDelta * votes[i]) / activeVotes;
+//        }
     }
 
     function rewardClaimed(uint256, address _account, uint256, bool) external {
