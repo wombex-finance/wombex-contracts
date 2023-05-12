@@ -166,8 +166,7 @@ contract GaugeVoting is Ownable {
         }
     }
 
-    function setLpTokenStatus(address _lpToken, LpTokenStatus _status) public onlyOwner {
-        require(lpTokenStatus[_lpToken] != LpTokenStatus.NOT_EXISTS, "already exists");
+    function setLpTokenStatus(address _lpToken, LpTokenStatus _status) external onlyOwner {
         lpTokenStatus[_lpToken] = _status;
         emit SetLpTokenStatus(_lpToken, _status);
     }
