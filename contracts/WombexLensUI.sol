@@ -653,7 +653,7 @@ contract WombexLensUI is Ownable {
         }
     }
 
-    function getUserPendingRewards(uint256 mintRatio, address _rewardsPool, address _user) public
+    function getUserPendingRewards(uint256 _mintRatio, address _rewardsPool, address _user) public
         returns (RewardItem[] memory rewards)
     {
         (address[] memory rewardTokens, uint256[] memory earnedRewards) = IBaseRewardPool4626(_rewardsPool)
@@ -663,6 +663,10 @@ contract WombexLensUI is Ownable {
         rewards = new RewardItem[](len + 1);
         uint256 earnedWom;
         for (uint256 i = 0; i < earnedRewards.length; i++) {
+            IBaseRewardPool4626.RewardState memory tokenRewards = IBaseRewardPool4626(_rewardsPool).tokenRewards(rewardTokens[i]);
+            if (earnedRewards[i] == 0 && tokenRewards.periodFinish < block.timestamp) {
+                continue;
+            }
             if (rewardTokens[i] == WOM_TOKEN) {
                 earnedWom = earnedRewards[i];
             }
@@ -676,7 +680,7 @@ contract WombexLensUI is Ownable {
         }
         if (earnedWom > 0) {
             uint256 earned = ITokenMinter(WMX_MINTER).getFactAmounMint(earnedWom);
-            earned = mintRatio > 0 ? earned * mintRatio / 10000 : earned;
+            earned = _mintRatio > 0 ? earned * _mintRatio / 10000 : earned;
             rewards[len] = RewardItem(WMX_TOKEN, uint128(earned), uint128(estimateInBUSD(WMX_TOKEN, earned, uint8(18))), uint8(18));
         }
     }

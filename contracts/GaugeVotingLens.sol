@@ -22,6 +22,7 @@ contract GaugeVotingLens {
     struct Pool {
         address lpToken;
         address rewards;
+        WombexLensUI.RewardItem[] userRewardItems;
         PoolVotes votes;
         bool isActive;
         string name;
@@ -58,7 +59,7 @@ contract GaugeVotingLens {
         wombexLensUI = _wombexLensUI;
     }
 
-    function getPools() public returns (Pool[] memory pools) {
+    function getPools(address _userAddress) public returns (Pool[] memory pools) {
         address[] memory lpTokens = gaugeVoting.getLpTokensAdded();
         (int256[] memory deltas, int256[] memory votes) = gaugeVoting.getVotesDelta();
         if (deltas.length == 0) {
@@ -71,6 +72,7 @@ contract GaugeVotingLens {
         uint256 veWomBalance = veWom.balanceOf(voterProxy);
         for (uint256 i = 0; i < lpTokens.length; i++) {
             pools[i].rewards = gaugeVoting.lpTokenRewards(lpTokens[i]);
+            pools[i].userRewardItems = wombexLensUI.getUserPendingRewards(0, pools[i].rewards, _userAddress);
             uint256 vlVotes = IERC20(pools[i].rewards).totalSupply();
             if (vlVotes == 0) {
                 vlVotes = 1 ether;
