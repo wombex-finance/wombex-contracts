@@ -298,7 +298,6 @@ contract GaugeVoting is Ownable {
         votes = new int256[](lpTokensAdded.length);
 
         int256 activeVotes = 0;
-        int256 unusedVotes = 0;
         int256 unusedDelta = 0;
         for (uint256 i = 0; i < deltas.length; i++) {
             address lpToken = lpTokensAdded[i];
@@ -315,21 +314,20 @@ contract GaugeVoting is Ownable {
             } else {
                 votes[i] = 0;
                 deltas[i] = -1 * bribeVotes;
-                unusedVotes += lpTokenVotes;
-                unusedDelta += lpTokenDelta - bribeVotes;
+                unusedDelta += lpTokenDelta + bribeVotes;
             }
         }
-        if (activeVotes == 0 || unusedVotes == 0) {
+        if (activeVotes == 0 || unusedDelta == 0) {
             return (deltas, votes);
         }
-//        for (uint256 i = 0; i < deltas.length; i++) {
-//            address lpToken = lpTokensAdded[i];
-//            if (lpTokenStatus[lpToken] != LpTokenStatus.ACTIVE) {
-//                continue;
-//            }
-//            votes[i] += (unusedVotes * votes[i]) / activeVotes;
-//            deltas[i] -= (unusedDelta * votes[i]) / activeVotes;
-//        }
+        for (uint256 i = 0; i < deltas.length; i++) {
+            if (lpTokenStatus[lpTokensAdded[i]] != LpTokenStatus.ACTIVE) {
+                continue;
+            }
+            int256 deltaIncr = (unusedDelta * votes[i]) / activeVotes;
+            deltas[i] += deltaIncr;
+            votes[i] += deltaIncr;
+        }
     }
 
     function rewardClaimed(uint256, address _account, uint256, bool) external {
