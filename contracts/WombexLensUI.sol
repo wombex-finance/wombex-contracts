@@ -43,6 +43,7 @@ interface IWomAsset {
 
 interface IWomPool {
     function quotePotentialWithdraw(address _token, uint256 _liquidity) external view returns (uint256);
+    function quotePotentialWithdrawFromOtherAsset(address fromToken, address toToken, uint256 liquidity) external view virtual returns (uint256 amount, uint256 withdrewAmount);
     function quotePotentialSwap(
         address fromToken,
         address toToken,
@@ -233,7 +234,8 @@ contract WombexLensUI is Ownable {
             pValues.rewardPool = poolInfo.crvRewards;
 
             // 1. Calculate Tvl
-            pValues.lpTokenPrice = getLpUsdOut(pool, 1 ether);
+            address underlyingToken = IWomAsset(poolInfo.lptoken).underlyingToken();
+            pValues.lpTokenPrice = getLpUsdOut(pool, underlyingToken, 1 ether);
             pValues.lpTokenBalance = ERC20(poolInfo.crvRewards).totalSupply();
             pValues.tvl = pValues.lpTokenBalance * pValues.lpTokenPrice / 1 ether;
 
@@ -380,7 +382,8 @@ contract WombexLensUI is Ownable {
         for (uint256 i = 0; i < len; i++) {
             IBooster.PoolInfo memory poolInfo = _booster.poolInfo(i);
             address pool = IWomAsset(poolInfo.lptoken).pool();
-            tvlSum += ERC20(poolInfo.crvRewards).totalSupply() * getLpUsdOut(pool, 1 ether) / 1 ether;
+            address underlyingToken = IWomAsset(poolInfo.lptoken).underlyingToken();
+            tvlSum += ERC20(poolInfo.crvRewards).totalSupply() * getLpUsdOut(pool, underlyingToken, 1 ether) / 1 ether;
         }
         address voterProxy = _booster.voterProxy();
         tvlSum += estimateInBUSD(WOM_TOKEN, ERC20(IStaker(voterProxy).veWom()).balanceOf(voterProxy), 18);
@@ -455,17 +458,18 @@ contract WombexLensUI is Ownable {
 
     function getLpUsdOut(
         address _womPool,
+        address _fromToken,
         uint256 _lpTokenAmountIn
     ) public returns (uint256 result) {
         address tokenOut = getTokenToWithdrawFromPool(_womPool);
         if (tokenOut == address(0)) {
             revert("stable not found for pool");
         }
-        return quotePotentialWithdrawalTokenToBUSD(_womPool, tokenOut, _lpTokenAmountIn);
+        return quotePotentialWithdrawalTokenToBUSD(_womPool, _fromToken, tokenOut, _lpTokenAmountIn);
     }
 
-    function quotePotentialWithdrawalTokenToBUSD(address _womPool, address _tokenOut, uint256 _lpTokenAmountIn) public returns (uint256) {
-        try IWomPool(_womPool).quotePotentialWithdraw(_tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut) {
+    function quotePotentialWithdrawalTokenToBUSD(address _womPool, address _fromToken, address _tokenOut, uint256 _lpTokenAmountIn) public returns (uint256) {
+        try IWomPool(_womPool).quotePotentialWithdrawFromOtherAsset(_fromToken, _tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut, uint256 withdrewAmount) {
             uint8 decimals = getTokenDecimals(_tokenOut);
             return estimateInBUSDEther(_tokenOut, tokenAmountOut, decimals);
         } catch {
@@ -631,7 +635,7 @@ contract WombexLensUI is Ownable {
                     underlyingBalance *= 10 ** (18 - decimals);
                     rewardContractData[i].usdBalance = uint128(underlyingBalance);
                 } else {
-                    rewardContractData[i].usdBalance = uint128(getLpUsdOut(womPool, lpTokenBalance));
+                    rewardContractData[i].usdBalance = uint128(getLpUsdOut(womPool, underlyingToken, lpTokenBalance));
                 }
             } catch {}
         }
@@ -714,16 +718,5 @@ contract WombexLensUI is Ownable {
             IBooster.PoolInfo memory poolInfo = _booster.poolInfo(i);
             balances[i] = ERC20(poolInfo.crvRewards).balanceOf(_user);
         }
-    }
-
-    /*** ESTIMATIONS ***/
-
-    function quoteUnderlyingAmountOut(
-        address _lpToken,
-        uint256 _lpTokenAmountIn
-    ) public view returns(uint256) {
-        address pool = IWomAsset(_lpToken).pool();
-        address underlyingToken = IWomAsset(_lpToken).underlyingToken();
-        return IWomPool(pool).quotePotentialWithdraw(underlyingToken, _lpTokenAmountIn);
     }
 }
