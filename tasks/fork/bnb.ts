@@ -789,7 +789,7 @@ task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: 
 
     let lpTokensToMigrate = [];
     if (process.env.NETWORK === 'bnb') {
-        lpTokensToMigrate = ['0x88beb144352bd3109c79076202fac2bceab87117'];
+        lpTokensToMigrate = ['0x88beb144352bd3109c79076202fac2bceab87117', '0xbd459e33307a4ae92fffcb45c6893084cfc273b1', '0x31b82b3125c2b6e8eff230c3624eb7de07fb5cd7'];
     } else if (process.env.NETWORK === 'arbitrum') {
         lpTokensToMigrate = ['0x51E073D92b0c226F7B0065909440b18A85769606', '0xf9c2356a21b60c0c4ddf2397f828dd158f82a274', '0xBd7568d25338940ba212e3F299D2cCC138fA35F0'];
     }
