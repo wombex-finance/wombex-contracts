@@ -3,10 +3,10 @@ import { TaskArguments } from "hardhat/types";
 import {
     BaseRewardPool4626__factory,
     BaseRewardPool__factory,
-    Booster__factory, BoosterEarmark__factory,
+    Booster__factory, BoosterEarmark__factory, BribesRewardPool__factory,
     CvxCrvToken__factory,
     DepositToken__factory,
-    ExtraRewardsDistributor__factory,
+    ExtraRewardsDistributor__factory, GaugeVoting__factory, GaugeVotingLens__factory,
     PoolDepositor__factory,
     ProxyAdmin__factory, ProxyFactory__factory, ReservoirMinter__factory,
     VoterProxy__factory,
@@ -273,9 +273,11 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
     const wombexUiLens = WombexLensUI__factory.connect(bnbtConfig.wombexUiLens, hre.ethers.provider);
     await writeArgsAndVerify(hre,'wombexUiLens', bnbtConfig.wombexUiLens, [
         await wombexUiLens.UNISWAP_ROUTER(),
+        await wombexUiLens.UNISWAP_V3_QUOTER(),
         await wombexUiLens.MAIN_STABLE_TOKEN(),
         await wombexUiLens.WOM_TOKEN(),
         await wombexUiLens.WMX_TOKEN(),
+        await wombexUiLens.WMX_MINTER(),
         await wombexUiLens.WETH_TOKEN(),
         await wombexUiLens.WMX_WOM_TOKEN(),
         await wombexUiLens.WOM_WMX_POOL(),
@@ -301,6 +303,32 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
             [bnbtConfig.crvDepositor]
         ]);
     }
+
+    const gaugeVoting = GaugeVoting__factory.connect(bnbtConfig.gaugeVoting, hre.ethers.provider);
+    await writeArgsAndVerify(hre,'gaugeVoting', bnbtConfig.gaugeVoting, [
+        await gaugeVoting.wmxLocker(),
+        await gaugeVoting.booster(),
+        await gaugeVoting.bribeVoter()
+    ]);
+    const lpTokensAdded = await gaugeVoting.getLpTokensAdded();
+    if (lpTokensAdded.length) {
+        const bribeRewards = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lpTokensAdded[0]), hre.ethers.provider);
+        await writeArgsAndVerify(hre,'bribeRewards', bribeRewards.address, [
+            await bribeRewards.stakingToken(),
+            await bribeRewards.operator(),
+            await bribeRewards.asset(),
+            await bribeRewards.callOperatorOnGetReward(),
+        ]);
+    }
+    await writeArgsAndVerify(hre,'gaugeVotingLens', bnbtConfig.gaugeVotingLens, [
+        bnbtConfig.gaugeVoting
+    ]);
+    await writeArgsAndVerify(hre,'bribeRewardsFactory', await gaugeVoting.bribeRewardsFactory(), [
+        bnbtConfig.gaugeVoting
+    ]);
+    await writeArgsAndVerify(hre,'bribeTokenFactory', await gaugeVoting.tokenFactory(), [
+        bnbtConfig.gaugeVoting
+    ]);
 });
 
 async function verify(networkName, address, argsName, contractName = null) {

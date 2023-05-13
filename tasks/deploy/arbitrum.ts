@@ -3,7 +3,11 @@ import {TaskArguments} from "hardhat/types";
 import {deployContract, getSigner} from "../utils";
 import {
     BaseRewardPool__factory,
-    BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory, BribesTokenFactory__factory,
+    BribesRewardFactory,
+    BribesRewardFactory__factory,
+    BribesTokenFactory,
+    BribesTokenFactory__factory,
+    EarmarkRewardsLens, EarmarkRewardsLens__factory,
     GaugeVoting,
     GaugeVoting__factory,
     GaugeVotingLens,
@@ -247,6 +251,21 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     // );
     // console.log('wmxRewardPoolLens', wmxRewardPoolLens.address);
 
+
+    // const gaugeVotingLensArgs = ['0x6C6fB5e7628D9b232B43ABb81E9D4b5653F46Ca0', '0x5E28771D4414D3325f57542d16516E6e58F3351E'];
+    // fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
+    // const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+    //     hre,
+    //     new GaugeVotingLens__factory(deployer),
+    //     "GaugeVotingLens",
+    //     gaugeVotingLensArgs,
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // console.log('gaugeVotingLens', gaugeVotingLens.address);
+    // return;
+
     const args = [
         '0xc873fEcbd354f5A56E00E710B90EF4201db2448d', //_UNISWAP_ROUTER
         '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', //_UNISWAP_V3_ROUTER
@@ -269,27 +288,46 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
         waitForBlocks,
     );
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    await lens.setUsdStableTokens(['0xff970a61a04b1ca14834a43f5de4533ebddb5cc8', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xeb8e93a0c7504bffd8a8ffa56cd754c63aaebfe8', '0xfea7a6a0b346362bf88a9e4a88416b77a57d6c2a', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f', '0x3f56e0c36d275367b8c502090edf38289b3dea0d', '0xb0b195aefa3650a6908f15cdac7d92f8a5791b0b'], true).then(tx => tx.wait());
-    await lens.setTokenUniV3(['0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96'], true).then(tx => tx.wait());
-    // await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x0520451B19AD0bb00eD35ef391086A692CFC74B2', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait(3));
-    // await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
-    // await lens.setPoolsForToken(['0x05f727876d7C123B9Bb41507251E2Afd81EAD09A'], '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d').then(tx => tx.wait());
-    // await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
-    // await lens.setPoolsForToken(['0x2Ea772346486972E7690219c190dAdDa40Ac5dA4'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
-    // await lens.setTokenSwapThroughBnb(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], true).then(tx => tx.wait(3));
+    await lens.setUsdStableTokens(['0xff970a61a04b1ca14834a43f5de4533ebddb5cc8', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xeb8e93a0c7504bffd8a8ffa56cd754c63aaebfe8', '0xfea7a6a0b346362bf88a9e4a88416b77a57d6c2a', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f', '0x3f56e0c36d275367b8c502090edf38289b3dea0d', '0xb0b195aefa3650a6908f15cdac7d92f8a5791b0b', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f'], true).then(tx => tx.wait());
+    await lens.setTokenUniV3(['0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96', '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], true).then(tx => tx.wait());
+    await lens.setTokensTargetStable(['0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8').then(tx => tx.wait());
+    await lens.setTokensToRouter(['0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'], '0xCAAaB0A72f781B92bA63Af27477aA46aB8F653E7').then(tx => tx.wait());
+    await lens.setTokensTargetStable(['0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'], '0x17fc002b466eec40dae837fc4be5c67993ddbd6f').then(tx => tx.wait());
+    // console.log('getBribeTotalApr', await lens.callStatic.getBribeTotalApr('0x24d2f6be2bf9cdf3627f720cf09d4551580c1ec1', '0x3f90a5a47364c0467031fb00246192d40e3d2d9d', '0xbd7568d25338940ba212e3f299d2ccc138fa35f0', '9464106345051990800395'));
+
+    // const lens = WombexLensUI__factory.connect('0xa2a791c8ad4f3363c3997a565f9d7c19e870c83e', deployer);
     console.log('lens', lens.address);
-    console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96', simpleToExactAmount(1, 18), 18));
-    console.log('getTokenToWithdrawFromPool', await lens.callStatic.getTokenToWithdrawFromPool('0x4a8686df475D4c44324210FFA3Fc1DEA705296e0'));
-    // console.log('getUserBalances 0,1,2,3,4,5', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [0,1,2,3,4,5]));
-    // console.log('getUserBalances 6,7,8,9,10', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [6,7,8,9,10]));
-    // console.log('getUserBalances 11,12,13,14,15', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [11,12,13,14,15]));
-    // console.log('getUserBalances 16,17', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [16,17]));
-    console.log('getUserWmxWom', await lens.callStatic.getUserWmxWom('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x19e6776e35e4afbffd4f51a792113382757940a8', '0x2f667D66dD3145F9cf9665428fd530902b0F7843'));
-    console.log('getUserLocker', await lens.callStatic.getUserLocker('0xdd76ce773ce8bd29d32c8389197e98a6e4c1c1a5', '0x2f667D66dD3145F9cf9665428fd530902b0F7843'));
-    console.log('getUserBalancesDefault', await lens.callStatic.getUserBalancesDefault('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843'));
+
+    const gaugeVotingLensArgs = ['0x6C6fB5e7628D9b232B43ABb81E9D4b5653F46Ca0', lens.address];
+    fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
+    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+        hre,
+        new GaugeVotingLens__factory(deployer),
+        "GaugeVotingLens",
+        gaugeVotingLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVotingLens', gaugeVotingLens.address);
+    console.log('getPools()', await gaugeVotingLens.callStatic.getPools().then(pools => pools.filter(p => p.symbol === 'LP-DAI+')));
+
+    console.log('quotePotentialWithdrawalTokenToBUSD', await lens.callStatic.quotePotentialWithdrawalTokenToBUSD('0xc6bc781e20f9323012f6e422bdf552ff06ba6cd1', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '15986739405025212357290065'));
+    console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '15986739405025212357290065', 6));
+    console.log('getLpUsdOut', await lens.callStatic.getLpUsdOut('0xc6bc781e20f9323012f6e422bdf552ff06ba6cd1', '15986739405025212357290065'));
+    console.log('getTvl', await lens.callStatic.getTvl('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F'));
+    // console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96', simpleToExactAmount(1, 18), 18));
+    // console.log('getTokenToWithdrawFromPool', await lens.callStatic.getTokenToWithdrawFromPool('0x4a8686df475D4c44324210FFA3Fc1DEA705296e0'));
+    // // console.log('getUserBalances 0,1,2,3,4,5', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [0,1,2,3,4,5]));
+    // // console.log('getUserBalances 6,7,8,9,10', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [6,7,8,9,10]));
+    // // console.log('getUserBalances 11,12,13,14,15', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [11,12,13,14,15]));
+    // // console.log('getUserBalances 16,17', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [16,17]));
+    // console.log('getUserWmxWom', await lens.callStatic.getUserWmxWom('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x19e6776e35e4afbffd4f51a792113382757940a8', '0x2f667D66dD3145F9cf9665428fd530902b0F7843'));
+    // console.log('getUserLocker', await lens.callStatic.getUserLocker('0xdd76ce773ce8bd29d32c8389197e98a6e4c1c1a5', '0x2f667D66dD3145F9cf9665428fd530902b0F7843'));
+    // console.log('getUserBalancesDefault', await lens.callStatic.getUserBalancesDefault('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843'));
 });
 
-task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+task("gauge-voting:arbitrum").setAction(async function (taskArguments: TaskArguments, hre) {
     const bnbConfig = JSON.parse(fs.readFileSync('./arbitrum.json', {encoding: 'utf8'}));
     const deployer = await getSigner(hre);
 
@@ -362,4 +400,30 @@ task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments,
 
     await gaugeVoting.setFactories(bribesTokenFactory.address, bribesRewardFactory.address, ZERO_ADDRESS).then(tx => tx.wait());
     await gaugeVoting.transferOwnership(treasuryMultisig).then(tx => tx.wait());
+});
+
+task("earmark-rewards-lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(100000000),
+    })) as any;
+
+    const earmarkRewardsLensArgs = ['0x24D2f6be2bF9cdf3627f720cf09D4551580C1eC1'];
+    fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
+    const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
+        hre,
+        new EarmarkRewardsLens__factory(deployer),
+        "EarmarkRewardsLens",
+        earmarkRewardsLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    // const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xb76591973f0649a1978D7Caf3B93f7aa8Da5E162', deployer);
+    console.log('earmarkRewardsLens', earmarkRewardsLens.address);
+    const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
+    tokensSymbols.map((symbol, index) => {
+        console.log(symbol, diffBalances[index]);
+    })
 });
