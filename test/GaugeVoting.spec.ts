@@ -193,8 +193,8 @@ describe("GaugeVoting", () => {
                 true,
             );
             await multiRewarder1.addRewardToken(rewardToken2.address, 142207).then(tx => tx.wait());
-            await rewardToken1.transfer(multiRewarder1.address, simpleToExactAmount(100000, 9)).then(tx => tx.wait());
-            await rewardToken2.transfer(multiRewarder1.address, simpleToExactAmount(100000, 9)).then(tx => tx.wait());
+            await rewardToken1.transfer(multiRewarder1.address, simpleToExactAmount(100000, 18)).then(tx => tx.wait());
+            await rewardToken2.transfer(multiRewarder1.address, simpleToExactAmount(100000, 18)).then(tx => tx.wait());
 
             multiRewarder2 = await deployContract<WombatBribe>(
                 hre,
@@ -210,7 +210,7 @@ describe("GaugeVoting", () => {
                 {},
                 true,
             );
-            await rewardToken3.transfer(multiRewarder2.address, simpleToExactAmount(100000, 9)).then(tx => tx.wait());
+            await rewardToken3.transfer(multiRewarder2.address, simpleToExactAmount(100000, 18)).then(tx => tx.wait());
 
             await wombatVoter.add(deployerAddress, lptoken1.address, multiRewarder1.address).then(tx => tx.wait());
             await wombatVoter.add(deployerAddress, lptoken2.address, multiRewarder2.address).then(tx => tx.wait());

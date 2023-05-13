@@ -423,23 +423,25 @@ contract BaseRewardPool {
     }
 
     function _earned(RewardState storage _rState, address account) internal view returns (uint256) {
+        uint256 divider = 36 - tokenDecimals[_rState.token];
         return
-        balanceOf(account)
-            .mul(_rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account]))
-            .div(10 ** tokenDecimals[_rState.token])
-            .add(rewards[_rState.token][account]);
+            balanceOf(account)
+                .mul(_rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account]))
+                .div(10 ** divider)
+                .add(rewards[_rState.token][account]);
     }
 
     function _rewardPerToken(RewardState storage _rState) internal view returns (uint256) {
         if (totalSupply() == 0) {
             return _rState.rewardPerTokenStored;
         }
+        uint256 multiplier = 36 - tokenDecimals[_rState.token];
         return
             _rState.rewardPerTokenStored.add(
                 _lastTimeRewardApplicable(_rState)
                 .sub(_rState.lastUpdateTime)
                 .mul(_rState.rewardRate)
-                .mul(10 ** tokenDecimals[_rState.token])
+                .mul(10 ** multiplier)
                 .div(totalSupply())
             );
     }

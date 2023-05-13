@@ -49,7 +49,7 @@ type Pool = {
 describe("Booster", () => {
     let accounts: Signer[];
     let booster: Booster, boosterEarmark: BoosterEarmark;
-    let crv, cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, underlying;
+    let crv, cvx, cvxLocker, cvxCrvRewards, veWom, cvxStakingProxy, underlying, rewardToken6;
     let mocks: any;
     let pool: Pool;
     let contracts: SystemDeployed;
@@ -432,6 +432,10 @@ describe("Booster", () => {
                 true,
             );
             await underlying.transfer(multiRewarder.address, simpleToExactAmount(10000, 9)).then(tx => tx.wait());
+
+            rewardToken6 = await deployContract<MockERC20>(hre, new MockERC20__factory(deployer), "MockERC20", ["Mock0", "M0", 6, deployerAddress, simpleToExactAmount(1000000, 6)], {}, true);
+            await multiRewarder.addRewardToken(rewardToken6.address, 152).then(tx => tx.wait());
+            await rewardToken6.transfer(multiRewarder.address, simpleToExactAmount(10000, 6)).then(tx => tx.wait());
             await mocks.masterWombat.add('1', lptoken.address, multiRewarder.address).then(tx => tx.wait());
             await contracts.voterProxy.connect(daoSigner).setLpTokensPid(mocks.masterWombat.address).then(tx => tx.wait());
 
@@ -449,8 +453,15 @@ describe("Booster", () => {
                 [550, 1100],
                 [true, true]
             ).then(tx => tx.wait());
+            await boosterEarmark.connect(daoSigner).updateDistributionByTokens(
+                rewardToken6.address,
+                [cvxCrvRewards.address, cvxLocker.address],
+                [550, 1100],
+                [true, true]
+            ).then(tx => tx.wait());
 
             await cvxLocker.connect(daoSigner).addReward(underlying.address, booster.address).then(tx => tx.wait());
+            await cvxLocker.connect(daoSigner).addReward(rewardToken6.address, booster.address).then(tx => tx.wait());
             await cvxLocker.connect(daoSigner).addReward(crv.address, booster.address).then(tx => tx.wait());
 
             defPool = await booster.poolInfo(pid);
@@ -511,7 +522,9 @@ describe("Booster", () => {
             let cvxBalanceBefore = await cvx.balanceOf(bobAddress);
             let crvBalanceBefore = await crv.balanceOf(bobAddress);
             let underlyingBalanceBefore = await underlying.balanceOf(bobAddress);
+            let token6BalanceBefore = await rewardToken6.balanceOf(bobAddress);
             const userRewardPerTokenPaid = await crvRewards1.userRewardPerTokenPaid(crv.address, bobAddress);
+            const userRewardPerToken6Paid = await crvRewards1.userRewardPerTokenPaid(rewardToken6.address, bobAddress);
 
             let tx = await crvRewards1["getReward(address,bool)"](bobAddress, false);
             let boosterReward = await getBoosterReward(tx, booster, 1);
@@ -522,12 +535,16 @@ describe("Booster", () => {
             expect(await underlying.balanceOf(bobAddress)).gt(underlyingBalanceBefore);
 
             const receivedCrv = (await crv.balanceOf(bobAddress)).sub(crvBalanceBefore);
+            const receivedToken6 = (await rewardToken6.balanceOf(bobAddress)).sub(token6BalanceBefore);
 
             let balance = await crvRewards1.balanceOf(bobAddress);
             let rewardPerToken = (await crvRewards1.rewardPerToken(crv.address)).sub(userRewardPerTokenPaid);
+            let rewardPerToken6 = (await crvRewards1.rewardPerToken(rewardToken6.address)).sub(userRewardPerToken6Paid);
             let expectedRewards = rewardPerToken.mul(balance).div(simpleToExactAmount(1));
+            let expectedRewardsToken6 = rewardPerToken6.mul(balance).div(simpleToExactAmount(1, 30));
 
             expect(expectedRewards).to.equal(receivedCrv);
+            expect(expectedRewardsToken6).to.equal(receivedToken6);
 
             await increaseTime(60 * 60 * 24 * 6);
 
@@ -714,6 +731,12 @@ describe("Booster", () => {
             );
             await boosterEarmark.connect(daoSigner).updateDistributionByTokens(
                 underlying.address,
+                [cvxCrvRewards.address, cvxLocker.address, treasuryAddress],
+                [2000, 400, 100],
+                [true, true, false]
+            );
+            await boosterEarmark.connect(daoSigner).updateDistributionByTokens(
+                rewardToken6.address,
                 [cvxCrvRewards.address, cvxLocker.address, treasuryAddress],
                 [2000, 400, 100],
                 [true, true, false]
@@ -1128,6 +1151,7 @@ describe("Booster", () => {
 
             await cvxLocker.connect(daoSigner).approveRewardDistributor(crv.address, newBooster, true);
             await cvxLocker.connect(daoSigner).approveRewardDistributor(underlying.address, newBooster, true);
+            await cvxLocker.connect(daoSigner).approveRewardDistributor(rewardToken6.address, newBooster, true);
             await cvxLocker.connect(daoSigner).approveRewardDistributor(mocks.weth.address, newBooster, true);
 
             expect(await newBoosterContract.paused()).to.equal(true);
@@ -1300,7 +1324,7 @@ describe("Booster", () => {
 
             await newBoosterContract.connect(daoSigner).updateLpPendingRewardTokensByGauge(0).then(tx => tx.wait(1));
             const tokens0 = await newBoosterContract.getPendingRewardTokens(lpToken0.address);
-            expect(tokens0.length).eq(2);
+            expect(tokens0.length).eq(3);
             expect(tokens0[0]).eq(crv.address);
             expect(tokens0[1]).eq(underlying.address);
 
