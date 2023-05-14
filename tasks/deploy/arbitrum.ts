@@ -414,6 +414,18 @@ task("gauge-voting-migrate:arbitrum").setAction(async function (taskArguments: T
     const oldGaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
     const daoMultisig = await oldGaugeVoting.owner();
 
+    const lpTokensToMigrate = ['0x51E073D92b0c226F7B0065909440b18A85769606', '0xF9C2356a21B60c0c4DDF2397f828dd158f82a274', '0xBd7568d25338940ba212e3F299D2cCC138fA35F0'];
+    const rewards = [];
+    const lpTokens = await oldGaugeVoting.getLpTokensAdded();
+    console.log('lpTokens.length', lpTokens.length);
+    for (let i = 0; i < lpTokens.length; i++) {
+        if (lpTokensToMigrate.includes(lpTokens[i])) {
+            continue;
+        }
+        rewards.push(await oldGaugeVoting.lpTokenRewards(lpTokens[i]));
+    }
+    console.log('rewards.length', rewards.length);
+
     const newGaugeVoting = await deployContract<GaugeVoting>(
         hre,
         new GaugeVoting__factory(deployer),
@@ -435,18 +447,6 @@ task("gauge-voting-migrate:arbitrum").setAction(async function (taskArguments: T
     );
     console.log('bribesRewardFactory', bribesRewardFactory.address);
     await newGaugeVoting.setFactories(ZERO_ADDRESS, bribesRewardFactory.address, await oldGaugeVoting.stakingToken()).then(tx => tx.wait());
-
-    const lpTokensToMigrate = ['0x51E073D92b0c226F7B0065909440b18A85769606', '0xf9c2356a21b60c0c4ddf2397f828dd158f82a274', '0xBd7568d25338940ba212e3F299D2cCC138fA35F0'];
-    const rewards = [];
-    const lpTokens = await oldGaugeVoting.getLpTokensAdded();
-    for (let i = 0; i < lpTokens.length; i++) {
-        console.log('includes', lpTokens[i], lpTokensToMigrate.includes(lpTokens[i]));
-        if (lpTokensToMigrate.includes(lpTokens[i])) {
-            continue;
-        }
-        rewards.push(await oldGaugeVoting.lpTokenRewards(lpTokens[i]));
-    }
-    console.log('rewards', rewards);
     await newGaugeVoting.registerCreatedLpTokens(rewards).then(tx => tx.wait());
 
     console.log('lpTokensToMigrate', lpTokensToMigrate);
