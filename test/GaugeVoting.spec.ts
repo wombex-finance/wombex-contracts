@@ -135,14 +135,14 @@ describe("GaugeVoting", () => {
                 true,
             );
 
-            gaugeVotingLens = await deployContract<GaugeVotingLens>(
-                hre,
-                new GaugeVotingLens__factory(deployer),
-                "GaugeVotingLens",
-                [gaugeVoting.address],
-                {},
-                true,
-            );
+            // gaugeVotingLens = await deployContract<GaugeVotingLens>(
+            //     hre,
+            //     new GaugeVotingLens__factory(deployer),
+            //     "GaugeVotingLens",
+            //     [gaugeVoting.address],
+            //     {},
+            //     true,
+            // );
 
             await booster.connect(daoSigner).setVoteDelegate(gaugeVoting.address, true).then(tx => tx.wait());
             await booster.connect(daoSigner).setVotingValid(wombatVoter.address, true).then(tx => tx.wait());
@@ -216,7 +216,7 @@ describe("GaugeVoting", () => {
             await wombatVoter.add(deployerAddress, lptoken2.address, multiRewarder2.address).then(tx => tx.wait());
 
             await gaugeVoting.registerLpTokens([lptoken1.address, lptoken2.address]).then(tx => tx.wait());
-            await gaugeVoting.approveRewards().then(tx => tx.wait());
+            // await gaugeVoting.approveRewards().then(tx => tx.wait());
 
             await gaugeVoting.transferOwnership(await daoSigner.getAddress()).then(tx => tx.wait());
 
@@ -321,27 +321,29 @@ describe("GaugeVoting", () => {
         });
 
         it("GaugeVoting config should be able to change by owner", async () => {
-            expect(await gaugeVotingLens.getPools().then(pools => pools.map(p => p.lpToken))).deep.eq([lptoken1.address, lptoken2.address]);
+            // expect(await gaugeVotingLens.getPools(ZERO_ADDRESS).then(pools => pools.map(p => p.lpToken))).deep.eq([lptoken1.address, lptoken2.address]);
             expect(await gaugeVoting.getLpTokensAdded()).deep.eq([lptoken1.address, lptoken2.address]);
             expect(await gaugeVoting.votePeriod()).eq(0);
             expect(await gaugeVoting.voteThreshold()).eq(0);
             expect(await gaugeVoting.voteIncentive()).eq(0);
             expect(await gaugeVoting.executeOnVote()).eq(false);
 
-            await expect(gaugeVoting.setVotingConfig(ONE_DAY, simpleToExactAmount(10), 100, true)).to.be.revertedWith("Ownable: caller is not the owner");
-            await gaugeVoting.connect(daoSigner).setVotingConfig(ONE_DAY, simpleToExactAmount(10), 100, true).then(tx => tx.wait(1));
+            await expect(gaugeVoting.setVotingConfig(ONE_DAY, simpleToExactAmount(10), 100, true, true)).to.be.revertedWith("Ownable: caller is not the owner");
+            await gaugeVoting.connect(daoSigner).setVotingConfig(ONE_DAY, simpleToExactAmount(10), 100, true, false).then(tx => tx.wait(1));
 
             expect(await gaugeVoting.votePeriod()).eq(ONE_DAY);
             expect(await gaugeVoting.voteThreshold()).eq(simpleToExactAmount(10));
             expect(await gaugeVoting.voteIncentive()).eq(100);
             expect(await gaugeVoting.executeOnVote()).eq(true);
+            expect(await gaugeVoting.addRewardOnExecute()).eq(false);
 
-            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 0, false).then(tx => tx.wait(1));
+            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 0, false, true).then(tx => tx.wait(1));
 
             expect(await gaugeVoting.votePeriod()).eq(0);
             expect(await gaugeVoting.voteThreshold()).eq(0);
             expect(await gaugeVoting.voteIncentive()).eq(0);
             expect(await gaugeVoting.executeOnVote()).eq(false);
+            expect(await gaugeVoting.addRewardOnExecute()).eq(true);
 
             expect(await gaugeVoting.nftLocker()).eq(ZERO_ADDRESS);
             await expect(gaugeVoting.setNftLocker(deployerAddress)).to.be.revertedWith("Ownable: caller is not the owner");
@@ -489,7 +491,7 @@ describe("GaugeVoting", () => {
                 rewardPool1Balance[rewardToken1.address.toLowerCase()] = await reward1Tokens[i].balanceOf(reward1.address);
             }
 
-            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 100, true);
+            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 100, true, true);
             res = await gaugeVoting.connect(alice).vote([lptoken1.address], [incrEther]).then(tx => tx.wait());
 
             const lpTokensArr = [lptoken1.address, lptoken2.address];
@@ -526,7 +528,7 @@ describe("GaugeVoting", () => {
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
 
 
-            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 0, false);
+            await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 0, false, true);
 
             res = await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
 

@@ -38,12 +38,15 @@ contract GaugeVoting is Ownable {
     mapping(address => LpTokenStatus) public lpTokenStatus;
     address[] public lpTokensAdded;
 
+    mapping(address => bool) public rewardTokenAdded;
+
     ITokenMinter public stakingToken;
     uint256 public lastVoteAt;
     uint256 public votePeriod;
     uint256 public voteIncentive;
     uint256 public voteThreshold;
     bool public executeOnVote;
+    bool public addRewardOnExecute;
 
     event SetVotingConfig(uint256 votePeriod, uint256 voteThreshold, uint256 voteIncentive, bool executeOnVote);
     event SetNftLocker(address indexed nftLocker);
@@ -70,12 +73,13 @@ contract GaugeVoting is Ownable {
         bribeVoter = _bribeVoter;
     }
 
-    function setVotingConfig(uint256 _votePeriod, uint256 _voteThreshold, uint256 _voteIncentive, bool _executeOnVote) public onlyOwner {
+    function setVotingConfig(uint256 _votePeriod, uint256 _voteThreshold, uint256 _voteIncentive, bool _executeOnVote, bool _addRewardOnExecute) public onlyOwner {
         require(_voteIncentive <= 1000, "voteIncentive>1000");
         votePeriod = _votePeriod;
         voteThreshold = _voteThreshold;
         voteIncentive = _voteIncentive;
         executeOnVote = _executeOnVote;
+        addRewardOnExecute = _addRewardOnExecute;
         emit SetVotingConfig(_votePeriod, _voteThreshold, _voteIncentive, _executeOnVote);
     }
 
@@ -111,10 +115,14 @@ contract GaugeVoting is Ownable {
 
             uint256 rtLen = rewardTokens.length;
             for (uint256 j = 0; j < rtLen; j++) {
-                IERC20(rewardTokens[j]).approve(rewardPool, 0);
-                IERC20(rewardTokens[j]).approve(rewardPool, type(uint256).max);
+                _approveRewardToPool(rewardTokens[j], rewardPool);
             }
         }
+    }
+
+    function _approveRewardToPool(address _rewardToken, address _rewardPool) internal {
+        IERC20(_rewardToken).approve(_rewardPool, 0);
+        IERC20(_rewardToken).approve(_rewardPool, type(uint256).max);
     }
 
     function updateBribeRewardsConfig(address[] calldata _rewards, bool _callOperatorOnGetReward) external onlyOwner {
@@ -265,6 +273,11 @@ contract GaugeVoting is Ownable {
                 if (amount == 0) {
                     emit ZeroRewards(lpToken, bribe, rewardTokens[j]);
                     continue;
+                }
+                if (addRewardOnExecute && !rewardTokenAdded[rewardTokens[j]]) {
+                    booster.setVotingValid(rewardTokens[j], true);
+                    _approveRewardToPool(rewardTokens[j], lpTokenRewards[lpToken]);
+                    rewardTokenAdded[rewardTokens[j]] = true;
                 }
                 booster.voteExecute(
                     rewardTokens[j],
