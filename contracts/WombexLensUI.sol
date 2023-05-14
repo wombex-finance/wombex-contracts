@@ -469,10 +469,18 @@ contract WombexLensUI is Ownable {
     }
 
     function quotePotentialWithdrawalTokenToBUSD(address _womPool, address _fromToken, address _tokenOut, uint256 _lpTokenAmountIn) public returns (uint256) {
-        try IWomPool(_womPool).quotePotentialWithdrawFromOtherAsset(_fromToken, _tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut, uint256 withdrewAmount) {
-            uint8 decimals = getTokenDecimals(_tokenOut);
-            return estimateInBUSDEther(_tokenOut, tokenAmountOut, decimals);
-        } catch {
+        if (_fromToken == _tokenOut) {
+            try IWomPool(_womPool).quotePotentialWithdraw(_tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut) {
+                uint8 decimals = getTokenDecimals(_tokenOut);
+                return estimateInBUSDEther(_tokenOut, tokenAmountOut, decimals);
+            } catch {
+            }
+        } else {
+            try IWomPool(_womPool).quotePotentialWithdrawFromOtherAsset(_fromToken, _tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut, uint256 withdrewAmount) {
+                uint8 decimals = getTokenDecimals(_tokenOut);
+                return estimateInBUSDEther(_tokenOut, tokenAmountOut, decimals);
+            } catch {
+            }
         }
         return 0;
     }
