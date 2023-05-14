@@ -1012,7 +1012,7 @@ task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskAr
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
     })) as any;
 
     const networkConfig = JSON.parse(fs.readFileSync('./' + (process.env.NETWORK || hre.network.name) + '.json', {encoding: 'utf8'}));

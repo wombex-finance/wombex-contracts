@@ -414,7 +414,7 @@ task("gauge-voting-migrate:arbitrum").setAction(async function (taskArguments: T
     const oldGaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
     const daoMultisig = await oldGaugeVoting.owner();
 
-    const lpTokensToMigrate = ['0x51E073D92b0c226F7B0065909440b18A85769606', '0xF9C2356a21B60c0c4DDF2397f828dd158f82a274', '0xBd7568d25338940ba212e3F299D2cCC138fA35F0'];
+    const lpTokensToMigrate = ['0x51E073D92b0c226F7B0065909440b18A85769606', '0xF9C2356a21B60c0c4DDF2397f828dd158f82a274', '0xBd7568d25338940ba212e3F299D2cCC138fA35F0', '0x6ADd078996308547C57B052549a19c5f66BF42C8'];
     const rewards = [];
     const lpTokens = await oldGaugeVoting.getLpTokensAdded();
     console.log('lpTokens.length', lpTokens.length);
