@@ -299,7 +299,7 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     // const lens = WombexLensUI__factory.connect('0xa2a791c8ad4f3363c3997a565f9d7c19e870c83e', deployer);
     console.log('lens', lens.address);
 
-    const gaugeVotingLensArgs = ['0x6C6fB5e7628D9b232B43ABb81E9D4b5653F46Ca0', lens.address];
+    const gaugeVotingLensArgs = ['0x9229CF9a183Fd1E1C83E77f43F625F12AE9cA2AF', lens.address];
     fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
     const gaugeVotingLens = await deployContract<GaugeVotingLens>(
         hre,

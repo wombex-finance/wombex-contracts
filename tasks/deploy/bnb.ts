@@ -657,7 +657,7 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     await lens.setTokensTargetStable(['0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0x90c97f71e18723b0cf0dfa30ee176ab653e89f40').then(tx => tx.wait());
 
     const gaugeVotingLensArgs = [
-        '0x01F5cf0ddf7654714DA2a8D712Ce55687aC6057c',
+        '0x3E4Bb4C5862ff6739177E3770b914534a7378CdE',
         lens.address,
     ];
     fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
