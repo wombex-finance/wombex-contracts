@@ -796,14 +796,14 @@ task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: 
     const rewards = [];
     const lpTokens = await oldGaugeVoting.getLpTokensAdded();
     for (let i = 0; i < lpTokens.length; i++) {
-        console.log('includes', lpTokens[i], lpTokensToMigrate.includes(lpTokens[i]));
-        if (lpTokensToMigrate.includes(lpTokens[i])) {
-            continue;
-        }
+        // console.log('includes', lpTokens[i], lpTokensToMigrate.includes(lpTokens[i]));
+        // if (lpTokensToMigrate.includes(lpTokens[i])) {
+        //     continue;
+        // }
         rewards.push(await oldGaugeVoting.lpTokenRewards(lpTokens[i]));
-        if (i > 0) {
-            break;
-        }
+        // if (i > 0) {
+        //     break;
+        // }
     }
     console.log('rewards', rewards);
     await newGaugeVoting.registerCreatedLpTokens(rewards).then(tx => tx.wait());

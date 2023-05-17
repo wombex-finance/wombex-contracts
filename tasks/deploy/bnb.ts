@@ -1012,24 +1012,25 @@ task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskAr
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
     })) as any;
 
-    const networkConfig = JSON.parse(fs.readFileSync('./' + hre.network.name + '.json', {encoding: 'utf8'}));
+    const networkConfig = JSON.parse(fs.readFileSync('./' + (process.env.NETWORK || hre.network.name) + '.json', {encoding: 'utf8'}));
 
     const oldGaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
     const daoMultisig = await oldGaugeVoting.owner();
 
-    const lpTokensToMigrate = ['0x88beb144352bd3109c79076202fac2bceab87117', '0xbd459e33307a4ae92fffcb45c6893084cfc273b1', '0x31b82b3125c2b6e8eff230c3624eb7de07fb5cd7'];
+    const lpTokensToMigrate = ['0x88bEb144352BD3109c79076202Fac2bcEAb87117', '0xbd459E33307A4ae92fFFCb45C6893084CFC273B1', '0x8Df8b50B73849f0433EE3314BD956e624e67b3ce'];
     const rewards = [];
     const lpTokens = await oldGaugeVoting.getLpTokensAdded();
+    console.log('lpTokens.length', lpTokens.length);
     for (let i = 0; i < lpTokens.length; i++) {
         if (lpTokensToMigrate.includes(lpTokens[i])) {
             continue;
         }
         rewards.push(await oldGaugeVoting.lpTokenRewards(lpTokens[i]));
     }
-    console.log('rewards', rewards);
+    console.log('rewards.length', rewards.length);
 
     const newGaugeVoting = await deployContract<GaugeVoting>(
         hre,
