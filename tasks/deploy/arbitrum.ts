@@ -2,7 +2,8 @@ import {task} from "hardhat/config";
 import {TaskArguments} from "hardhat/types";
 import {deployContract, getSigner} from "../utils";
 import {
-    BaseRewardPool__factory,
+    Asset__factory,
+    BaseRewardPool__factory, Booster__factory,
     BribesRewardFactory,
     BribesRewardFactory__factory,
     BribesTokenFactory,
@@ -298,7 +299,7 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     // const lens = WombexLensUI__factory.connect('0xa2a791c8ad4f3363c3997a565f9d7c19e870c83e', deployer);
     console.log('lens', lens.address);
 
-    const gaugeVotingLensArgs = ['0x6C6fB5e7628D9b232B43ABb81E9D4b5653F46Ca0', lens.address];
+    const gaugeVotingLensArgs = ['0x9229CF9a183Fd1E1C83E77f43F625F12AE9cA2AF', lens.address];
     fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
     const gaugeVotingLens = await deployContract<GaugeVotingLens>(
         hre,
@@ -315,7 +316,22 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     // console.log('quotePotentialWithdrawalTokenToBUSD', await lens.callStatic.quotePotentialWithdrawalTokenToBUSD('0xc6bc781e20f9323012f6e422bdf552ff06ba6cd1', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '15986739405025212357290065'));
     console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '15986739405025212357290065', 6));
     // console.log('getLpUsdOut', await lens.callStatic.getLpUsdOut('0xc6bc781e20f9323012f6e422bdf552ff06ba6cd1', '15986739405025212357290065'));
-    console.log('getTvl', await lens.callStatic.getTvl('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F'));
+    // console.log('getTvl', await lens.callStatic.getTvl('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F'));
+    const boosterAddress = '0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F';
+    console.log('getTvl', await lens.callStatic.getTvl(boosterAddress));
+    const booster = await Booster__factory.connect(boosterAddress, deployer);
+    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    for (let i = 0; i < poolLength; i++) {
+        const poolInfo = await booster.poolInfo(i);
+        const asset = await Asset__factory.connect(poolInfo.lptoken, deployer);
+        const [symbol, poolAddress, underlying] = await Promise.all([
+            asset.symbol(),
+            asset.pool(),
+            asset.underlyingToken()
+        ])
+        const tokenToWithdrawal = await lens.callStatic.getTokenToWithdrawFromPool(poolAddress);
+        console.log(symbol, 'tokenToWithdrawal === underlying', tokenToWithdrawal.toLowerCase() === underlying.toLowerCase(), 'getLpUsdOut', ethers.utils.formatEther(await lens.callStatic.getLpUsdOut(poolAddress, underlying, simpleToExactAmount(1))))
+    }
     // console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96', simpleToExactAmount(1, 18), 18));
     // console.log('getTokenToWithdrawFromPool', await lens.callStatic.getTokenToWithdrawFromPool('0x4a8686df475D4c44324210FFA3Fc1DEA705296e0'));
     // // console.log('getUserBalances 0,1,2,3,4,5', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [0,1,2,3,4,5]));
