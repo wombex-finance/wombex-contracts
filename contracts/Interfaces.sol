@@ -384,6 +384,9 @@ interface IBoosterEarmark {
     function distributionTokenList() external view returns (address[] memory);
     function addPool(address _lptoken, address _gauge) external returns (uint256);
     function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) external returns (uint256);
+    function isEarmarkAvailable(uint256 _pid) external view returns(bool);
+    function isEarmarkPoolAvailable(uint256 _pid, IBooster.PoolInfo memory _pool) external view returns (bool);
+    function earmarkRewards(uint256[] memory _pids) external;
 }
 
 interface ISwapRouter {

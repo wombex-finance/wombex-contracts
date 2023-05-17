@@ -26,6 +26,9 @@ contract BoosterEarmark is Ownable {
     }
     address[] distributionTokens;
 
+    uint256 public earmarkPeriod;
+    mapping(uint256 => uint256) public lastEarmarkAt;
+
     struct EarmarkState {
         IERC20 token;
         uint256 balance;
@@ -45,6 +48,7 @@ contract BoosterEarmark is Ownable {
     event SetEarmarkConfig(uint256 earmarkIncentive);
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
     event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
+    event EarmarkRewardsDiff(address indexed rewardToken, uint256 diffAmount, uint256 pendingAmount, uint256 currentBal);
 
     event ReleaseToken(address indexed token, uint256 amount, address indexed recipient);
 
@@ -239,16 +243,24 @@ contract BoosterEarmark is Ownable {
 
         balances = new uint256[](tLen);
         for (uint256 i = 0; i < tLen; ) {
-            balances[i] = IERC20(_tokens[i]).balanceOf(address(booster)) - balancesBefore[i] + pendingRewards[i];
+            uint256 currentBal = IERC20(_tokens[i]).balanceOf(address(booster));
+            balances[i] = currentBal - balancesBefore[i];
+            if(balances[i] + pendingRewards[i] > currentBal) {
+                emit EarmarkRewardsDiff(_tokens[i], (balances[i] + pendingRewards[i]) - currentBal, pendingRewards[i], currentBal);
+                balances[i] = currentBal;
+            } else {
+                balances[i] += pendingRewards[i];
+            }
             unchecked {
                 ++i;
             }
         }
     }
 
-    function earmarkRewards(uint256 _pid) external {
+    function earmarkRewards(uint256 _pid) public {
         IBooster.PoolInfo memory p = booster.poolInfo(_pid);
         require(!p.shutdown, "closed");
+        require(isEarmarkPoolAvailable(_pid, p), "!available");
 
         //claim crv/wom and bonus tokens
         address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(p.lptoken, p.gauge);
@@ -324,6 +336,32 @@ contract BoosterEarmark is Ownable {
                 ++i;
             }
         }
+    }
+
+    function earmarkRewards(uint256[] memory _pids) external {
+        uint256 len = _pids.length;
+        for (uint256 i = 0; i < len; i++) {
+            earmarkRewards(_pids[i]);
+        }
+    }
+
+    function isEarmarkAvailable(uint256 _pid) public view returns(bool) {
+        return isEarmarkPoolAvailable(_pid, booster.poolInfo(_pid));
+    }
+
+    function isEarmarkPoolAvailable(uint256 _pid, IBooster.PoolInfo memory _pool) public view returns (bool) {
+        if (block.timestamp > lastEarmarkAt[_pid] + earmarkPeriod) {
+            return true;
+        }
+        address[] memory rewardTokens = IRewards(_pool.crvRewards).rewardTokensList();
+        uint256 len = rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            ( , uint256 periodFinish, , , , , , , bool paused) = IRewards(_pool.crvRewards).tokenRewards(rewardTokens[i]);
+            if (!paused && periodFinish < block.timestamp) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] storage) {
