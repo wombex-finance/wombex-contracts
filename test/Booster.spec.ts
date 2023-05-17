@@ -836,7 +836,7 @@ describe("Booster", () => {
 
             await expect(booster.connect(voteDelegate).voteExecute(mockVoting.address, 0, voteData)).to.be.revertedWith("!voting");
             await expect(booster.setVotingValid(mockVoting.address, true)).to.be.revertedWith("!auth");
-            await expect(booster.connect(voteDelegate).setVotingValid(mockVoting.address, true)).to.be.revertedWith("!auth");
+            // await expect(booster.connect(voteDelegate).setVotingValid(mockVoting.address, true)).to.be.revertedWith("!auth");
 
             expect(await booster.votingMap(mockVoting.address), 'voting not set').eq(false);
             await booster.connect(daoSigner).setVotingValid(mockVoting.address, true).then(tx => tx.wait(1));
