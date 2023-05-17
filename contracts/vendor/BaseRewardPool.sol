@@ -43,6 +43,7 @@ import "./interfaces/Interfaces.sol";
 import "./interfaces/MathUtil.sol";
 import "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-0.6/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
 
@@ -67,6 +68,7 @@ contract BaseRewardPool {
     address public operator;
     uint256 public pid;
 
+    mapping(address => uint8) public tokenDecimals;
     mapping(address => uint256) internal _balances;
     uint256 internal _totalSupply;
 
@@ -90,6 +92,7 @@ contract BaseRewardPool {
 
     event UpdateOperatorData(address indexed sender, address indexed operator, uint256 indexed pid);
     event UpdateRatioData(address indexed sender, uint256 duration, uint256 newRewardRatio);
+    event UpdateTokenDecimals(address indexed sender, address token, uint8 decimals);
     event SetRewardTokenPaused(address indexed sender, address indexed token, bool indexed paused);
     event RewardAdded(address indexed token, uint256 currentRewards, uint256 newRewards);
     event Staked(address indexed user, uint256 amount);
@@ -132,6 +135,13 @@ contract BaseRewardPool {
         newRewardRatio = newRewardRatio_;
 
         emit UpdateRatioData(msg.sender, duration_, newRewardRatio_);
+    }
+
+    function setTokenDecimals(address token_, uint8 decimals_) external {
+        require(msg.sender == IBooster(operator).owner(), "!authorized");
+        tokenDecimals[token_] = decimals_;
+
+        emit UpdateTokenDecimals(msg.sender, token_, decimals_);
     }
 
     function setRewardTokenPaused(address token_, bool paused_) external {
@@ -360,6 +370,9 @@ contract BaseRewardPool {
         if (rState.lastUpdateTime == 0) {
             rState.token = _token;
             allRewardTokens.push(_token);
+            if (tokenDecimals[_token] == 0) {
+                tokenDecimals[_token] = ERC20(_token).decimals();
+            }
             require(allRewardTokens.length <= MAX_TOKENS, "!`max_tokens`");
         }
         _rewards = _rewards.add(rState.queuedRewards);
@@ -410,23 +423,25 @@ contract BaseRewardPool {
     }
 
     function _earned(RewardState storage _rState, address account) internal view returns (uint256) {
+        uint256 divider = 36 - tokenDecimals[_rState.token];
         return
-        balanceOf(account)
-            .mul(_rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account]))
-            .div(1e18)
-            .add(rewards[_rState.token][account]);
+            balanceOf(account)
+                .mul(_rewardPerToken(_rState).sub(userRewardPerTokenPaid[_rState.token][account]))
+                .div(10 ** divider)
+                .add(rewards[_rState.token][account]);
     }
 
     function _rewardPerToken(RewardState storage _rState) internal view returns (uint256) {
         if (totalSupply() == 0) {
             return _rState.rewardPerTokenStored;
         }
+        uint256 multiplier = 36 - tokenDecimals[_rState.token];
         return
             _rState.rewardPerTokenStored.add(
                 _lastTimeRewardApplicable(_rState)
                 .sub(_rState.lastUpdateTime)
                 .mul(_rState.rewardRate)
-                .mul(1e18)
+                .mul(10 ** multiplier)
                 .div(totalSupply())
             );
     }

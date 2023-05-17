@@ -30,9 +30,7 @@ import {
     GaugeVoting,
     GaugeVoting__factory,
     BribesRewardFactory,
-    BribesRewardFactory__factory,
-    GaugeVotingLens__factory,
-    GaugeVotingLens,
+    BribesRewardFactory__factory, GaugeVotingLens__factory, GaugeVotingLens, BaseRewardPool4626__factory,
     EarmarkRewardsLens__factory,
     LensPoker,
     LensPoker__factory
@@ -754,9 +752,7 @@ task("test-fork:booster-earmark").setAction(async function (taskArguments: TaskA
     console.log('earmarkRewards success');
 });
 task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: TaskArguments, hre) {
-    // const deployer = await getSigner(hre);
     const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
-    // const deployerAddress = await deployer.getAddress();
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
@@ -764,24 +760,10 @@ task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: 
         gasPrice: ethers.BigNumber.from(5000000000),
     })) as any;
 
-    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
-        hre,
-        new GaugeVotingLens__factory(deployer),
-        "GaugeVotingLens",
-        ['0x01F5cf0ddf7654714DA2a8D712Ce55687aC6057c'],
-        {},
-        true,
-        waitForBlocks,
-    );
-    console.log("getUserRewards", await gaugeVotingLens.getUserRewards('0x2f667D66dD3145F9cf9665428fd530902b0F7843', 2));
-    return;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + process.env.NETWORK + '.json', {encoding: 'utf8'}));
 
-    // console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
-    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
-
-    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
-
-    const oldGaugeVoting = GaugeVoting__factory.connect('0xfC41ACe00811cfF97EB6BAdF42f3d2B9f1ceB3d4', deployer);
+    const oldGaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
+    const daoMultisig = await oldGaugeVoting.owner();
 
     const newGaugeVoting = await deployContract<GaugeVoting>(
         hre,
@@ -804,62 +786,170 @@ task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: 
     );
     console.log('bribesRewardFactory', bribesRewardFactory.address);
     await newGaugeVoting.setFactories(ZERO_ADDRESS, bribesRewardFactory.address, await oldGaugeVoting.stakingToken()).then(tx => tx.wait());
-    const rewards = ["0x1623955a87DC65B19482864d7a1F7213F0e3e04A", "0x24373CF57213874C989444d9712780D4CD7ee0bd", "0x4EB829FB1d7c9d14a214d26419bff94776853b91", "0xa140a78a0a2c4d7B2478C61C8F76F36E0C774C0f", "0x5623EBb81b9a10aD599BaCa9A309F2c409fC498c"];
+
+    let lpTokensToMigrate = [];
+    if (process.env.NETWORK === 'bnb') {
+        lpTokensToMigrate = ['0x88beb144352bd3109c79076202fac2bceab87117', '0xbd459e33307a4ae92fffcb45c6893084cfc273b1', '0x31b82b3125c2b6e8eff230c3624eb7de07fb5cd7'];
+    } else if (process.env.NETWORK === 'arbitrum') {
+        lpTokensToMigrate = ['0x51E073D92b0c226F7B0065909440b18A85769606', '0xf9c2356a21b60c0c4ddf2397f828dd158f82a274', '0xBd7568d25338940ba212e3F299D2cCC138fA35F0'];
+    }
+    const rewards = [];
+    const lpTokens = await oldGaugeVoting.getLpTokensAdded();
+    for (let i = 0; i < lpTokens.length; i++) {
+        // console.log('includes', lpTokens[i], lpTokensToMigrate.includes(lpTokens[i]));
+        // if (lpTokensToMigrate.includes(lpTokens[i])) {
+        //     continue;
+        // }
+        rewards.push(await oldGaugeVoting.lpTokenRewards(lpTokens[i]));
+        // if (i > 0) {
+        //     break;
+        // }
+    }
+    console.log('rewards', rewards);
     await newGaugeVoting.registerCreatedLpTokens(rewards).then(tx => tx.wait());
+
+    console.log('lpTokensToMigrate', lpTokensToMigrate);
+    if (lpTokensToMigrate.length) {
+        await newGaugeVoting.registerLpTokens(lpTokensToMigrate).then(tx => tx.wait());
+    }
+    let lpTokensToDeactivate = [];
+    if (process.env.NETWORK === 'bnb') {
+        lpTokensToDeactivate = ['0xf9bdc872d75f76b946e0770f96851b1f2f653cac', '0x3c42e4f84573ab8c88c8e479b7dc38a7e678d688'];
+        console.log('lpTokensToDeactivate', lpTokensToDeactivate);
+        for (let i = 0; i < lpTokensToDeactivate.length; i++) {
+            await newGaugeVoting.setLpTokenStatus(lpTokensToDeactivate[i], '1').then(tx => tx.wait());
+        }
+    }
+
     await newGaugeVoting.approveRewards().then(tx => tx.wait());
     await newGaugeVoting.transferOwnership(daoMultisig).then(tx => tx.wait());
 
     const dao = await impersonate(daoMultisig, true);
 
-    const booster = Booster__factory.connect(bnbConfig.booster, dao);
+    const booster = Booster__factory.connect(networkConfig.booster, dao);
 
     console.log('migration...');
     await oldGaugeVoting.connect(dao).migrateRewards(rewards, newGaugeVoting.address).then(tx => tx.wait());
     await oldGaugeVoting.connect(dao).migrateStakingToken(newGaugeVoting.address).then(tx => tx.wait());
     await booster.connect(dao).setVoteDelegate(newGaugeVoting.address, true).then(tx => tx.wait());
 
+    const voterAddress = process.env.NETWORK === 'arbitrum' ? '0xb17f6e542373e5662a37e8c354377be2eecfba82' : '0x896860FB33a8298342F5de500e1e3ED1c576379a';
+    const voter = await impersonate(voterAddress, true);
+    await newGaugeVoting.connect(voter).vote([lpTokensToMigrate[0]], ['870269316048197366615']);
+
+    console.log('getLpTokensAdded', await newGaugeVoting.getLpTokensAdded());
     console.log('getVotesDelta 1', await newGaugeVoting.getVotesDelta());
 
     let res = await newGaugeVoting.voteExecute(daoMultisig).then(tx => tx.wait());
-    console.log('1 events', res.events.filter(e => e.event));
+    // console.log('1f events', res.events.filter(e => e.event));
 
-    res = await newGaugeVoting.voteExecute(daoMultisig).then(tx => tx.wait());
-    console.log('2 events', res.events.filter(e => e.event));
+    if (lpTokensToMigrate.length) {
+        console.log('reward events', res.events.filter(e => e.args && e.args.lpToken && e.args.lpToken.toLowerCase() === lpTokensToMigrate[0].toLowerCase()));
+    }
+    // res = await newGaugeVoting.voteExecute(daoMultisig).then(tx => tx.wait());
+    // console.log('2 events', res.events.filter(e => e.event));
 
     console.log('getVotesDelta 2', await newGaugeVoting.getVotesDelta());
 
     await increaseTime(24 * 60 * 60);
-
     res = await newGaugeVoting.voteExecute(daoMultisig).then(tx => tx.wait());
-    console.log('3 events', res.events.filter(e => e.event));
+    // console.log('2 events', res.events.filter(e => e.event));
 
-    const rewardToken = IERC20__factory.connect("0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5", deployer);
-    for (let i = 0; i < rewards.length; i++) {
-        console.log('rewardToken balance', await rewardToken.balanceOf(rewards[i]));
+    if (lpTokensToMigrate.length) {
+        console.log('reward events', res.events.filter(e => e.args && e.args.lpToken && e.args.lpToken.toLowerCase() === lpTokensToMigrate[0].toLowerCase()));
     }
+    if (lpTokensToMigrate.length) {
+        const rewardsPool = BaseRewardPool__factory.connect(await newGaugeVoting.lpTokenRewards(lpTokensToMigrate[0]), deployer);
+        const rewardTokens = await rewardsPool.rewardTokensList();
+        console.log('rewardTokens', rewardTokens);
+        for (let i = 0; i < rewardTokens.length; i++) {
+            console.log('tokenDecimals', await rewardsPool.tokenDecimals(rewardTokens[i]), 'earned', await rewardsPool.earned(rewardTokens[0], voterAddress));
+        }
+    }
+    // const rewardToken = IERC20__factory.connect("0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5", deployer);
+    // for (let i = 0; i < rewards.length; i++) {
+    //     console.log('rewardToken balance', await rewardToken.balanceOf(rewards[i]));
+    // }
 });
 
 task("test-fork-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
-    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
+    const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]));
 
-    const lens = await deployContract<WombexLensUI>(
-        hre,
-        new WombexLensUI__factory(deployer),
-        "WombexLensUI",
-        [],
-        {},
-        true,
-        waitForBlocks,
-    );
-    await lens.setUsdStableTokens(['0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', '0x55d398326f99059fF775485246999027B3197955', '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5', '0x90C97F71E18723b0Cf0dfa30ee176Ab653E89F40', '0x14016E85a25aeb13065688cAFB43044C2ef86784', '0x4268B8F0B87b6Eae5d897996E6b845ddbD99Adf3', '0xFa4BA88Cf97e282c505BEa095297786c16070129', '0x0A3BB08b3a15A19b4De82F8AcFc862606FB69A2D', '0xd17479997F34dd9156Deef8F95A52D81D265be9c'], true).then(tx => tx.wait());
-    await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x0520451B19AD0bb00eD35ef391086A692CFC74B2', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait());
-    await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
-    await lens.setPoolsForToken(['0x05f727876d7C123B9Bb41507251E2Afd81EAD09A'], '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d').then(tx => tx.wait());
-    await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
-    await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
-    await lens.setTokenSwapThroughBnb(['0xf307910A4c7bbc79691fD374889b36d8531B08e3'], true).then(tx => tx.wait());
-    console.log('lens deployed');
-    console.log('getTvl', await lens.callStatic.getTvl('0x561050FFB188420D2605714F84EdA714DA58da69'));
+    // const lens = await deployContract<WombexLensUI>(
+    //     hre,
+    //     new WombexLensUI__factory(deployer),
+    //     "WombexLensUI",
+    //     [
+    //         '0x10ED43C718714eb63d5aA57B78B54704E256024E', //_UNISWAP_ROUTER
+    //         ZERO_ADDRESS, //_UNISWAP_V3_ROUTER
+    //         '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', //_MAIN_STABLE_TOKEN
+    //         '0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1', //_WOM_TOKEN
+    //         '0xa75d9ca2a0a1D547409D82e1B06618EC284A2CeD', //_WMX_TOKEN
+    //         '0xa75d9ca2a0a1D547409D82e1B06618EC284A2CeD', //_WMX_MINTER
+    //         '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', //_WETH_TOKEN
+    //         '0x0415023846Ff1C6016c4d9621de12b24B2402979', //_WMX_WOM_TOKEN
+    //         '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'  //_WOM_WMX_POOL
+    //     ],
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // console.log('lens', lens.address);
+    // await new Promise((resolve) => setTimeout(resolve, 3000));
+    // await lens.setUsdStableTokens(['0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', '0x55d398326f99059fF775485246999027B3197955', '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5', '0x90C97F71E18723b0Cf0dfa30ee176Ab653E89F40', '0x14016E85a25aeb13065688cAFB43044C2ef86784', '0x4268B8F0B87b6Eae5d897996E6b845ddbD99Adf3', '0xFa4BA88Cf97e282c505BEa095297786c16070129', '0x0A3BB08b3a15A19b4De82F8AcFc862606FB69A2D', '0xd17479997F34dd9156Deef8F95A52D81D265be9c', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xB0B195aEFA3650A6908f15CdaC7D92F8a5791B0B'], true).then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x0520451B19AD0bb00eD35ef391086A692CFC74B2', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x05f727876d7C123B9Bb41507251E2Afd81EAD09A'], '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d').then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x2Ea772346486972E7690219c190dAdDa40Ac5dA4'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
+    // await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8', '0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
+    // await lens.setTokenSwapThroughToken(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
+    // await lens.setTokensTargetStable(['0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0x90c97f71e18723b0cf0dfa30ee176ab653e89f40').then(tx => tx.wait());
+    //
+    // const gaugeVotingLensArgs = [
+    //     '0x01F5cf0ddf7654714DA2a8D712Ce55687aC6057c',
+    //     lens.address,
+    // ];
+    // fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
+    // const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+    //     hre,
+    //     new GaugeVotingLens__factory(deployer),
+    //     "GaugeVotingLens",
+    //     gaugeVotingLensArgs,
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // console.log('gaugeVotingLens', gaugeVotingLens.address);
+
+    const gaugeVotingLens = GaugeVotingLens__factory.connect('0xab5fc0e5dea6fcd3c2e8d2100fb28efd807f9280', hre.ethers.provider);
+    const lens = WombexLensUI__factory.connect(await gaugeVotingLens.wombexLensUI(), hre.ethers.provider);
+    const allRewards = await gaugeVotingLens.getTotalRewards(2);
+    for (let i = 0; i < allRewards.length; i++) {
+        if (allRewards[i].rewardToken === ZERO_ADDRESS) {
+            break;
+        }
+        const token = ERC20__factory.connect(allRewards[i].rewardToken, hre.ethers.provider);
+        console.log('reward token', await token.symbol(), 'price', await lens.callStatic.estimateInBUSD(allRewards[i].rewardToken, simpleToExactAmount(1), 18), 'address', allRewards[i].rewardToken);
+    }
+    // const lens = await deployContract<WombexLensUI>(
+    //     hre,
+    //     new WombexLensUI__factory(deployer),
+    //     "WombexLensUI",
+    //     [],
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // await lens.setUsdStableTokens(['0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', '0x55d398326f99059fF775485246999027B3197955', '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5', '0x90C97F71E18723b0Cf0dfa30ee176Ab653E89F40', '0x14016E85a25aeb13065688cAFB43044C2ef86784', '0x4268B8F0B87b6Eae5d897996E6b845ddbD99Adf3', '0xFa4BA88Cf97e282c505BEa095297786c16070129', '0x0A3BB08b3a15A19b4De82F8AcFc862606FB69A2D', '0xd17479997F34dd9156Deef8F95A52D81D265be9c'], true).then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x0520451B19AD0bb00eD35ef391086A692CFC74B2', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x05f727876d7C123B9Bb41507251E2Afd81EAD09A'], '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d').then(tx => tx.wait());
+    // await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
+    // await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
+    // await lens.setTokenSwapThroughBnb(['0xf307910A4c7bbc79691fD374889b36d8531B08e3'], true).then(tx => tx.wait());
+    // console.log('lens deployed');
+    // console.log('getTvl', await lens.callStatic.getTvl('0x561050FFB188420D2605714F84EdA714DA58da69'));
     // console.log('getTokenToWithdrawFromPool', await lens.getTokenToWithdrawFromPool('0x8df1126de13bcfef999556899f469d64021adbae'));
     // console.log('getUserBalancesDefault', await lens.getUserBalancesDefault('0x561050FFB188420D2605714F84EdA714DA58da69', '0x2f667D66dD3145F9cf9665428fd530902b0F7843').then(r => console.log('r.pools[10]', r.pools[10])));
     // console.log('getUserBalances', await lens.getUserBalances('0x9Ac0a3E8864Ea370Bf1A661444f6610dd041Ba1c', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [2,3,4,5,9]));

@@ -92,6 +92,8 @@ interface IBribeVoter {
     function vote(IERC20[] calldata _lpVote, int256[] calldata _deltas) external returns (uint256[][] memory bribeRewards);
     function votes(address _user, address _lpToken) external view returns (uint256);
     function infos(address _lpToken) external view returns (uint104 supplyBaseIndex, uint104 supplyVoteIndex, uint40 nextEpochStartTime, uint128 claimable, bool whitelist, address gaugeManager, address bribe);
+    function weights(address _lpToken) external view returns (uint128 allocPoint, uint128 voteWeight);
+    function getUserVotes(address _user, address _lpToken) external view returns (uint256);
 }
 
 interface IMasterWombatRewarder {
@@ -160,6 +162,8 @@ interface IBribe {
     function rewardTokens() external view returns (IERC20[] memory tokens);
 
     function rewardLength() external view returns (uint256);
+
+    function rewardInfo(uint256 i) external view returns (IERC20 rewardToken, uint96 tokenPerSec, uint128 accTokenPerShare, uint128 distributedAmount);
 }
 
 interface IVe {
@@ -366,6 +370,7 @@ interface IBooster {
     function forceShutdownPool(uint256 _pid) external returns (bool);
     function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
     function voteExecute(address _voting, uint256 _value, bytes calldata _data) external returns (bytes memory);
+    function setVotingValid(address _voting, bool _value) external;
     function mintRatio() external view returns (uint256);
     function customMintRatio(uint256 _pid) external view returns (uint256);
     function crvLockRewards() external view returns (address);
