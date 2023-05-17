@@ -231,7 +231,7 @@ contract Booster{
      * @notice Vote Delegate has the rights to cast votes on the VoterProxy via the Booster
      */
     function setVotingValid(address _voting, bool _valid) external {
-        require(msg.sender==owner, "!auth");
+        require(msg.sender == owner || voteDelegate[msg.sender], "!auth");
         votingMap[_voting] = _valid;
 
         emit VotingMapUpdated(_voting, _valid);

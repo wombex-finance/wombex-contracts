@@ -370,6 +370,7 @@ interface IBooster {
     function forceShutdownPool(uint256 _pid) external returns (bool);
     function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
     function voteExecute(address _voting, uint256 _value, bytes calldata _data) external returns (bytes memory);
+    function setVotingValid(address _voting, bool _value) external;
     function mintRatio() external view returns (uint256);
     function customMintRatio(uint256 _pid) external view returns (uint256);
     function crvLockRewards() external view returns (address);

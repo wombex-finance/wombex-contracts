@@ -54,6 +54,8 @@ import {
     BribesRewardFactory__factory,
     BribesTokenFactory__factory,
     BribesTokenFactory,
+    DepositToken,
+    DepositToken__factory, BaseRewardPoolLocked, BaseRewardPoolLocked__factory, MultiStaker__factory, MultiStaker,
     EarmarkRewardsLens__factory, EarmarkRewardsLens
 } from "../../types/generated";
 import {
@@ -63,12 +65,14 @@ import {
     simpleToExactAmount,
     ZERO_ADDRESS
 } from "../../test-utils";
+import assert from "assert";
 
 const {approvePoolDepositor} = require('../helpers');
 
 const fs = require('fs');
 const ethers = require('ethers');
 const _ = require('lodash');
+const pIteration = require('p-iteration');
 
 const forking = false;
 const waitForBlocks = forking ? undefined : 1;
@@ -610,6 +614,146 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 });
 
+function csvToAccountsAndAmounts(csvName) {
+    const bnbLockCsv = fs.readFileSync('./tasks/data/' + csvName, {encoding: 'utf8'});
+    const lines = bnbLockCsv.split(/\r?\n/);
+    const accounts = [];
+    const amounts = [];
+    lines.forEach(line => {
+        accounts.push(line.split(',')[0]);
+        amounts.push(simpleToExactAmount(line.split(',')[1]));
+    });
+    return {accounts, amounts};
+}
+
+task("reward-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+
+    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('BNB_lock_v1.csv');
+    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('ankrBNB_lock_v1.csv');
+
+    const deployer = await getSigner(hre);
+    const deployerAddress = await deployer.getAddress();
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+    })) as any;
+
+    fs.writeFileSync('./args/multiStaker.js', 'module.exports = ' + JSON.stringify([]));
+    const multiStaker = await deployContract<MultiStaker>(
+        hre,
+        new MultiStaker__factory(deployer),
+        "MultiStaker",
+        [],
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('multiStaker', multiStaker.address);
+
+    const bnbLpAddress = '0x0e99fBfD04c255124A168c6Ae68CcE3c7dCC5760';
+    const ankrBnbLpAddress = '0xB6D83F199b361403BDa2c44712a77F55E7f8855f';
+    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
+    const tokenFactory = TokenFactory__factory.connect(await booster.tokenFactory(), deployer);
+    const namePostfix = await tokenFactory.namePostfix();
+    const symbolPrefix = await tokenFactory.symbolPrefix();
+
+    const bnbStakingToken = await deployContract<DepositToken>(
+        hre,
+        new DepositToken__factory(deployer),
+        "DepositToken",
+        [bnbConfig.booster, bnbLpAddress, namePostfix, symbolPrefix],
+        {},
+        true,
+        waitForBlocks,
+    );
+    const ankrBnbStakingToken = await deployContract<DepositToken>(
+        hre,
+        new DepositToken__factory(deployer),
+        "DepositToken",
+        [bnbConfig.booster, ankrBnbLpAddress, namePostfix, symbolPrefix],
+        {},
+        true,
+        waitForBlocks,
+    );
+
+    const bnbPoolLockedArgs = ['0', bnbStakingToken.address, bnbConfig.wom, bnbConfig.booster, bnbLpAddress, deployerAddress, 1712639772];
+    fs.writeFileSync('./args/bnbPoolLocked.js', 'module.exports = ' + JSON.stringify(bnbPoolLockedArgs));
+    const bnbPool = await deployContract<BaseRewardPoolLocked>(
+        hre,
+        new BaseRewardPoolLocked__factory(deployer),
+        "BaseRewardPoolLocked",
+        bnbPoolLockedArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bnbPool', bnbPool.address);
+    await bnbPool.setLock(bnbAccounts, bnbAmounts, false).then(tx => tx.wait());
+
+    const ankrBnbPoolLockedArgs = ['0', ankrBnbStakingToken.address, bnbConfig.wom, bnbConfig.booster, ankrBnbLpAddress, deployerAddress, 1712639772];
+    const ankrBnbPool = await deployContract<BaseRewardPoolLocked>(
+        hre,
+        new BaseRewardPoolLocked__factory(deployer),
+        "BaseRewardPoolLocked",
+        ankrBnbPoolLockedArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('ankrBnbPool', ankrBnbPool.address);
+    await ankrBnbPool.setLock(ankrBnbAccounts, ankrBnbAmounts, false).then(tx => tx.wait());
+});
+
+task("reset-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const {accounts: oldBnbAccounts} = csvToAccountsAndAmounts('BNB_lock_v1.csv');
+    const {accounts: oldAnkrBnbAccounts} = csvToAccountsAndAmounts('ankrBNB_lock_v1.csv');
+
+    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('BNB_lock_v2.csv');
+    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('ankrBNB_lock_v2.csv');
+
+    const deployer = await getSigner(hre);
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+    })) as any;
+
+    const deployedBnbPool = BaseRewardPoolLocked__factory.connect('0x383A773c9bcaD46E94010D8bb704FF3E450701Ba', deployer);
+    const deployedAnkrBnbPool = BaseRewardPoolLocked__factory.connect('0x8fC093fe17C7b74970277D66Cb85232D3041AdE6', deployer);
+
+    await deployedBnbPool.setLock(oldBnbAccounts, oldBnbAccounts.map(() => '0'), false).then(tx => tx.wait());
+    await deployedAnkrBnbPool.setLock(oldAnkrBnbAccounts, oldAnkrBnbAccounts.map(() => '0'), false).then(tx => tx.wait());
+
+    await deployedBnbPool.setLock(bnbAccounts, bnbAmounts, false).then(tx => tx.wait());
+    await deployedAnkrBnbPool.setLock(ankrBnbAccounts, ankrBnbAmounts, false).then(tx => tx.wait());
+});
+
+task("check-pool-locked:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const {accounts: oldBnbAccounts} = csvToAccountsAndAmounts('BNB_lock_v1.csv');
+    const {accounts: oldAnkrBnbAccounts} = csvToAccountsAndAmounts('ankrBNB_lock_v1.csv');
+
+    const {accounts: bnbAccounts, amounts: bnbAmounts} = csvToAccountsAndAmounts('BNB_lock_v2.csv');
+    const {accounts: ankrBnbAccounts, amounts: ankrBnbAmounts} = csvToAccountsAndAmounts('ankrBNB_lock_v2.csv');
+
+    const signer = await getSigner(hre);
+    const deployedBnbPool = BaseRewardPoolLocked__factory.connect('0x383A773c9bcaD46E94010D8bb704FF3E450701Ba', signer);
+    const deployedAnkrBnbPool = BaseRewardPoolLocked__factory.connect('0x8fC093fe17C7b74970277D66Cb85232D3041AdE6', signer);
+
+    await pIteration.forEachSeries([bnbAccounts, ankrBnbAccounts], (accounts, accIndex) => {
+        const amounts = accIndex ? ankrBnbAmounts : bnbAmounts;
+        return pIteration.forEachSeries(_.chunk(accounts, 10), (chunk, i) => {
+            return pIteration.forEach(chunk, async (address, j) => {
+                const index = i * 10 + j;
+                const balance = await (accIndex ? deployedAnkrBnbPool : deployedBnbPool).lockedBalance(address).then(r => r.toString());
+                console.log('\n' + address);
+                console.log(accIndex + ' amount', amounts[index].toString());
+                console.log('balance ', balance);
+                assert(amounts[index].toString() === balance);
+            });
+        });
+    })
+    console.log('v1 bnbAccounts not persist in v2', oldBnbAccounts.filter(acc => bnbAccounts.indexOf(acc) === -1));
+    console.log('v1 ankrBnbAccounts not persist in v2', oldAnkrBnbAccounts.filter(acc => ankrBnbAccounts.indexOf(acc) === -1));
+});
+
 task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
 
@@ -864,17 +1008,29 @@ task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments,
     await gaugeVoting.transferOwnership(treasuryMultisig).then(tx => tx.wait());
 });
 
-
 task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
     })) as any;
 
-    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
+    const networkConfig = JSON.parse(fs.readFileSync('./' + (process.env.NETWORK || hre.network.name) + '.json', {encoding: 'utf8'}));
 
-    const oldGaugeVoting = GaugeVoting__factory.connect('0xfC41ACe00811cfF97EB6BAdF42f3d2B9f1ceB3d4', deployer);
+    const oldGaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
+    const daoMultisig = await oldGaugeVoting.owner();
+
+    const lpTokensToMigrate = ['0x88bEb144352BD3109c79076202Fac2bcEAb87117', '0xbd459E33307A4ae92fFFCb45C6893084CFC273B1', '0x8Df8b50B73849f0433EE3314BD956e624e67b3ce'];
+    const rewards = [];
+    const lpTokens = await oldGaugeVoting.getLpTokensAdded();
+    console.log('lpTokens.length', lpTokens.length);
+    for (let i = 0; i < lpTokens.length; i++) {
+        if (lpTokensToMigrate.includes(lpTokens[i])) {
+            continue;
+        }
+        rewards.push(await oldGaugeVoting.lpTokenRewards(lpTokens[i]));
+    }
+    console.log('rewards.length', rewards.length);
 
     const newGaugeVoting = await deployContract<GaugeVoting>(
         hre,
@@ -896,22 +1052,18 @@ task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskAr
         waitForBlocks,
     );
     console.log('bribesRewardFactory', bribesRewardFactory.address);
-
-    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
-        hre,
-        new GaugeVotingLens__factory(deployer),
-        "GaugeVotingLens",
-        [newGaugeVoting.address],
-        {},
-        true,
-        waitForBlocks,
-    );
-    console.log('gaugeVotingLens', gaugeVotingLens.address);
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
     await newGaugeVoting.setFactories(ZERO_ADDRESS, bribesRewardFactory.address, await oldGaugeVoting.stakingToken()).then(tx => tx.wait());
-    const rewards = ["0x1623955a87DC65B19482864d7a1F7213F0e3e04A", "0x24373CF57213874C989444d9712780D4CD7ee0bd", "0x4EB829FB1d7c9d14a214d26419bff94776853b91", "0xa140a78a0a2c4d7B2478C61C8F76F36E0C774C0f", "0x5623EBb81b9a10aD599BaCa9A309F2c409fC498c"];
     await newGaugeVoting.registerCreatedLpTokens(rewards).then(tx => tx.wait());
+
+    console.log('lpTokensToMigrate', lpTokensToMigrate);
+    await newGaugeVoting.registerLpTokens(lpTokensToMigrate).then(tx => tx.wait());
+
+    const lpTokensToDeactivate = ['0xf9bdc872d75f76b946e0770f96851b1f2f653cac', '0x3c42e4f84573ab8c88c8e479b7dc38a7e678d688'];
+    console.log('lpTokensToDeactivate', lpTokensToDeactivate);
+    for (let i = 0; i < lpTokensToDeactivate.length; i++) {
+        await newGaugeVoting.setLpTokenStatus(lpTokensToDeactivate[i], '1').then(tx => tx.wait());
+    }
+
     await newGaugeVoting.approveRewards().then(tx => tx.wait());
     await newGaugeVoting.transferOwnership(daoMultisig).then(tx => tx.wait());
 });

@@ -983,7 +983,7 @@ async function deploySideChain(
 
     return {
         ...deployment,
-        cvx,
+        cvx: cvx as Wmx,
         minter: null,
         booster,
         reservoirMinter,

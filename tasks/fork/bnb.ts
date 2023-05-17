@@ -30,9 +30,7 @@ import {
     GaugeVoting,
     GaugeVoting__factory,
     BribesRewardFactory,
-    BribesRewardFactory__factory,
-    GaugeVotingLens__factory,
-    GaugeVotingLens,
+    BribesRewardFactory__factory, GaugeVotingLens__factory, GaugeVotingLens, BaseRewardPool4626__factory,
     EarmarkRewardsLens__factory,
     LensPoker,
     LensPoker__factory
@@ -754,9 +752,7 @@ task("test-fork:booster-earmark").setAction(async function (taskArguments: TaskA
     console.log('earmarkRewards success');
 });
 task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: TaskArguments, hre) {
-    // const deployer = await getSigner(hre);
     const deployer = await hre.ethers.provider.listAccounts().then(accounts => hre.ethers.provider.getSigner(accounts[9]))
-    // const deployerAddress = await deployer.getAddress();
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
@@ -764,24 +760,10 @@ task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: 
         gasPrice: ethers.BigNumber.from(5000000000),
     })) as any;
 
-    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
-        hre,
-        new GaugeVotingLens__factory(deployer),
-        "GaugeVotingLens",
-        ['0x01F5cf0ddf7654714DA2a8D712Ce55687aC6057c'],
-        {},
-        true,
-        waitForBlocks,
-    );
-    console.log("getUserRewards", await gaugeVotingLens.getUserRewards('0x2f667D66dD3145F9cf9665428fd530902b0F7843', 2));
-    return;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + process.env.NETWORK + '.json', {encoding: 'utf8'}));
 
-    // console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
-    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
-
-    const daoMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
-
-    const oldGaugeVoting = GaugeVoting__factory.connect('0xfC41ACe00811cfF97EB6BAdF42f3d2B9f1ceB3d4', deployer);
+    const oldGaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
+    const daoMultisig = await oldGaugeVoting.owner();
 
     const newGaugeVoting = await deployContract<GaugeVoting>(
         hre,
@@ -804,39 +786,90 @@ task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: 
     );
     console.log('bribesRewardFactory', bribesRewardFactory.address);
     await newGaugeVoting.setFactories(ZERO_ADDRESS, bribesRewardFactory.address, await oldGaugeVoting.stakingToken()).then(tx => tx.wait());
-    const rewards = ["0x1623955a87DC65B19482864d7a1F7213F0e3e04A", "0x24373CF57213874C989444d9712780D4CD7ee0bd", "0x4EB829FB1d7c9d14a214d26419bff94776853b91", "0xa140a78a0a2c4d7B2478C61C8F76F36E0C774C0f", "0x5623EBb81b9a10aD599BaCa9A309F2c409fC498c"];
+
+    let lpTokensToMigrate = [];
+    if (process.env.NETWORK === 'bnb') {
+        lpTokensToMigrate = ['0x88beb144352bd3109c79076202fac2bceab87117', '0xbd459e33307a4ae92fffcb45c6893084cfc273b1', '0x31b82b3125c2b6e8eff230c3624eb7de07fb5cd7'];
+    } else if (process.env.NETWORK === 'arbitrum') {
+        lpTokensToMigrate = ['0x51E073D92b0c226F7B0065909440b18A85769606', '0xf9c2356a21b60c0c4ddf2397f828dd158f82a274', '0xBd7568d25338940ba212e3F299D2cCC138fA35F0'];
+    }
+    const rewards = [];
+    const lpTokens = await oldGaugeVoting.getLpTokensAdded();
+    for (let i = 0; i < lpTokens.length; i++) {
+        // console.log('includes', lpTokens[i], lpTokensToMigrate.includes(lpTokens[i]));
+        // if (lpTokensToMigrate.includes(lpTokens[i])) {
+        //     continue;
+        // }
+        rewards.push(await oldGaugeVoting.lpTokenRewards(lpTokens[i]));
+        // if (i > 0) {
+        //     break;
+        // }
+    }
+    console.log('rewards', rewards);
     await newGaugeVoting.registerCreatedLpTokens(rewards).then(tx => tx.wait());
+
+    console.log('lpTokensToMigrate', lpTokensToMigrate);
+    if (lpTokensToMigrate.length) {
+        await newGaugeVoting.registerLpTokens(lpTokensToMigrate).then(tx => tx.wait());
+    }
+    let lpTokensToDeactivate = [];
+    if (process.env.NETWORK === 'bnb') {
+        lpTokensToDeactivate = ['0xf9bdc872d75f76b946e0770f96851b1f2f653cac', '0x3c42e4f84573ab8c88c8e479b7dc38a7e678d688'];
+        console.log('lpTokensToDeactivate', lpTokensToDeactivate);
+        for (let i = 0; i < lpTokensToDeactivate.length; i++) {
+            await newGaugeVoting.setLpTokenStatus(lpTokensToDeactivate[i], '1').then(tx => tx.wait());
+        }
+    }
+
     await newGaugeVoting.approveRewards().then(tx => tx.wait());
     await newGaugeVoting.transferOwnership(daoMultisig).then(tx => tx.wait());
 
     const dao = await impersonate(daoMultisig, true);
 
-    const booster = Booster__factory.connect(bnbConfig.booster, dao);
+    const booster = Booster__factory.connect(networkConfig.booster, dao);
 
     console.log('migration...');
     await oldGaugeVoting.connect(dao).migrateRewards(rewards, newGaugeVoting.address).then(tx => tx.wait());
     await oldGaugeVoting.connect(dao).migrateStakingToken(newGaugeVoting.address).then(tx => tx.wait());
     await booster.connect(dao).setVoteDelegate(newGaugeVoting.address, true).then(tx => tx.wait());
 
+    const voterAddress = process.env.NETWORK === 'arbitrum' ? '0xb17f6e542373e5662a37e8c354377be2eecfba82' : '0x896860FB33a8298342F5de500e1e3ED1c576379a';
+    const voter = await impersonate(voterAddress, true);
+    await newGaugeVoting.connect(voter).vote([lpTokensToMigrate[0]], ['870269316048197366615']);
+
+    console.log('getLpTokensAdded', await newGaugeVoting.getLpTokensAdded());
     console.log('getVotesDelta 1', await newGaugeVoting.getVotesDelta());
 
     let res = await newGaugeVoting.voteExecute(daoMultisig).then(tx => tx.wait());
-    console.log('1 events', res.events.filter(e => e.event));
+    // console.log('1f events', res.events.filter(e => e.event));
 
-    res = await newGaugeVoting.voteExecute(daoMultisig).then(tx => tx.wait());
-    console.log('2 events', res.events.filter(e => e.event));
+    if (lpTokensToMigrate.length) {
+        console.log('reward events', res.events.filter(e => e.args && e.args.lpToken && e.args.lpToken.toLowerCase() === lpTokensToMigrate[0].toLowerCase()));
+    }
+    // res = await newGaugeVoting.voteExecute(daoMultisig).then(tx => tx.wait());
+    // console.log('2 events', res.events.filter(e => e.event));
 
     console.log('getVotesDelta 2', await newGaugeVoting.getVotesDelta());
 
     await increaseTime(24 * 60 * 60);
-
     res = await newGaugeVoting.voteExecute(daoMultisig).then(tx => tx.wait());
-    console.log('3 events', res.events.filter(e => e.event));
+    // console.log('2 events', res.events.filter(e => e.event));
 
-    const rewardToken = IERC20__factory.connect("0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5", deployer);
-    for (let i = 0; i < rewards.length; i++) {
-        console.log('rewardToken balance', await rewardToken.balanceOf(rewards[i]));
+    if (lpTokensToMigrate.length) {
+        console.log('reward events', res.events.filter(e => e.args && e.args.lpToken && e.args.lpToken.toLowerCase() === lpTokensToMigrate[0].toLowerCase()));
     }
+    if (lpTokensToMigrate.length) {
+        const rewardsPool = BaseRewardPool__factory.connect(await newGaugeVoting.lpTokenRewards(lpTokensToMigrate[0]), deployer);
+        const rewardTokens = await rewardsPool.rewardTokensList();
+        console.log('rewardTokens', rewardTokens);
+        for (let i = 0; i < rewardTokens.length; i++) {
+            console.log('tokenDecimals', await rewardsPool.tokenDecimals(rewardTokens[i]), 'earned', await rewardsPool.earned(rewardTokens[0], voterAddress));
+        }
+    }
+    // const rewardToken = IERC20__factory.connect("0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5", deployer);
+    // for (let i = 0; i < rewards.length; i++) {
+    //     console.log('rewardToken balance', await rewardToken.balanceOf(rewards[i]));
+    // }
 });
 
 task("test-fork-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
