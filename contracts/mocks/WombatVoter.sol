@@ -3,7 +3,6 @@ pragma solidity ^0.8.5;
 
 import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
 import '../Interfaces.sol';
-import "hardhat/console.sol";
 
 contract WombatVoter {
     struct GaugeInfo {

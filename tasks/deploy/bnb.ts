@@ -32,20 +32,29 @@ import {
     PoolDepositor,
     PoolDepositor__factory,
     Asset__factory,
-    WomSwapDepositor, WomSwapDepositor__factory,
-    WomStakingProxy, WomStakingProxy__factory,
-    LpVestedEscrow__factory, LpVestedEscrow,
-    WombexLensUI, WombexLensUI__factory,
+    WomSwapDepositor,
+    WomSwapDepositor__factory,
+    WomStakingProxy,
+    WomStakingProxy__factory,
+    LpVestedEscrow__factory,
+    LpVestedEscrow,
+    WombexLensUI,
+    WombexLensUI__factory,
     BoosterEarmark,
     BoosterEarmark__factory,
     WmxRewardPoolFactory__factory,
     WmxRewardPoolFactory,
-    WmxRewardPoolLens__factory, WmxRewardPoolLens,
+    WmxRewardPoolLens__factory,
+    WmxRewardPoolLens,
     GaugeVoting,
     GaugeVoting__factory,
     GaugeVotingLens__factory,
     GaugeVotingLens,
-    BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory__factory, BribesTokenFactory
+    BribesRewardFactory,
+    BribesRewardFactory__factory,
+    BribesTokenFactory__factory,
+    BribesTokenFactory,
+    EarmarkRewardsLens__factory, EarmarkRewardsLens
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -62,7 +71,7 @@ const ethers = require('ethers');
 const _ = require('lodash');
 
 const forking = false;
-const waitForBlocks = forking ? undefined : 3;
+const waitForBlocks = forking ? undefined : 1;
 
 task("deploy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
@@ -607,21 +616,24 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
         maxPriorityFeePerGas: null,
-        gasPrice: ethers.BigNumber.from(5000000000),
+        gasPrice: ethers.BigNumber.from(3000000000),
     })) as any;
 
+
     const args = [
-        '0x10ED43C718714eb63d5aA57B78B54704E256024E',
-        '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
-        '0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1',
-        '0xa75d9ca2a0a1D547409D82e1B06618EC284A2CeD',
-        '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
-        '0x0415023846Ff1C6016c4d9621de12b24B2402979',
-        '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'
+        '0x10ED43C718714eb63d5aA57B78B54704E256024E', //_UNISWAP_ROUTER
+        ZERO_ADDRESS, //_UNISWAP_V3_ROUTER
+        '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', //_MAIN_STABLE_TOKEN
+        '0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1', //_WOM_TOKEN
+        '0xa75d9ca2a0a1D547409D82e1B06618EC284A2CeD', //_WMX_TOKEN
+        '0xa75d9ca2a0a1D547409D82e1B06618EC284A2CeD', //_WMX_MINTER
+        '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', //_WETH_TOKEN
+        '0x0415023846Ff1C6016c4d9621de12b24B2402979', //_WMX_WOM_TOKEN
+        '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'  //_WOM_WMX_POOL
     ];
     fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
 
-    // const lens = WombexLensUI__factory.connect('0x49ce4648979238653be2B45b142BE8bD676BF083', deployer);
+    // const lens = WombexLensUI__factory.connect('0xA557e3D026eA201Eb3B0e04A64d93761ca2cC42b', deployer);
     const lens = await deployContract<WombexLensUI>(
         hre,
         new WombexLensUI__factory(deployer),
@@ -631,16 +643,43 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
         true,
         waitForBlocks,
     );
+    console.log('lens', lens.address);
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    await lens.setUsdStableTokens(['0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', '0x55d398326f99059fF775485246999027B3197955', '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5', '0x90C97F71E18723b0Cf0dfa30ee176Ab653E89F40', '0x14016E85a25aeb13065688cAFB43044C2ef86784', '0x4268B8F0B87b6Eae5d897996E6b845ddbD99Adf3', '0xFa4BA88Cf97e282c505BEa095297786c16070129', '0x0A3BB08b3a15A19b4De82F8AcFc862606FB69A2D', '0xd17479997F34dd9156Deef8F95A52D81D265be9c'], true).then(tx => tx.wait(3));
-    await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x0520451B19AD0bb00eD35ef391086A692CFC74B2', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait(3));
+    await lens.setUsdStableTokens(['0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', '0x55d398326f99059fF775485246999027B3197955', '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5', '0x90C97F71E18723b0Cf0dfa30ee176Ab653E89F40', '0x14016E85a25aeb13065688cAFB43044C2ef86784', '0x4268B8F0B87b6Eae5d897996E6b845ddbD99Adf3', '0xFa4BA88Cf97e282c505BEa095297786c16070129', '0x0A3BB08b3a15A19b4De82F8AcFc862606FB69A2D', '0xd17479997F34dd9156Deef8F95A52D81D265be9c', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xB0B195aEFA3650A6908f15CdaC7D92F8a5791B0B'], true).then(tx => tx.wait());
+    await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x0520451B19AD0bb00eD35ef391086A692CFC74B2', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x05f727876d7C123B9Bb41507251E2Afd81EAD09A'], '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x2Ea772346486972E7690219c190dAdDa40Ac5dA4'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
-    await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait(3));
-    await lens.setTokenSwapThroughBnb(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], true).then(tx => tx.wait(3));
-    console.log('lens', lens.address);
+    await lens.setPoolsForToken(['0x8b892b6Ea1d0e5B29b719d6Bd6eb9354f1cDE060'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
+    await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8', '0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
+    await lens.setTokenSwapThroughToken(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
+    await lens.setTokensTargetStable(['0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0x90c97f71e18723b0cf0dfa30ee176ab653e89f40').then(tx => tx.wait());
+
+    const gaugeVotingLensArgs = [
+        '0x3E4Bb4C5862ff6739177E3770b914534a7378CdE',
+        lens.address,
+    ];
+    fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
+    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+        hre,
+        new GaugeVotingLens__factory(deployer),
+        "GaugeVotingLens",
+        gaugeVotingLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVotingLens', gaugeVotingLens.address);
+
+    // console.log('getProtocolStats', await lens.callStatic.getProtocolStats('0x561050FFB188420D2605714F84EdA714DA58da69'));
+    // console.log('getTotalRevenue', await lens.callStatic.getTotalRevenue('0x561050FFB188420D2605714F84EdA714DA58da69'));
+    // const booster = Booster__factory.connect('0x561050FFB188420D2605714F84EdA714DA58da69', deployer);
+    // const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    // for (let i = 0; i < poolLength; i++) {
+    //     const {crvRewards} = await booster.poolInfo(i);
+    //     console.log(i, 'getPoolRewardsInUsd', await lens.callStatic.getPoolRewardsInUsd(crvRewards).then(r => ethers.utils.formatEther(r)));
+    // }
 });
 
 task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
@@ -722,6 +761,32 @@ task("wmx-reward-pool-lens:bnb").setAction(async function (taskArguments: TaskAr
         waitForBlocks,
     );
     console.log('wmxRewardPoolLens', wmxRewardPoolLens.address);
+});
+
+task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+    })) as any;
+
+    const earmarkRewardsLensArgs = ['0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569'];
+    fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
+    const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
+        hre,
+        new EarmarkRewardsLens__factory(deployer),
+        "EarmarkRewardsLens",
+        earmarkRewardsLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    // const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xb76591973f0649a1978D7Caf3B93f7aa8Da5E162', deployer);
+    console.log('earmarkRewardsLens', earmarkRewardsLens.address);
+    const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
+    tokensSymbols.map((symbol, index) => {
+        console.log(symbol, diffBalances[index]);
+    })
 });
 
 task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments, hre) {

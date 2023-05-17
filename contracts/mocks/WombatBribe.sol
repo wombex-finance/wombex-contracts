@@ -6,7 +6,6 @@ import { Address } from "@openzeppelin/contracts-0.8/utils/Address.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import './WombatVoter.sol';
 import './MultiRewarderPerSec.sol';
-import "hardhat/console.sol";
 
 interface IVoter {
     struct GaugeWeight {
@@ -26,7 +25,7 @@ interface IVoter {
  * Bribe.onVote->updateReward() is a bit different from SimpleRewarder.
  * Here we reduce the original total amount of share
  */
-contract WombatBribe is IBribe, MultiRewarderPerSec {
+contract WombatBribe is MultiRewarderPerSec {
     using SafeERC20 for IERC20;
 
     constructor(
@@ -41,7 +40,7 @@ contract WombatBribe is IBribe, MultiRewarderPerSec {
         address user,
         uint256 newVote,
         uint256 originalTotalVotes
-    ) external override returns (uint256[] memory rewards) {
+    ) external returns (uint256[] memory rewards) {
         _updateReward(originalTotalVotes);
         return _onReward(user, newVote);
     }
@@ -58,20 +57,15 @@ contract WombatBribe is IBribe, MultiRewarderPerSec {
         (, voteWeight) = WombatVoter(master).weights(lpToken);
     }
 
-    function rewardLength() external view override(IBribe, MultiRewarderPerSec) returns (uint256) {
+    function rewardLength() external view override(MultiRewarderPerSec) returns (uint256) {
         return _rewardLength();
     }
 
-    function rewardTokens() external view override(IBribe, MultiRewarderPerSec) returns (IERC20[] memory tokens) {
+    function rewardTokens() external view override(MultiRewarderPerSec) returns (IERC20[] memory tokens) {
         return _rewardTokens();
     }
 
-    function pendingTokens(address _user)
-    external
-    view
-    override(IBribe, MultiRewarderPerSec)
-    returns (uint256[] memory tokens)
-    {
+    function pendingTokens(address _user) external view override(MultiRewarderPerSec) returns (uint256[] memory tokens) {
         return _pendingTokens(_user);
     }
 }

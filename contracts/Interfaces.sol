@@ -92,6 +92,8 @@ interface IBribeVoter {
     function vote(IERC20[] calldata _lpVote, int256[] calldata _deltas) external returns (uint256[][] memory bribeRewards);
     function votes(address _user, address _lpToken) external view returns (uint256);
     function infos(address _lpToken) external view returns (uint104 supplyBaseIndex, uint104 supplyVoteIndex, uint40 nextEpochStartTime, uint128 claimable, bool whitelist, address gaugeManager, address bribe);
+    function weights(address _lpToken) external view returns (uint128 allocPoint, uint128 voteWeight);
+    function getUserVotes(address _user, address _lpToken) external view returns (uint256);
 }
 
 interface IMasterWombatRewarder {
@@ -160,6 +162,8 @@ interface IBribe {
     function rewardTokens() external view returns (IERC20[] memory tokens);
 
     function rewardLength() external view returns (uint256);
+
+    function rewardInfo(uint256 i) external view returns (IERC20 rewardToken, uint96 tokenPerSec, uint128 accTokenPerShare, uint128 distributedAmount);
 }
 
 interface IVe {
@@ -194,6 +198,7 @@ interface IStaker{
     function getGaugeRewardTokens(address _lptoken, address _gauge) external returns (address[] memory tokens);
     function claimCrv(address, uint256) external returns (address[] memory tokens, uint256[] memory balances);
     function balanceOfPool(address, address) external view returns (uint256);
+    function lpTokenToPid(address, address) external view returns (uint256);
     function operator() external view returns (address);
     function depositor() external view returns (address);
     function veWom() external view returns (address);
@@ -347,6 +352,7 @@ interface IBooster {
     function crv() external view returns (address);
     function owner() external view returns (address);
     function voterProxy() external view returns (address);
+    function earmarkDelegate() external view returns (address);
     function poolLength() external view returns (uint256);
     function poolInfo(uint256 _pid) external view returns (PoolInfo memory);
     function depositFor(uint256 _pid, uint256 _amount, bool _stake, address _receiver) external returns (bool);
@@ -358,7 +364,7 @@ interface IBooster {
     function approveDistribution(address _distro, address[] memory _distributionTokens, uint256 _amount) external;
     function approvePoolsCrvRewardsDistribution(address _token) external;
     function distributeRewards(uint256 _pid, address _lpToken, address _rewardToken, address[] memory _transferTo, uint256[] memory _transferAmount, bool[] memory _callQueue) external;
-    function lpPendingRewards(address _lptoken, address _token) external returns (uint256);
+    function lpPendingRewards(address _lptoken, address _token) external view returns (uint256);
     function earmarkRewards(uint256 _pid) external;
     function shutdownPool(uint256 _pid) external returns (bool);
     function forceShutdownPool(uint256 _pid) external returns (bool);
@@ -451,4 +457,35 @@ interface IMasterWombatV2 {
     ) external;
 
     function updateFactor(address _user, uint256 _newVeWomBalance) external;
+
+    function poolInfo(uint256 _pid) external view returns (address lpToken, uint96 allocPoint, IMasterWombatRewarder rewarder, uint256 sumOfFactors, uint104 accWomPerShare, uint104 accWomPerFactorShare, uint40 lastRewardTimestamp);
+}
+
+interface IMasterWombatV3 {
+    struct PoolInfoV3 {
+        address lpToken; // Address of LP token contract.
+        ////
+        address rewarder;
+        uint40 periodFinish;
+        ////
+        uint128 sumOfFactors; // 20.18 fixed point. the sum of all boosted factors by all of the users in the pool
+        uint128 rewardRate; // 20.18 fixed point.
+        ////
+        uint104 accWomPerShare; // 19.12 fixed point. Accumulated WOM per share, times 1e12.
+        uint104 accWomPerFactorShare; // 19.12 fixed point. Accumulated WOM per factor share
+        uint40 lastRewardTimestamp;
+    }
+
+    function poolInfoV3(uint256 _index) external view returns (PoolInfoV3 memory);
+
+    // Info of each user.
+    struct UserInfo {
+        // storage slot 1
+        uint128 amount; // 20.18 fixed point. How many LP tokens the user has provided.
+        uint128 factor; // 20.18 fixed point. boosted factor = sqrt (lpAmount * veWom.balanceOf())
+        // storage slot 2
+        uint128 rewardDebt; // 20.18 fixed point. Reward debt. See explanation below.
+        uint128 pendingWom; // 20.18 fixed point. Amount of pending wom
+    }
+    function userInfo(uint256 _pid, address _user) external view returns (UserInfo memory);
 }
