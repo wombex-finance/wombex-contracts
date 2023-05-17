@@ -96,6 +96,7 @@ contract Booster{
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
     event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
     event RewardClaimed(uint256 indexed pid, address indexed user, uint256 amount, bool indexed lock, uint256 mintAmount, uint256 penalty);
+    event MinterMint(address indexed recipient, uint256 amount);
 
     /**
      * @dev Constructor doing what constructors do. It is noteworthy that
@@ -730,29 +731,19 @@ contract Booster{
         return true;
     }
 
-    function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external {
-        require(msg.sender == poolManager, "!auth");
-
-        address oldGauge = poolInfo[migratePids[0]].gauge;
-
-        for (uint i = 0; i < migratePids.length; i++) {
-            uint256 pid = migratePids[i];
-            require(poolInfo[pid].gauge == oldGauge, "!gauge");
-            address lptoken = poolInfo[pid].lptoken;
-
-            if (!IStaker(voterProxy).lpTokenPidSet(_newGauge, lptoken)) {
-                continue;
-            }
-
-            uint128 amount = getLpBalance(oldGauge, lptoken);
-            IStaker(voterProxy).withdrawLp(lptoken, oldGauge, amount);
-
-            IERC20(lptoken).safeTransfer(voterProxy, amount);
-            IStaker(voterProxy).deposit(lptoken, _newGauge);
-
-            poolInfo[pid].gauge = _newGauge;
-        }
+    /**
+     * @notice Allows the owner to mint new `cvx` tokens and allocate them to a specified address.
+     * @param _address The address to allocate the newly minted tokens to.
+     * @param _amount The amount of `cvx` tokens to be minted.
+     * @return A boolean indicating whether or not the operation was successful.
+     */
+    function minterMint(address _address, uint256 _amount) external returns(bool){
+        require(msg.sender == owner, "!auth");
+        ITokenMinter(cvx).mint(_address, _amount);
+        emit MinterMint(_address, _amount);
+        return true;
     }
+
 
     function getLpBalance(address _gauge, address _lptoken) public returns (uint128 amount) {
         uint256 mwPid = IStaker(voterProxy).lpTokenToPid(_gauge, _lptoken);

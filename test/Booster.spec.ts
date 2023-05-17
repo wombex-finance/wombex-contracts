@@ -62,6 +62,8 @@ describe("Booster", () => {
     let aliceAddress: string;
     let bob: Signer;
     let bobAddress: string;
+    let dan: Signer;
+    let danAddress: string;
     let voteDelegate: Signer;
     let voteDelegateAddress: string;
     let treasuryAddress: string;
@@ -94,6 +96,8 @@ describe("Booster", () => {
         bobAddress = await bob.getAddress();
         voteDelegate = accounts[3];
         voteDelegateAddress = await voteDelegate.getAddress();
+        dan = accounts[4];
+        danAddress = await dan.getAddress();
     };
 
     async function getBoosterReward(tx, _booster, logsLength) {
@@ -631,6 +635,17 @@ describe("Booster", () => {
 
             expect(await crvRewards.duration()).eq(604800);
             expect(await crvRewards.newRewardRatio()).eq(830);
+        });
+    });
+
+    describe("minting using minterMint", async () => {
+        it("booster owner should have rights to call setRewardParams", async () => {
+            await expect(booster.minterMint(danAddress, simpleToExactAmount(1))).to.be.revertedWith("!auth");
+
+            let balanceBefore = await cvx.balanceOf(danAddress);
+            let factMintAmount = await cvx.getFactAmounMint(simpleToExactAmount(1));
+            await booster.connect(daoSigner).minterMint(danAddress, simpleToExactAmount(1));
+            expect((await cvx.balanceOf(danAddress)).sub(balanceBefore)).eq(factMintAmount);
         });
     });
 
