@@ -259,7 +259,6 @@ contract BoosterEarmark is Ownable {
 
     function earmarkRewards(uint256 _pid) public {
         IBooster.PoolInfo memory p = booster.poolInfo(_pid);
-        require(!p.shutdown, "closed");
         require(isEarmarkPoolAvailable(_pid, p), "!available");
 
         //claim crv/wom and bonus tokens
@@ -345,23 +344,34 @@ contract BoosterEarmark is Ownable {
         }
     }
 
-    function isEarmarkAvailable(uint256 _pid) public view returns(bool) {
+    function isEarmarkAvailable(uint256 _pid) public view returns (bool) {
         return isEarmarkPoolAvailable(_pid, booster.poolInfo(_pid));
     }
 
     function isEarmarkPoolAvailable(uint256 _pid, IBooster.PoolInfo memory _pool) public view returns (bool) {
-        if (block.timestamp > lastEarmarkAt[_pid] + earmarkPeriod) {
-            return true;
+        return getEarmarkPoolExecuteOn(_pid, _pool) < block.timestamp;
+    }
+
+    function getEarmarkPoolExecuteOn(uint256 _pid) public view returns (uint256) {
+        return getEarmarkPoolExecuteOn(_pid, booster.poolInfo(_pid));
+    }
+
+    function getEarmarkPoolExecuteOn(uint256 _pid, IBooster.PoolInfo memory _pool) public view returns (uint256 executeOn) {
+        if (_pool.shutdown) {
+            return type(uint256).max;
+        }
+        executeOn = lastEarmarkAt[_pid] + earmarkPeriod;
+        if (block.timestamp > executeOn) {
+            return executeOn;
         }
         address[] memory rewardTokens = IRewards(_pool.crvRewards).rewardTokensList();
         uint256 len = rewardTokens.length;
         for (uint256 i = 0; i < len; i++) {
             ( , uint256 periodFinish, , , , , , , bool paused) = IRewards(_pool.crvRewards).tokenRewards(rewardTokens[i]);
-            if (!paused && periodFinish < block.timestamp) {
-                return true;
+            if (!paused && periodFinish < executeOn) {
+                executeOn = periodFinish;
             }
         }
-        return false;
     }
 
     function _getDistributionByTokens(uint256 _pid, address _rewardToken) internal view returns(TokenDistro[] storage) {

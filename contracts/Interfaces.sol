@@ -387,6 +387,9 @@ interface IBoosterEarmark {
     function isEarmarkAvailable(uint256 _pid) external view returns(bool);
     function isEarmarkPoolAvailable(uint256 _pid, IBooster.PoolInfo memory _pool) external view returns (bool);
     function earmarkRewards(uint256[] memory _pids) external;
+    function earmarkPeriod() external view returns (uint256);
+    function lastEarmarkAt(uint256 pid) external view returns (uint256);
+    function getEarmarkPoolExecuteOn(uint256 pid) external view returns (uint256);
 }
 
 interface ISwapRouter {
