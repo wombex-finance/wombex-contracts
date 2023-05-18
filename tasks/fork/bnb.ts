@@ -317,7 +317,7 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
     console.log('crvRewards operator', await crvRewards.operator());
     console.log('crvRewards balance', await crvRewards.balanceOf(busdHolderAddress));
 
-    await newBoosterEarmark.earmarkRewards(0).then(tx => tx.wait(1));
+    await newBoosterEarmark['earmarkRewards(uint256)'](0).then(tx => tx.wait(1));
 
     console.log('1 wom before', await wom.balanceOf(womHolderAddress));
     console.log('1 wmx before', await wmx.balanceOf(womHolderAddress));
@@ -521,34 +521,8 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         };
         // await newMasterWombat.add(pool.allocPoint, pool.lpToken, pool.rewarder).then(tx => tx.wait());
     }
+
     console.log('lpTokenBalance', lpTokenBalance);
-
-    const newMasterWombat = MasterWombatV2__factory.connect('0x489833311676B566f888119c29bd997Dc6C95830', deployer);
-    const newMasterWombatOwner = await impersonate(await newMasterWombat.owner(), true);
-    await voterProxy.connect(daoSigner).setLpTokensPid(newMasterWombat.address).then(tx => tx.wait());
-    // await newMasterWombat.connect(newMasterWombatOwner).unpause();
-    const pids = Array.from(Array(await newBooster.poolLength().then(pl => parseInt(pl.toString()))).keys());
-    await newBoosterEarmark.connect(daoSigner).gaugeMigrate(newMasterWombat.address, pids).then(tx => tx.wait());
-
-    for (let i = 0; i < mwLen; i++) {
-        const pool = await oldMW.poolInfo(i);
-        const olBalance = await oldMW.userInfo(await voterProxy.lpTokenToPid(oldMW.address, pool.lpToken), voterProxy.address).then(u => u.amount);
-        expect(olBalance).eq(0);
-        const pid = await voterProxy.lpTokenToPid(newMasterWombat.address, pool.lpToken);
-        const pidSet = await voterProxy.lpTokenPidSet(newMasterWombat.address, pool.lpToken);
-        const newBalance = await newMasterWombat.userInfo(pid, voterProxy.address).then(u => u.amount);
-        const rewardTokens = pidSet ? await voterProxy.getGaugeRewardTokens(pool.lpToken, newMasterWombat.address) : null;
-        console.log('pool.lpToken', pid.toString(), pidSet, pool.lpToken, pidSet ? newBalance.toString() : null, 'rewardTokens', rewardTokens);
-        // if (pidSet) {
-        //     expect(newBalance).eq(lpTokenBalance[pool.lpToken].balance);
-        // }
-    }
-
-    for (let i = 0; i < newPoolLength; i++) {
-        const newPool = await newBooster.poolInfo(i);
-        console.log(i, 'newPool.gauge', newPool.gauge);
-    }
-
     console.log('poolDepositor.deposit');
     await poolDepositor.connect(busdHolder).deposit(busdLpAddress, simpleToExactAmount(1), 0, true).then(tx => tx.wait(1));
 
@@ -561,7 +535,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     console.log('crvRewards balance', await crvRewards.balanceOf(busdHolderAddress));
 
     for(let i = 0; i < newPoolLength; i++) {
-        const res = await newBoosterEarmark.earmarkRewards(i).then(tx => tx.wait(1));
+        const res = await newBoosterEarmark['earmarkRewards(uint256)'](i).then(tx => tx.wait(1));
         console.log('earmarkRewards events', res.events.filter(e => e.event === 'EarmarkRewardsTransfer').map(e => ({
             pid: e.args.pid.toString(),
             lpToken: e.args.lpToken,
@@ -622,7 +596,7 @@ task("test-fork:check-earmark").setAction(async function (taskArguments: TaskArg
         const pool = await booster.poolInfo(pools[i].pid);
         const lensRewards = await earmarkRewardsLens.getRewards();
         console.log(pools[i].pid.toString(), 'before pending', await booster.lpPendingRewards(pool.lptoken, bnbConfig.wom).then(r => r.toString()), 'diff', lensRewards.diffBalances[0].toString());
-        await boosterEarmark.earmarkRewards(pools[i].pid).then(tx => tx.wait());
+        await boosterEarmark['earmarkRewards(uint256)'](pools[i].pid).then(tx => tx.wait());
         console.log(pools[i].pid.toString(), 'after pending', await lensPoker.getPokeRequiredPendingPools(false, useBalanceToDiff).then(res => res.pools.map(p => ({pid: p.pid.toString(), womDiff: parseFloat(ethers.utils.formatEther(p.womDiff))}))));
     }
 
@@ -748,7 +722,7 @@ task("test-fork:booster-earmark").setAction(async function (taskArguments: TaskA
     await getBoosterValues(booster, boosterEarmark);
 
     console.log('earmarkRewards 10');
-    await boosterEarmark.earmarkRewards(10).then(tx => tx.wait());
+    await boosterEarmark['earmarkRewards(uint256)'](10).then(tx => tx.wait());
     console.log('earmarkRewards success');
 });
 task("test-fork:gauge-voting-migrate").setAction(async function (taskArguments: TaskArguments, hre) {
@@ -924,7 +898,7 @@ task("test-fork-lens:bnb").setAction(async function (taskArguments: TaskArgument
 
     const gaugeVotingLens = GaugeVotingLens__factory.connect('0xab5fc0e5dea6fcd3c2e8d2100fb28efd807f9280', hre.ethers.provider);
     const lens = WombexLensUI__factory.connect(await gaugeVotingLens.wombexLensUI(), hre.ethers.provider);
-    const allRewards = await gaugeVotingLens.getTotalRewards(2);
+    const allRewards = await gaugeVotingLens.callStatic.getTotalRewards(2);
     for (let i = 0; i < allRewards.length; i++) {
         if (allRewards[i].rewardToken === ZERO_ADDRESS) {
             break;
