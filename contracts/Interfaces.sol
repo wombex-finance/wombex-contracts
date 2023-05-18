@@ -366,6 +366,7 @@ interface IBooster {
     function distributeRewards(uint256 _pid, address _lpToken, address _rewardToken, address[] memory _transferTo, uint256[] memory _transferAmount, bool[] memory _callQueue) external;
     function lpPendingRewards(address _lptoken, address _token) external view returns (uint256);
     function earmarkRewards(uint256 _pid) external;
+    function earmarkRewardsIfAvailable(uint256 _pid) external;
     function shutdownPool(uint256 _pid) external returns (bool);
     function forceShutdownPool(uint256 _pid) external returns (bool);
     function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;

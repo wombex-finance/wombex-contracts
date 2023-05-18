@@ -607,7 +607,7 @@ async function deployFirstStage(
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setEarmarkConfig')
-    tx = await boosterEarmark.setEarmarkConfig(10);
+    tx = await boosterEarmark.setEarmarkConfig(10, 60 * 60);
     await waitForTx(tx, debug, waitForBlocks);
 
     console.log('booster.setExtraRewardsDistributor')

@@ -196,7 +196,7 @@ contract WomDepositor is Ownable {
         }
 
         if (IERC20(wom).balanceOf(staker) > 0) {
-            IBooster(booster).earmarkRewards(earmarkPid);
+            IBooster(booster).earmarkRewardsIfAvailable(earmarkPid);
         }
 
         IERC20(wom).safeTransfer(staker, amountToLock);

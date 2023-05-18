@@ -45,7 +45,7 @@ contract BoosterEarmark is Ownable {
 
     event SetPoolManager(address poolManager);
 
-    event SetEarmarkConfig(uint256 earmarkIncentive);
+    event SetEarmarkConfig(uint256 earmarkIncentive, uint256 earmarkPeriod);
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
     event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
     event EarmarkRewardsDiff(address indexed rewardToken, uint256 diffAmount, uint256 pendingAmount, uint256 currentBal);
@@ -63,10 +63,11 @@ contract BoosterEarmark is Ownable {
      * @notice Fee manager can set all the relevant fees
      * @param _earmarkIncentive   % for whoever calls the claim where 1% == 100
      */
-    function setEarmarkConfig(uint256 _earmarkIncentive) external onlyOwner {
+    function setEarmarkConfig(uint256 _earmarkIncentive, uint256 _earmarkPeriod) external onlyOwner {
         require(_earmarkIncentive <= 100, ">max");
         earmarkIncentive = _earmarkIncentive;
-        emit SetEarmarkConfig(_earmarkIncentive);
+        earmarkPeriod = _earmarkPeriod;
+        emit SetEarmarkConfig(_earmarkIncentive, _earmarkPeriod);
     }
 
     /**
@@ -103,11 +104,6 @@ contract BoosterEarmark is Ownable {
 
     function forceShutdownPool(uint256 _pid) external onlyOwner returns (bool) {
         return booster.forceShutdownPool(_pid);
-    }
-
-    function gaugeMigrate(address _newGauge, uint256[] calldata migratePids) external onlyOwner {
-        require(_newGauge != address(0), "zero");
-        return booster.gaugeMigrate(_newGauge, migratePids);
     }
 
     /**
@@ -335,6 +331,14 @@ contract BoosterEarmark is Ownable {
                 ++i;
             }
         }
+        lastEarmarkAt[_pid] = block.timestamp;
+    }
+
+    function earmarkRewardsIfAvailable(uint256 _pid) external {
+        if (!isEarmarkAvailable(_pid)) {
+           return;
+        }
+        earmarkRewards(_pid);
     }
 
     function earmarkRewards(uint256[] memory _pids) external {

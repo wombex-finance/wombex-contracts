@@ -494,7 +494,7 @@ contract Booster{
         _writePendingRewards(lptoken, rewardBalancesBefore);
 
         if (earmarkOnDeposit) {
-            IBoosterEarmark(earmarkDelegate).earmarkRewards(_pid);
+            IBoosterEarmark(earmarkDelegate).earmarkRewardsIfAvailable(_pid);
         }
 
         address token = pool.token;

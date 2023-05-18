@@ -115,7 +115,7 @@ contract BoosterMigrator is Ownable {
         newBooster.setFactories(address(rewardFactory), address(tokenFactory));
         newBooster.setExtraRewardsDistributor(address(Booster(oldBooster).extraRewardsDist()));
         newBooster.setLockRewardContracts(Booster(oldBooster).crvLockRewards(), Booster(oldBooster).cvxLocker());
-        newBoosterEarmark.setEarmarkConfig(IBoosterEarmark(distrSource).earmarkIncentive());
+//        newBoosterEarmark.setEarmarkConfig(IBoosterEarmark(distrSource).earmarkIncentive(), IBoosterEarmark(distrSource).earmarkPeriod());
         newBooster.setFeeManager(Booster(oldBooster).feeManager());
         newBooster.setPaused(true);
 
