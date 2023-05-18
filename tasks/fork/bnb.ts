@@ -106,7 +106,7 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
         console.log('customLockSlot', i, customLockSlots[i].amount.toString());
     }
 
-    const oldBoosterEarmark = BoosterEarmark__factory.connect(bnbConfig.booster, deployer);
+    const oldBoosterEarmark = BoosterEarmark__factory.connect(await booster.earmarkDelegate(), deployer);
     await getBoosterValues(booster, oldBoosterEarmark);
 
     const newBooster = await deployContract<Booster>(
@@ -350,7 +350,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     const cvxLocker = WmxLocker__factory.connect(bnbConfig.cvxLocker, deployer);
     const womDepositor = WomDepositor__factory.connect(bnbConfig.crvDepositor, deployer);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
-    const oldBoosterEarmark = BoosterEarmark__factory.connect(bnbConfig.booster, deployer);
+    const oldBoosterEarmark = BoosterEarmark__factory.connect(await booster.earmarkDelegate(), deployer);
 
     const mwPoolLength = await masterWombat.poolLength().then(pl => parseInt(pl.toString()));
     const userInfoList = [];
@@ -421,7 +421,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
         hre,
         new BoosterMigrator__factory(deployer),
         "BoosterMigrator",
-        [booster.address, ZERO_ADDRESS, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth],
+        [booster.address, oldBoosterEarmark.address, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth],
         {},
         true,
         waitForBlocks,
@@ -445,7 +445,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     const daoSigner = await impersonate(await booster.owner(), true);
 
-    await booster.connect(daoSigner).setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
+    await oldBoosterEarmark.connect(daoSigner).setBoosterPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
     await booster.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
     await voterProxy.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
 

@@ -39,11 +39,6 @@ contract BoosterMigrator is Ownable {
             if (shutdown) {
                 continue;
             }
-            if (oldBoosterEarmark == address(0)) {
-                IBoosterEarmark(oldBooster).earmarkRewards(i);
-            } else {
-                IBoosterEarmark(oldBoosterEarmark).earmarkRewards(i);
-            }
             lpBalances[i] = IERC20(lptoken).balanceOf(oldBooster);
             activePoolLen++;
         }
