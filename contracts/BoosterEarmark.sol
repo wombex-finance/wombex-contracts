@@ -11,6 +11,7 @@ contract BoosterEarmark is Ownable {
 
     IBooster public booster;
     address public voterProxy;
+    address public depositor;
     address public mainRewardToken;
     address public weth;
 
@@ -56,7 +57,13 @@ contract BoosterEarmark is Ownable {
         booster = IBooster(_booster);
         mainRewardToken = booster.crv();
         voterProxy = IBooster(_booster).voterProxy();
+        depositor = IStaker(voterProxy).depositor();
         weth = _weth;
+    }
+
+    function updateBoosterAndDepositor() external onlyOwner {
+        booster = IBooster(IStaker(voterProxy).operator());
+        depositor = IStaker(voterProxy).depositor();
     }
 
     /**
@@ -353,6 +360,9 @@ contract BoosterEarmark is Ownable {
     }
 
     function isEarmarkPoolAvailable(uint256 _pid, IBooster.PoolInfo memory _pool) public view returns (bool) {
+        if (msg.sender == depositor && !_pool.shutdown) {
+            return true;
+        }
         return getEarmarkPoolExecuteOn(_pid, _pool) < block.timestamp;
     }
 

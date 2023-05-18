@@ -490,7 +490,7 @@ async function deployFirstStage(
         hre,
         new WomDepositorV3__factory(deployer),
         "WomDepositorV3",
-        [token, voterProxy.address, cvxCrv.address, booster.address, ZERO_ADDRESS],
+        [token, voterProxy.address, cvxCrv.address, boosterEarmark.address, ZERO_ADDRESS],
         {},
         debug,
         waitForBlocks,
@@ -609,6 +609,8 @@ async function deployFirstStage(
     console.log('booster.setEarmarkConfig')
     tx = await boosterEarmark.setEarmarkConfig(10, 60 * 60);
     await waitForTx(tx, debug, waitForBlocks);
+
+    await boosterEarmark.updateBoosterAndDepositor().then(tx => tx.wait());
 
     console.log('booster.setExtraRewardsDistributor')
     tx = await booster.setExtraRewardsDistributor(extraRewardsDistributor.address);
@@ -938,7 +940,7 @@ async function deploySideChain(
     console.log('cvxCrv.setOperator')
     await cvxCrv.setOperator(womDepositor.address).then(tx => tx.wait());
     console.log('boosterEarmark.setEarmarkConfig')
-    await boosterEarmark.setEarmarkConfig(10).then(tx => tx.wait());
+    await boosterEarmark.setEarmarkConfig(10, 24 * 60 * 60).then(tx => tx.wait());
     console.log('extraRewardsDistributor.modifyWhitelist')
     await extraRewardsDistributor.modifyWhitelist(penaltyForwarder.address, true).then(tx => tx.wait());
     await extraRewardsDistributor.modifyWhitelist(booster.address, true).then(tx => tx.wait());

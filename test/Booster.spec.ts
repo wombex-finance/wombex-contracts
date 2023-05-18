@@ -141,16 +141,13 @@ describe("Booster", () => {
         await setup();
 
         const operatorAccount = await impersonateAccount(booster.address);
-        let tx = await cvx
+        await cvx
             .connect(operatorAccount.signer)
-            .mint(aliceAddress, simpleToExactAmount(100, 18));
-        await tx.wait();
+            .mint(aliceAddress, simpleToExactAmount(100, 18)).then(tx => tx.wait());
 
         const cvxAmount = simpleToExactAmount(100);
-        tx = await cvx.connect(alice).approve(cvxLocker.address, cvxAmount);
-        await tx.wait();
-        tx = await cvxLocker.connect(alice).lock(aliceAddress, cvxAmount);
-        await tx.wait();
+        await cvx.connect(alice).approve(cvxLocker.address, cvxAmount).then(tx => tx.wait());
+        await cvxLocker.connect(alice).lock(aliceAddress, cvxAmount).then(tx => tx.wait());
     });
 
     describe("performing core functions", async () => {

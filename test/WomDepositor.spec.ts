@@ -15,6 +15,7 @@ import {
     VeWom, VoterProxy, WomDepositor, WomDepositorV2__factory, WomDepositorV3
 } from "../types/generated";
 import {deployContract} from "../tasks/utils";
+import {impersonateAccount} from "../test-utils";
 
 describe("WomDepositor", () => {
     let accounts: Signer[];
@@ -52,6 +53,14 @@ describe("WomDepositor", () => {
 
         await mocks.lptoken.approve(contracts.booster.address, simpleToExactAmount(2000)).then(tx => tx.wait());
         await contracts.booster.deposit(0, simpleToExactAmount(2000), true).then(tx => tx.wait());
+
+        const cvxAmount = simpleToExactAmount(100);
+        const operatorAccount = await impersonateAccount(contracts.booster.address);
+        await contracts.cvx
+            .connect(operatorAccount.signer)
+            .mint(aliceAddress, cvxAmount).then(tx => tx.wait());
+        await contracts.cvx.connect(alice).approve(contracts.cvxLocker.address, cvxAmount).then(tx => tx.wait());
+        await contracts.cvxLocker.connect(alice).lock(aliceAddress, cvxAmount).then(tx => tx.wait());
     });
 
     it("setLockConfig can be configured", async () => {
@@ -80,6 +89,9 @@ describe("WomDepositor", () => {
     });
 
     it("deposit do not trigger lock, until smart lock period reached", async () => {
+        expect(await womDepositor.booster()).to.be.eq(contracts.boosterEarmark.address);
+        expect(await womDepositor.staker()).to.be.eq(contracts.voterProxy.address);
+
         const stakeAddress = contracts.cvxCrvRewards.address;
         await mocks.crv.connect(alice).approve(womDepositor.address, await mocks.crv.balanceOf(aliceAddress));
 
@@ -529,11 +541,27 @@ describe("WomDepositor", () => {
         await increaseTime(60);
 
         expect(await newWomDepositor.currentSlot()).eq(15);
+
+        expect(await await contracts.boosterEarmark.depositor()).not.eq(newWomDepositor.address);
+        await contracts.boosterEarmark.connect(daoSigner).updateBoosterAndDepositor().then(tx => tx.wait());
+        expect(await await contracts.boosterEarmark.depositor()).eq(newWomDepositor.address);
+        await contracts.boosterEarmark.connect(daoSigner).setEarmarkConfig(10, 10);
+        expect(await contracts.boosterEarmark.isEarmarkAvailable(await newWomDepositor.earmarkPid())).eq(true);
+        await contracts.boosterEarmark["earmarkRewards(uint256)"](await newWomDepositor.earmarkPid()).then(tx => tx.wait());
+        await contracts.boosterEarmark.connect(daoSigner).setEarmarkConfig(10, 60 * 60 * 24);
+
+        await increaseTime(ONE_HOUR);
+
+        expect(await contracts.boosterEarmark.isEarmarkAvailable(await newWomDepositor.earmarkPid())).eq(false);
+
+        await mocks.crv.transfer(await newWomDepositor.staker(), simpleToExactAmount(100)).then(tx => tx.wait());
+        expect(await mocks.crv.balanceOf(await newWomDepositor.staker())).eq(simpleToExactAmount(100));
+
         await mocks.crv.transfer(contracts.voterProxy.address, amountToDeposit).then(r => r.wait(1));
         await mocks.crv.connect(alice).approve(newWomDepositor.address, await mocks.crv.balanceOf(aliceAddress)).then(r => r.wait(1));
         await newWomDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
 
-        expect(await newWomDepositor.currentSlot()).eq(16);
+        expect(await newWomDepositor.currentSlot()).eq(17);
 
         expect(await cvxCrvRewards.balanceOf(aliceAddress)).eq(cvxCrvBalanceBefore.add(amountToDeposit));
 
@@ -541,7 +569,7 @@ describe("WomDepositor", () => {
 
         await newWomDepositor.connect(alice)["deposit(uint256,address)"](amountToDeposit, stakeAddress).then(r => r.wait(1));
 
-        expect(await newWomDepositor.currentSlot()).eq(16);
+        expect(await newWomDepositor.currentSlot()).eq(17);
         const depositorWethBalance = await mocks.weth.balanceOf(newWomDepositor.address);
         expect(depositorWethBalance).gt(0);
 
