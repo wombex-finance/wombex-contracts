@@ -443,11 +443,17 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     );
     console.log('poolDepositor', poolDepositor.address);
 
-    const daoSigner = await impersonate(await booster.owner(), true);
+    const daoSigner = await impersonate(oldBoosterOwner, true);
 
-    await oldBoosterEarmark.connect(daoSigner).setBoosterPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
-    await booster.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
-    await voterProxy.connect(daoSigner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
+    const boosterOwner = await impersonate(await booster.owner(), true);
+    if ((await booster.poolManager()) === oldBoosterEarmark.address) {
+        await oldBoosterEarmark.connect(boosterOwner).setBoosterPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
+    } else {
+        await booster.connect(boosterOwner).setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
+    }
+    await oldBoosterEarmark.connect(boosterOwner).transferOwnership(boosterMigrator.address).then(tx => tx.wait(1));
+    await booster.connect(boosterOwner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
+    await voterProxy.connect(boosterOwner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
 
     console.log('migration...');
 
@@ -460,11 +466,13 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 
     const distributionTokenList = await oldBoosterEarmark.distributionTokenList();
+    const cvxLockerOwner = await impersonate(await cvxLocker.owner(), true);
     for (let i = 0; i < distributionTokenList.length; i++) {
-        await cvxLocker.connect(daoSigner).approveRewardDistributor(distributionTokenList[i], newBooster.address, true).then(tx => tx.wait(1)).catch(e => {});
+        await cvxLocker.connect(cvxLockerOwner).approveRewardDistributor(distributionTokenList[i], newBooster.address, true).then(tx => tx.wait(1)).catch(e => {});
     }
 
-    await womDepositor.connect(daoSigner).setBooster(newBooster.address, 0).then(tx => tx.wait(1));
+    const womDepositorOwner = await impersonate(await womDepositor.owner(), true);
+    await womDepositor.connect(womDepositorOwner).setBooster(newBooster.address, 0).then(tx => tx.wait(1));
     await newBooster.connect(daoSigner).setPaused(false).then(tx => tx.wait(1));
 
     assert(oldBoosterOwner === (await booster.owner()));
@@ -493,8 +501,8 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     }
     console.log("newPoolLength check finish              ");
 
-    const womHolderAddress = '0x3153793ad16670053c9f6ef49dbb650fa7c56a5b';
-    const busdHolderAddress = '0xf977814e90da44bfa03b6295a0616a897441acec';
+    const womHolderAddress = '0xeccb9b9c6fb7590a4d0588953b3170a1a84e3341';
+    const busdHolderAddress = '0x8894e0a0c962cb723c1976a4421c95949be2d4e3';
     const busdLpAddress = await masterWombat.poolInfo(0).then(p => p.lpToken);
 
     const womHolder = await impersonate(womHolderAddress, true);

@@ -39,11 +39,23 @@ contract PoolDepositor is Ownable {
      * @param tokens    array of tokens to be approved
      * @param pool      to be approved to spend
      */
-    function approveSpendingByPool(address[] calldata tokens, address pool) external onlyOwner {
+    function approveSpendingByPool(address[] calldata tokens, address pool) public onlyOwner {
         for (uint256 i; i < tokens.length; i++) {
             IERC20(tokens[i]).safeApprove(pool, 0);
             IERC20(tokens[i]).safeApprove(pool, type(uint256).max);
         }
+    }
+
+    /**
+     * @notice Approve spending of router tokens by pool and booster
+     * @dev Needs to be done after asset deployment for router to be able to support the tokens
+     * @param tokens    array of tokens to be approved
+     * @param pool      to be approved to spend
+     * @param booster   to be approved to spend
+     */
+    function approveSpendingByPoolAndBooster(address[] calldata tokens, address pool, address booster) external onlyOwner {
+        approveSpendingByPool(tokens, pool);
+        approveSpendingByPool(tokens, booster);
     }
 
     function resqueTokens(address[] calldata _tokens, address _recipient) external onlyOwner {

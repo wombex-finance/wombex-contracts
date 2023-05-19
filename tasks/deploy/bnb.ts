@@ -478,6 +478,9 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
 
     // const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
 
+    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
+    const boosterEarmarkAddress = await booster.earmarkDelegate();
+
     const newBoosterArgs = [bnbConfig.voterProxy, ZERO_ADDRESS, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 1500, 15000];
     fs.writeFileSync('./args/booster.js', 'module.exports = ' + JSON.stringify(newBoosterArgs));
 
@@ -530,7 +533,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     );//0xc20Ae367683Eb5f4FBb2b0ec7912E1c5BA32C2B5
 
     console.log('deployContract BoosterMigrator');
-    const boosterMigratorArgs = [bnbConfig.booster, ZERO_ADDRESS, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth];
+    const boosterMigratorArgs = [bnbConfig.booster, boosterEarmarkAddress, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth];
     fs.writeFileSync('./args/boosterMigrator.js', 'module.exports = ' + JSON.stringify(boosterMigratorArgs));
     const boosterMigrator = await deployContract<BoosterMigrator>(
         hre,

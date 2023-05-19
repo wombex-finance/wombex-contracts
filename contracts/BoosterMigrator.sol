@@ -87,16 +87,14 @@ contract BoosterMigrator is Ownable {
 
         require(newBooster.poolLength() == activePoolLen, "active_pool_len");
 
-        address distrSource = oldBoosterEarmark == address(0) ? oldBooster : oldBoosterEarmark;
-
-        address[] memory distroTokens = IBoosterEarmark(distrSource).distributionTokenList();
+        address[] memory distroTokens = IBoosterEarmark(oldBoosterEarmark).distributionTokenList();
         for (uint256 i = 0; i < distroTokens.length; i++) {
-            uint256 tokenDistroLength = IBoosterEarmark(distrSource).distributionByTokenLength(distroTokens[i]);
+            uint256 tokenDistroLength = IBoosterEarmark(oldBoosterEarmark).distributionByTokenLength(distroTokens[i]);
             address[] memory distros = new address[](tokenDistroLength);
             uint256[] memory shares = new uint256[](tokenDistroLength);
             bool[] memory callQueues = new bool[](tokenDistroLength);
             for (uint256 j = 0; j < tokenDistroLength; j++) {
-                (distros[j], shares[j], callQueues[j]) = IBoosterEarmark(distrSource).distributionByTokens(distroTokens[i], j);
+                (distros[j], shares[j], callQueues[j]) = IBoosterEarmark(oldBoosterEarmark).distributionByTokens(distroTokens[i], j);
             }
             newBoosterEarmark.updateDistributionByTokens(distroTokens[i], distros, shares, callQueues);
         }
@@ -120,10 +118,6 @@ contract BoosterMigrator is Ownable {
 
         Booster(oldBooster).setOwner(boosterOwner);
         voterProxy.setOwner(boosterOwner);
-
-        if (oldBoosterEarmark == address(0)) {
-            Booster(oldBooster).setPoolManager(boosterOwner);
-        }
         newBooster.setOwner(boosterOwner);
         newBoosterEarmark.transferOwnership(boosterOwner);
 

@@ -36,10 +36,7 @@ async function approvePoolDepositor(masterWombat, poolDepositor, signer) {
         if (!pools[i].tokens.length) {
             continue;
         }
-        await new Promise((resolve) => setTimeout(resolve, 30e3))
-        await poolDepositor.approveSpendingByPool(pools[i].tokens, pools[i].address);
-        await new Promise((resolve) => setTimeout(resolve, 30e3))
-        await poolDepositor.approveSpendingByPool(pools[i].tokens, booster);
+        await poolDepositor.approveSpendingByPoolAndBooster(pools[i].tokens, pools[i].address, booster).then(tx => tx.wait());
     }
 }
 
