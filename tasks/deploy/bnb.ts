@@ -466,22 +466,20 @@ task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskA
 
 
 task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
-    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const networkConfig = JSON.parse(fs.readFileSync('./' + hre.network.name + '.json', {encoding: 'utf8'}));
 
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
         maxPriorityFeePerGas: null,
-        gasPrice: ethers.BigNumber.from(5000000000),
+        gasPrice: ethers.BigNumber.from(hre.network.name === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    // const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
-
-    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
+    const booster = Booster__factory.connect(networkConfig.booster, deployer);
     const boosterEarmarkAddress = await booster.earmarkDelegate();
 
-    const newBoosterArgs = [bnbConfig.voterProxy, ZERO_ADDRESS, bnbConfig.cvx, bnbConfig.wom, bnbConfig.weth, 1500, 15000];
+    const newBoosterArgs = [networkConfig.voterProxy, ZERO_ADDRESS, networkConfig.cvx, networkConfig.wom, networkConfig.weth, 1500, 15000];
     fs.writeFileSync('./args/booster.js', 'module.exports = ' + JSON.stringify(newBoosterArgs));
 
     const newBooster = await deployContract<Booster>(
@@ -493,7 +491,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
         true,
     );
 
-    const newBoosterEarmarkArgs = [newBooster.address, bnbConfig.weth];
+    const newBoosterEarmarkArgs = [newBooster.address, networkConfig.weth];
     fs.writeFileSync('./args/boosterEarmark.js', 'module.exports = ' + JSON.stringify(newBoosterEarmarkArgs));
     const newBoosterEarmark = await deployContract<BoosterEarmark>(
         hre,
@@ -508,7 +506,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     // const newBooster = Booster__factory.connect('0x561050ffb188420d2605714f84eda714da58da69', deployer);
     // const newBoosterEarmark = BoosterEarmark__factory.connect('0x9bdcb245234b4d0dfa998d0f8da72e5ccd0f9df4', deployer);
 
-    const rewardFactoryArgs = [newBooster.address, bnbConfig.wom];
+    const rewardFactoryArgs = [newBooster.address, networkConfig.wom];
     fs.writeFileSync('./args/rewardFactory.js', 'module.exports = ' + JSON.stringify(rewardFactoryArgs));
     const rewardFactory = await deployContract<RewardFactory>(
         hre,
@@ -533,7 +531,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     );//0xc20Ae367683Eb5f4FBb2b0ec7912E1c5BA32C2B5
 
     console.log('deployContract BoosterMigrator');
-    const boosterMigratorArgs = [bnbConfig.booster, boosterEarmarkAddress, newBooster.address, rewardFactory.address, tokenFactory.address, bnbConfig.weth];
+    const boosterMigratorArgs = [networkConfig.booster, boosterEarmarkAddress, newBooster.address, rewardFactory.address, tokenFactory.address, networkConfig.weth];
     fs.writeFileSync('./args/boosterMigrator.js', 'module.exports = ' + JSON.stringify(boosterMigratorArgs));
     const boosterMigrator = await deployContract<BoosterMigrator>(
         hre,
@@ -550,7 +548,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     await newBooster.setPoolManager(newBoosterEarmark.address).then(tx => tx.wait(1));
     await newBoosterEarmark.transferOwnership(boosterMigrator.address).then(tx => tx.wait(1));
 
-    const poolDepositorArgs = [bnbConfig.weth, newBooster.address, bnbConfig.masterWombat];
+    const poolDepositorArgs = [networkConfig.weth, newBooster.address, networkConfig.masterWombat];
     fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
     const poolDepositor = await deployContract<PoolDepositor>(
         hre,
@@ -563,7 +561,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     );
     console.log('poolDepositor', poolDepositor.address);
 
-    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
+    const masterWombat = MasterWombatV2__factory.connect(networkConfig.masterWombat, deployer);
     await approvePoolDepositor(masterWombat, poolDepositor, deployer);
 });
 
