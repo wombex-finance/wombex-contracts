@@ -466,14 +466,15 @@ task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskA
 
 
 task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
-    const networkConfig = JSON.parse(fs.readFileSync('./' + hre.network.name + '.json', {encoding: 'utf8'}));
+    const network = process.env.NETWORK || hre.network.name;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
 
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
         maxPriorityFeePerGas: null,
-        gasPrice: ethers.BigNumber.from(hre.network.name === 'bnb' ? 3000000000 : 100000000),
+        gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
     const booster = Booster__factory.connect(networkConfig.booster, deployer);
@@ -482,53 +483,55 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     const newBoosterArgs = [networkConfig.voterProxy, ZERO_ADDRESS, networkConfig.cvx, networkConfig.wom, networkConfig.weth, 1500, 15000];
     fs.writeFileSync('./args/booster.js', 'module.exports = ' + JSON.stringify(newBoosterArgs));
 
-    const newBooster = await deployContract<Booster>(
-        hre,
-        new Booster__factory(deployer),
-        "Booster",
-        newBoosterArgs,
-        {},
-        true,
-    );
+    // const newBooster = await deployContract<Booster>(
+    //     hre,
+    //     new Booster__factory(deployer),
+    //     "Booster",
+    //     newBoosterArgs,
+    //     {},
+    //     true,
+    // );
 
-    const newBoosterEarmarkArgs = [newBooster.address, networkConfig.weth];
-    fs.writeFileSync('./args/boosterEarmark.js', 'module.exports = ' + JSON.stringify(newBoosterEarmarkArgs));
-    const newBoosterEarmark = await deployContract<BoosterEarmark>(
-        hre,
-        new BoosterEarmark__factory(deployer),
-        "BoosterEarmark",
-        newBoosterEarmarkArgs,
-        {},
-        true,
-    );
-
-    await newBooster.setEarmarkDelegate(newBoosterEarmark.address).then(tx => tx.wait());
-    // const newBooster = Booster__factory.connect('0x561050ffb188420d2605714f84eda714da58da69', deployer);
-    // const newBoosterEarmark = BoosterEarmark__factory.connect('0x9bdcb245234b4d0dfa998d0f8da72e5ccd0f9df4', deployer);
-
-    const rewardFactoryArgs = [newBooster.address, networkConfig.wom];
-    fs.writeFileSync('./args/rewardFactory.js', 'module.exports = ' + JSON.stringify(rewardFactoryArgs));
-    const rewardFactory = await deployContract<RewardFactory>(
-        hre,
-        new RewardFactory__factory(deployer),
-        "RewardFactory",
-        rewardFactoryArgs,
-        {},
-        true,
-    );//0x6d317CF62c55BB96b933fDC637F7e08100628B39
-
-    const tokenFactoryNamePostfix = ' Wombex Deposit Token';
-    const cvxSymbol = 'WMX';
-    const tokenFactoryArgs = [newBooster.address, tokenFactoryNamePostfix, cvxSymbol.toLowerCase()];
-    fs.writeFileSync('./args/tokenFactory.js', 'module.exports = ' + JSON.stringify(tokenFactoryArgs));
-    const tokenFactory = await deployContract<TokenFactory>(
-        hre,
-        new TokenFactory__factory(deployer),
-        "TokenFactory",
-        tokenFactoryArgs,
-        {},
-        true,
-    );//0xc20Ae367683Eb5f4FBb2b0ec7912E1c5BA32C2B5
+    const newBooster = Booster__factory.connect('0xA04b7cd20e916bd3a2BE874c2B75a596284AA201', deployer);
+    const newBoosterEarmark = BoosterEarmark__factory.connect('0x8ae15034cB19F6677f666EabfBB038611e6Bf1F7', deployer);
+    const rewardFactory = RewardFactory__factory.connect('0xfaAc2A5C4788b3D1b520493CE5b808C69EBd80a2', deployer);
+    const tokenFactory = RewardFactory__factory.connect('0x5959Edad2060C79ED25eF002EDB5ef8aBBd431Af', deployer);
+    // const newBoosterEarmarkArgs = [newBooster.address, networkConfig.weth];
+    // fs.writeFileSync('./args/boosterEarmark.js', 'module.exports = ' + JSON.stringify(newBoosterEarmarkArgs));
+    // const newBoosterEarmark = await deployContract<BoosterEarmark>(
+    //     hre,
+    //     new BoosterEarmark__factory(deployer),
+    //     "BoosterEarmark",
+    //     newBoosterEarmarkArgs,
+    //     {},
+    //     true,
+    // );
+    //
+    // await newBooster.setEarmarkDelegate(newBoosterEarmark.address).then(tx => tx.wait());
+    //
+    // const rewardFactoryArgs = [newBooster.address, networkConfig.wom];
+    // fs.writeFileSync('./args/rewardFactory.js', 'module.exports = ' + JSON.stringify(rewardFactoryArgs));
+    // const rewardFactory = await deployContract<RewardFactory>(
+    //     hre,
+    //     new RewardFactory__factory(deployer),
+    //     "RewardFactory",
+    //     rewardFactoryArgs,
+    //     {},
+    //     true,
+    // );
+    //
+    // const tokenFactoryNamePostfix = ' Wombex Deposit Token';
+    // const cvxSymbol = 'WMX';
+    // const tokenFactoryArgs = [newBooster.address, tokenFactoryNamePostfix, cvxSymbol.toLowerCase()];
+    // fs.writeFileSync('./args/tokenFactory.js', 'module.exports = ' + JSON.stringify(tokenFactoryArgs));
+    // const tokenFactory = await deployContract<TokenFactory>(
+    //     hre,
+    //     new TokenFactory__factory(deployer),
+    //     "TokenFactory",
+    //     tokenFactoryArgs,
+    //     {},
+    //     true,
+    // );
 
     console.log('deployContract BoosterMigrator');
     const boosterMigratorArgs = [networkConfig.booster, boosterEarmarkAddress, newBooster.address, rewardFactory.address, tokenFactory.address, networkConfig.weth];
