@@ -88,6 +88,7 @@ contract EarmarkRewardsLens {
             (address token , uint256 periodFinish, , , , , , , bool paused) = IRewards(p.crvRewards).tokenRewards(crv);
             if (token == crv && periodFinish < block.timestamp && IERC20(crv).balanceOf(p.crvRewards) > 1000 ether) {
                 earmarkablePools[i] = true;
+                poolsCount++;
                 continue;
             }
 
