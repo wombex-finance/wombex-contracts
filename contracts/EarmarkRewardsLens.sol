@@ -92,7 +92,10 @@ contract EarmarkRewardsLens {
                 continue;
             }
 
-            (uint256 pendingRewards, , , uint256[] memory pendingBonusRewards) = IMasterWombatV2(p.gauge).pendingTokens(i, address(voterProxy));
+            (uint256 pendingRewards, , , uint256[] memory pendingBonusRewards) = IMasterWombatV2(p.gauge).pendingTokens(
+                voterProxy.lpTokenToPid(p.gauge, p.lptoken),
+                address(voterProxy)
+            );
             if (pendingRewards != 0) {
                 earmarkablePools[i] = true;
                 poolsCount++;
