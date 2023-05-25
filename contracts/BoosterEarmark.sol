@@ -378,13 +378,9 @@ contract BoosterEarmark is Ownable {
         if (block.timestamp > executeOn) {
             return executeOn;
         }
-        address[] memory rewardTokens = IRewards(_pool.crvRewards).rewardTokensList();
-        uint256 len = rewardTokens.length;
-        for (uint256 i = 0; i < len; i++) {
-            ( , uint256 periodFinish, , , , , , , bool paused) = IRewards(_pool.crvRewards).tokenRewards(rewardTokens[i]);
-            if (!paused && periodFinish < executeOn) {
-                executeOn = periodFinish;
-            }
+        ( , uint256 periodFinish, , , , , , , bool paused) = IRewards(_pool.crvRewards).tokenRewards(mainRewardToken);
+        if (!paused && periodFinish < executeOn) {
+            executeOn = periodFinish;
         }
     }
 

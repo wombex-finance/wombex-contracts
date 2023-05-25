@@ -464,6 +464,45 @@ task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskA
     }
 });
 
+task("deploy-booster-earmark:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const network = process.env.NETWORK || hre.network.name;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
+
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null,
+        maxPriorityFeePerGas: null,
+        gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
+    })) as any;
+
+    const booster = Booster__factory.connect(networkConfig.booster, deployer);
+    const oldBoosterEarmark = BoosterEarmark__factory.connect(await booster.earmarkDelegate(), deployer);
+
+    const newBoosterEarmarkArgs = [booster.address, networkConfig.weth];
+    fs.writeFileSync('./args/boosterEarmark.js', 'module.exports = ' + JSON.stringify(newBoosterEarmarkArgs));
+    const newBoosterEarmark = await deployContract<BoosterEarmark>(
+        hre,
+        new BoosterEarmark__factory(deployer),
+        "BoosterEarmark",
+        newBoosterEarmarkArgs,
+        {},
+        true,
+    );
+    await newBoosterEarmark.setEarmarkConfig(await oldBoosterEarmark.earmarkIncentive(), await oldBoosterEarmark.earmarkPeriod()).then(tx => tx.wait());
+    await newBoosterEarmark.transferOwnership(await oldBoosterEarmark.owner()).then(tx => tx.wait());
+    // const tokenDistroLength = await oldBoosterEarmark.distributionByTokenLength(networkConfig.wom).then(r => parseInt(r.toString()));
+
+    // const distros = [], shares = [], callQueues = [];
+    // for(let i = 0; i < tokenDistroLength; i++) {
+    //     const {distro, share, callQueue} = await oldBoosterEarmark.distributionByTokens(networkConfig.wom, i);
+    //     distros.push(distro);
+    //     shares.push(share);
+    //     callQueues.push(callQueue);
+    // }
+    // await newBoosterEarmark.updateDistributionByTokens(networkConfig.wom, distros, shares, callQueues).then(tx => tx.wait());
+
+});
 
 task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const network = process.env.NETWORK || hre.network.name;
@@ -915,11 +954,14 @@ task("wmx-reward-pool-lens:bnb").setAction(async function (taskArguments: TaskAr
 task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
 
+    const network = process.env.NETWORK || hre.network.name;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
+
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    const earmarkRewardsLensArgs = ['0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569'];
+    const earmarkRewardsLensArgs = [networkConfig.voterProxy, 5];
     fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
     const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
         hre,
@@ -931,11 +973,11 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
         waitForBlocks,
     );
     // const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xb76591973f0649a1978D7Caf3B93f7aa8Da5E162', deployer);
-    console.log('earmarkRewardsLens', earmarkRewardsLens.address);
-    const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
-    tokensSymbols.map((symbol, index) => {
-        console.log(symbol, diffBalances[index]);
-    })
+    // console.log('earmarkRewardsLens', earmarkRewardsLens.address);
+    // const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
+    // tokensSymbols.map((symbol, index) => {
+    //     console.log(symbol, diffBalances[index]);
+    // })
 });
 
 task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
