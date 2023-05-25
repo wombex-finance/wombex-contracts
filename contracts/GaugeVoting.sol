@@ -55,7 +55,7 @@ contract GaugeVoting is Ownable {
     event SetLpTokenStatus(address indexed lpToken, LpTokenStatus indexed status);
     event StakingTokenMigrate(address indexed newOperator);
     event RewardPoolMigrate(address indexed rewards, address indexed newOperator);
-    event Vote(address[] lpTokens, int256[] deltas, uint256 availableVotes, uint256 votedAmount);
+    event Vote(address indexed voter, address[] lpTokens, int256[] deltas, uint256 availableVotes, uint256 votedAmount);
     event DistributeBribeRewards(address indexed lpToken, address indexed rewardsPool, address indexed bribe, address[] rewardTokens, uint256[] rewardAmounts);
     event ZeroRewards(address indexed lpToken, address indexed bribe, address indexed rewardToken);
     event TransferRewards(address indexed lpToken, address indexed rewardToken, address indexed recipient, uint256 rewardAmount, bool queueRewards);
@@ -225,7 +225,7 @@ contract GaugeVoting is Ownable {
         uint256 userVoted = getUserVoted(msg.sender);
         require(userVoted <= userLockerVotes, "votes overflow");
 
-        emit Vote(_lpTokens, _deltas, userLockerVotes, userVoted);
+        emit Vote(msg.sender, _lpTokens, _deltas, userLockerVotes, userVoted);
 
         if (executeOnVote && isVoteExecuteReady()) {
             voteExecute(msg.sender);
@@ -351,6 +351,13 @@ contract GaugeVoting is Ownable {
         _onVotesChanged(_account, _account, _account);
         if (executeOnVote && isVoteExecuteReady()) {
             voteExecute(_account);
+        }
+    }
+
+    function onVotesChangedMultiple(address[] memory _users, address _incentiveRecipient) public {
+        uint256 len = _users.length;
+        for (uint256 i = 0; i < len; i++) {
+            onVotesChanged(_users[i], _incentiveRecipient);
         }
     }
 
