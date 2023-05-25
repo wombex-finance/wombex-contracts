@@ -17,6 +17,11 @@ contract PoolDepositor is Ownable {
     using SafeERC20 for IERC20;
     using Address for address payable;
 
+    struct ApprovePool {
+        address pool;
+        address[] tokens;
+    }
+
     address public weth;
     address public booster;
     address public masterWombat;
@@ -31,6 +36,16 @@ contract PoolDepositor is Ownable {
         weth =  _weth;
         booster =  _booster;
         masterWombat = _masterWombat;
+    }
+
+    /**
+     * @notice Approve spending of router tokens by pool
+     * @dev Needs to be done after asset deployment for router to be able to support the tokens
+     */
+    function approveSpendingMultiplePools(ApprovePool[] calldata approveList, address booster) public onlyOwner {
+        for (uint256 i; i < approveList.length; i++) {
+            approveSpendingByPoolAndBooster(approveList[i].tokens, approveList[i].pool, booster);
+        }
     }
 
     /**
@@ -53,7 +68,7 @@ contract PoolDepositor is Ownable {
      * @param pool      to be approved to spend
      * @param booster   to be approved to spend
      */
-    function approveSpendingByPoolAndBooster(address[] calldata tokens, address pool, address booster) external onlyOwner {
+    function approveSpendingByPoolAndBooster(address[] calldata tokens, address pool, address booster) public onlyOwner {
         approveSpendingByPool(tokens, pool);
         approveSpendingByPool(tokens, booster);
     }
