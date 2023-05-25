@@ -202,7 +202,7 @@ task("test-fork:booster-and-depositor-migrate").setAction(async function (taskAr
     console.log('newBooster owner', await newBooster.owner());
     console.log('voterProxy owner', await voterProxy.owner());
 
-    await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+    await approvePoolDepositor(poolDepositor, deployer);
 
     await womDepositor.connect(daoSigner).transferOwnership(depositorMigrator.address).then(tx => tx.wait(1));
     await voterProxy.connect(daoSigner).setOwner(depositorMigrator.address).then(tx => tx.wait(1));
@@ -463,7 +463,7 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
     console.log('newBooster owner', await newBooster.owner());
     console.log('voterProxy owner', await voterProxy.owner());
 
-    await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+    await approvePoolDepositor(poolDepositor, deployer);
 
     const distributionTokenList = await oldBoosterEarmark.distributionTokenList();
     const cvxLockerOwner = await impersonate(await cvxLocker.owner(), true);

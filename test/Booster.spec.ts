@@ -1621,9 +1621,6 @@ describe("Booster", () => {
 
             await oldMW.setNewMasterWombat(newMasterWombat.address).then(tx => tx.wait());
 
-            const poolLen = await booster.poolLength().then(len => parseInt(len.toString()));
-            const pids = Array.from(Array(poolLen).keys());
-
             const lpTokenBalance = {};
 
             const mwLen = await oldMW.poolLength().then(len => parseInt(len.toString()));
