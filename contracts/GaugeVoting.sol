@@ -378,6 +378,16 @@ contract GaugeVoting is Ownable {
         }
     }
 
+    function burnDeprecatedPools(address[] memory _pools) public {
+        uint256 len = _pools.length;
+        for (uint256 i = 0; i < len; i++) {
+            address rewardsPool = _pools[i];
+            address lpToken = IRewards(rewardsPool).asset();
+            require(rewardsPool == lpTokenRewards[lpToken], "!deprecated");
+            stakingToken.burn(rewardsPool, stakingToken.balanceOf(rewardsPool));
+        }
+    }
+
     function getUserVoted(address _user) public view returns(uint256 voted) {
         uint256 len = lpTokensAdded.length;
         for (uint256 i = 0; i < len; i++) {
