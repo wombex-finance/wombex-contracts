@@ -321,6 +321,7 @@ describe("GaugeVoting", () => {
         it("GaugeVoting config should be able to change by owner", async () => {
             // expect(await gaugeVotingLens.getPools(ZERO_ADDRESS).then(pools => pools.map(p => p.lpToken))).deep.eq([lptoken1.address, lptoken2.address]);
             expect(await gaugeVoting.getLpTokensAdded()).deep.eq([lptoken1.address, lptoken2.address]);
+            expect(await gaugeVoting.getLpTokensRewardPools()).deep.eq([await gaugeVoting.lpTokenRewards(lptoken1.address), await gaugeVoting.lpTokenRewards(lptoken2.address)]);
             expect(await gaugeVoting.votePeriod()).eq(0);
             expect(await gaugeVoting.voteThreshold()).eq(0);
             expect(await gaugeVoting.voteIncentive()).eq(0);

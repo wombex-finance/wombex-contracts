@@ -415,6 +415,15 @@ contract GaugeVoting is Ownable {
         return lpTokensAdded;
     }
 
+    function getLpTokensRewardPools() external view returns (address[] memory rewardPools) {
+        uint256 len = lpTokensAdded.length;
+        rewardPools = new address[](len);
+        for (uint256 i = 0; i < len; i++) {
+            rewardPools[i] = lpTokenRewards[lpTokensAdded[i]];
+        }
+        return rewardPools;
+    }
+
     function boostedUserVotes(address _user, bool _locked) public view returns (uint256 userLockerVotes) {
         (uint256 totalBalance, , uint256 lockedBalance, ) = wmxLocker.lockedBalances(_user);
         userLockerVotes = _locked ? lockedBalance : totalBalance;
