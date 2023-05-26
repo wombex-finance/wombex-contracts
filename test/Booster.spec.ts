@@ -29,12 +29,17 @@ import {
     TokenFactory__factory,
     BoosterEarmark,
     BoosterEarmark__factory,
-    MasterWombatV2, MasterWombatV2__factory,
+    MasterWombatV2,
+    MasterWombatV2__factory,
+    WmxPenaltyForwarder,
+    WmxPenaltyForwarder__factory,
+    MintManager__factory,
+    MintManager,
 } from "../types/generated";
 import { Signer, BigNumber} from "ethers";
 import {getTimestamp, increaseTime, increaseTimeTo} from "../test-utils/time";
 import {simpleToExactAmount} from "../test-utils/math";
-import {DEAD_ADDRESS, impersonateAccount, ZERO_ADDRESS} from "../test-utils";
+import {DEAD_ADDRESS, impersonateAccount, ONE_WEEK, ZERO_ADDRESS} from "../test-utils";
 import {deployContract} from "../tasks/utils";
 import {BigNumber as BN} from "@ethersproject/bignumber/lib/bignumber";
 
@@ -298,14 +303,14 @@ describe("Booster", () => {
 
             await boosterEarmark['earmarkRewards(uint256)'](0).then(tx => tx.wait());
 
-            await expect(booster.setMintParams(8000, aliceAddress)).to.be.revertedWith("!auth");
-            await expect(booster.connect(daoSigner).setMintParams(4999, aliceAddress)).to.be.revertedWith("!boundaries");
-            await expect(booster.connect(daoSigner).setMintParams(15001, aliceAddress)).to.be.revertedWith("!boundaries");
+            await expect(booster.setMintParams(8000, aliceAddress, ZERO_ADDRESS)).to.be.revertedWith("!auth");
+            await expect(booster.connect(daoSigner).setMintParams(4999, aliceAddress, ZERO_ADDRESS)).to.be.revertedWith("!boundaries");
+            await expect(booster.connect(daoSigner).setMintParams(15001, aliceAddress, ZERO_ADDRESS)).to.be.revertedWith("!boundaries");
             const mintRatio = 8000;
             expect(await booster.reservoirMinter()).eq(ZERO_ADDRESS);
-            await booster.connect(daoSigner).setMintParams(mintRatio, aliceAddress).then(tx => tx.wait());
+            await booster.connect(daoSigner).setMintParams(mintRatio, aliceAddress, ZERO_ADDRESS).then(tx => tx.wait());
             expect(await booster.reservoirMinter()).eq(aliceAddress);
-            await booster.connect(daoSigner).setMintParams(mintRatio, ZERO_ADDRESS).then(tx => tx.wait());
+            await booster.connect(daoSigner).setMintParams(mintRatio, ZERO_ADDRESS, ZERO_ADDRESS).then(tx => tx.wait());
             expect(await booster.reservoirMinter()).eq(ZERO_ADDRESS);
 
             const crvRewards = BaseRewardPool__factory.connect(pool.crvRewards, bob);
@@ -351,7 +356,7 @@ describe("Booster", () => {
             await crvRewards.claimableRewards(bobAddress);
 
             await boosterEarmark['earmarkRewards(uint256)'](0).then(tx => tx.wait());
-            await booster.connect(daoSigner).setMintParams(0, ZERO_ADDRESS).then(tx => tx.wait());
+            await booster.connect(daoSigner).setMintParams(0, ZERO_ADDRESS, ZERO_ADDRESS).then(tx => tx.wait());
 
             const penaltyShare = 100;
             await expect(booster.setRewardClaimedPenalty(penaltyShare)).to.be.revertedWith("!auth");
@@ -578,7 +583,7 @@ describe("Booster", () => {
 
             const mintRatio = 8000;
             const customMintRatio = 9000;
-            await booster.connect(daoSigner).setMintParams(mintRatio, ZERO_ADDRESS).then(tx => tx.wait());
+            await booster.connect(daoSigner).setMintParams(mintRatio, ZERO_ADDRESS, ZERO_ADDRESS).then(tx => tx.wait());
             await booster.connect(daoSigner).setCustomMintRatioMultiple([0], [customMintRatio]).then(tx => tx.wait());
 
             cvxBalanceBefore = await cvx.balanceOf(bobAddress);
@@ -637,12 +642,37 @@ describe("Booster", () => {
 
     describe("minting using minterMint", async () => {
         it("booster owner should have rights to call setRewardParams", async () => {
+            const mintManager = await deployContract<MintManager>(
+                hre,
+                new MintManager__factory(deployer),
+                "MintManager",
+                [contracts.voterProxy.address],
+                {},
+                false,
+                1,
+            );
             await expect(booster.minterMint(danAddress, simpleToExactAmount(1))).to.be.revertedWith("!auth");
+            await expect(mintManager.mint(danAddress, simpleToExactAmount(1))).to.be.revertedWith("limit");
+
+            await mintManager.setMintLimit(await daoSigner.getAddress(), simpleToExactAmount(2)).then(tx => tx.wait());
+
+            await expect(mintManager.mint(danAddress, simpleToExactAmount(1))).to.be.revertedWith("limit");
+            await expect(mintManager.connect(daoSigner).mint(danAddress, simpleToExactAmount(1))).to.be.revertedWith("!auth");
+
+            await expect(booster.setMintParams(await booster.mintRatio(), await booster.reservoirMinter(), mintManager.address)).to.be.revertedWith("!auth");
+            await booster.connect(daoSigner).setMintParams(await booster.mintRatio(), await booster.reservoirMinter(), mintManager.address).then(tx => tx.wait());
+
+            let factMintAmount = await cvx.getFactAmounMint(simpleToExactAmount(1));
 
             let balanceBefore = await cvx.balanceOf(danAddress);
-            let factMintAmount = await cvx.getFactAmounMint(simpleToExactAmount(1));
-            await booster.connect(daoSigner).minterMint(danAddress, simpleToExactAmount(1));
+            await mintManager.connect(daoSigner).mint(danAddress, simpleToExactAmount(1)).then(tx => tx.wait());
             expect((await cvx.balanceOf(danAddress)).sub(balanceBefore)).eq(factMintAmount);
+
+            balanceBefore = await cvx.balanceOf(danAddress);
+            await mintManager.connect(daoSigner).mint(danAddress, simpleToExactAmount(1)).then(tx => tx.wait());
+            expect((await cvx.balanceOf(danAddress)).sub(balanceBefore)).eq(factMintAmount);
+
+            await expect(mintManager.connect(daoSigner).mint(danAddress, simpleToExactAmount(1))).to.be.revertedWith("limit");
         });
     });
 

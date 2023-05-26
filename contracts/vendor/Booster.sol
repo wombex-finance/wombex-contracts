@@ -36,12 +36,15 @@ contract Booster{
     address public crvLockRewards;
     address public cvxLocker;
     address public reservoirMinter;
+    address public mintManager;
 
     mapping(address => bool) public voteDelegate;
 
     IExtraRewardsDistributor public extraRewardsDist;
 
     uint256 public penaltyShare = 0;
+    mapping(uint256 => uint256) public customPenaltyShare;
+
     bool public earmarkOnDeposit;
 
     uint256 public minMintRatio;
@@ -86,9 +89,10 @@ contract Booster{
     event EarmarkDelegateUpdated(address newEarmarkDelegate);
     event VotingMapUpdated(address voting, bool valid);
     event LockRewardContractsUpdated(address lockRewards, address cvxLocker);
-    event MintParamsUpdated(uint256 mintRatio, address reservoirMinter);
+    event MintParamsUpdated(uint256 mintRatio, address reservoirMinter, address mintManager);
     event SetPaused(bool paused);
     event CustomMintRatioUpdated(uint256 indexed pid, uint256 mintRatio);
+    event CustomPenaltyShareUpdated(uint256 indexed pid, uint256 penaltyShare);
     event SetEarmarkOnDeposit(bool earmarkOnDeposit);
     event FeeInfoUpdated(address feeDistro, address lockFees, address feeToken);
     event FeeInfoChanged(address feeToken, bool active);
@@ -288,7 +292,7 @@ contract Booster{
     /**
      * @notice Change mint ratio in boundaries
      */
-    function setMintParams(uint256 _mintRatio, address _reservoirMinter) external {
+    function setMintParams(uint256 _mintRatio, address _reservoirMinter, address _mintManager) external {
         require(msg.sender == owner, "!auth");
         if (_mintRatio != 0) {
             require(_mintRatio >= minMintRatio && _mintRatio <= maxMintRatio, "!boundaries");
@@ -296,7 +300,8 @@ contract Booster{
 
         mintRatio = _mintRatio;
         reservoirMinter = _reservoirMinter;
-        emit MintParamsUpdated(_mintRatio, _reservoirMinter);
+        mintManager = _mintManager;
+        emit MintParamsUpdated(_mintRatio, _reservoirMinter, _mintManager);
     }
 
     /**
@@ -309,7 +314,7 @@ contract Booster{
     }
 
     /**
-     * @notice Change mint ratio for pool
+     * @notice Change mint ratio for multiple pools
      */
     function setCustomMintRatioMultiple(uint256[] memory _pids, uint256[] memory _mintRatios) external {
         require(msg.sender == owner, "!auth");
@@ -324,6 +329,21 @@ contract Booster{
 
             customMintRatio[_pids[i]] = _mintRatios[i];
             emit CustomMintRatioUpdated(_pids[i], _mintRatios[i]);
+        }
+    }
+
+    /**
+     * @notice Change penalty share for multiple pools
+     */
+    function setCustomPenaltyShareMultiple(uint256[] memory _pids, uint256[] memory _penaltyShares) external {
+        require(msg.sender == owner, "!auth");
+
+        uint256 len = _pids.length;
+        require(len == _penaltyShares.length, "!len");
+
+        for(uint256 i = 0; i < len; i++) {
+            customPenaltyShare[_pids[i]] = _penaltyShares[i];
+            emit CustomPenaltyShareUpdated(_pids[i], _penaltyShares[i]);
         }
     }
 
@@ -709,6 +729,12 @@ contract Booster{
         if (poolMintRatio > 0) {
             mintAmount = mintAmount.mul(poolMintRatio).div(DENOMINATOR);
         }
+        uint256 poolPenaltyShare = customPenaltyShare[_pid];
+        if (poolPenaltyShare == 0) {
+            poolPenaltyShare = penaltyShare;
+        } else if (poolPenaltyShare == 1) {
+            poolPenaltyShare = 0;
+        }
 
         ITokenMinter tokenMinter = reservoirMinter == address(0) ? ITokenMinter(cvx) : ITokenMinter(reservoirMinter);
         uint256 penalty;
@@ -717,7 +743,7 @@ contract Booster{
             tokenMinter.mint(address(this), mintAmount);
             ICvxLocker(cvxLocker).lock(_address, IERC20(cvx).balanceOf(address(this)).sub(balanceBefore));
         } else {
-            penalty = mintAmount.mul(penaltyShare).div(DENOMINATOR);
+            penalty = mintAmount.mul(poolPenaltyShare).div(DENOMINATOR);
             mintAmount = mintAmount.sub(penalty);
             //mint reward to user, except the penalty
             tokenMinter.mint(_address, mintAmount);
@@ -738,7 +764,7 @@ contract Booster{
      * @return A boolean indicating whether or not the operation was successful.
      */
     function minterMint(address _address, uint256 _amount) external returns(bool){
-        require(msg.sender == owner, "!auth");
+        require(msg.sender == mintManager, "!auth");
         ITokenMinter(cvx).mint(_address, _amount);
         emit MinterMint(_address, _amount);
         return true;

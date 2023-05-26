@@ -378,6 +378,7 @@ interface IBooster {
     function customMintRatio(uint256 _pid) external view returns (uint256);
     function crvLockRewards() external view returns (address);
     function cvxLocker() external view returns (address);
+    function minterMint(address _address, uint256 _amount) external returns(bool);
 }
 
 interface IBoosterEarmark {
