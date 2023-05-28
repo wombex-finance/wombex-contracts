@@ -73,6 +73,10 @@ contract GaugeVoting is Ownable {
         bribeVoter = _bribeVoter;
     }
 
+    function updateBooster() public {
+        booster = IBooster(IStaker(voterProxy).operator());
+    }
+
     function setVotingConfig(uint256 _votePeriod, uint256 _voteThreshold, uint256 _voteIncentive, bool _executeOnVote, bool _addRewardOnExecute) public onlyOwner {
         require(_voteIncentive <= 1000, "voteIncentive>1000");
         votePeriod = _votePeriod;

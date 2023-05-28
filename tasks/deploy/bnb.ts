@@ -817,7 +817,6 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
         '0xa75d9ca2a0a1D547409D82e1B06618EC284A2CeD', //_WMX_MINTER
         '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', //_WETH_TOKEN
         '0x0415023846Ff1C6016c4d9621de12b24B2402979', //_WMX_WOM_TOKEN
-        '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'  //_WOM_WMX_POOL
     ];
     fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
 
@@ -834,6 +833,9 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     console.log('lens', lens.address);
     await new Promise((resolve) => setTimeout(resolve, 3000));
     await lens.setUsdStableTokens(['0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', '0x55d398326f99059fF775485246999027B3197955', '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5', '0x90C97F71E18723b0Cf0dfa30ee176Ab653E89F40', '0x14016E85a25aeb13065688cAFB43044C2ef86784', '0x4268B8F0B87b6Eae5d897996E6b845ddbD99Adf3', '0xFa4BA88Cf97e282c505BEa095297786c16070129', '0x0A3BB08b3a15A19b4De82F8AcFc862606FB69A2D', '0xd17479997F34dd9156Deef8F95A52D81D265be9c', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xB0B195aEFA3650A6908f15CdaC7D92F8a5791B0B'], true).then(tx => tx.wait());
+    await lens.setSwapTokenByPool(['0x0415023846Ff1C6016c4d9621de12b24B2402979'], '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e').then(tx => tx.wait());
+    await lens.setSwapTokenByPool(['0xa2e3356610840701bdf5611a53974510ae27e2e1'], '0x8b892b6Ea1d0e5B29b719d6Bd6eb9354f1cDE060').then(tx => tx.wait());
+    await lens.setPoolsForToken(['0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'], '0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x0520451B19AD0bb00eD35ef391086A692CFC74B2', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x05f727876d7C123B9Bb41507251E2Afd81EAD09A'], '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d').then(tx => tx.wait());
@@ -841,7 +843,7 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     await lens.setPoolsForToken(['0x2Ea772346486972E7690219c190dAdDa40Ac5dA4'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x8b892b6Ea1d0e5B29b719d6Bd6eb9354f1cDE060'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
     await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8', '0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
-    await lens.setTokenSwapThroughToken(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
+    await lens.setTokenSwapThroughToken(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], ['0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c']).then(tx => tx.wait());
     await lens.setTokensTargetStable(['0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0x90c97f71e18723b0cf0dfa30ee176ab653e89f40').then(tx => tx.wait());
 
     const gaugeVotingLensArgs = [
@@ -985,7 +987,7 @@ task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments,
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(5000000000),
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
     })) as any;
 
     const treasuryMultisig = '0x35D32110d9a6f02d403061C851618756B3bC597F';
@@ -1058,16 +1060,17 @@ task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments,
 task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
 
+    const network = process.env.NETWORK || hre.network.name;
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    const networkConfig = JSON.parse(fs.readFileSync('./' + (process.env.NETWORK || hre.network.name) + '.json', {encoding: 'utf8'}));
+    const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
 
     const oldGaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
     const daoMultisig = await oldGaugeVoting.owner();
 
-    const lpTokensToMigrate = ['0x88bEb144352BD3109c79076202Fac2bcEAb87117', '0xbd459E33307A4ae92fFFCb45C6893084CFC273B1', '0x8Df8b50B73849f0433EE3314BD956e624e67b3ce'];
+    const lpTokensToMigrate = [];
     const rewards = [];
     const lpTokens = await oldGaugeVoting.getLpTokensAdded();
     console.log('lpTokens.length', lpTokens.length);
@@ -1079,11 +1082,13 @@ task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskAr
     }
     console.log('rewards.length', rewards.length);
 
+    const gaugeVotingArgs = [await oldGaugeVoting.wmxLocker(), await oldGaugeVoting.booster(), await oldGaugeVoting.bribeVoter()];
+    fs.writeFileSync('./args/gaugeVoting.js', 'module.exports = ' + JSON.stringify(gaugeVotingArgs));
     const newGaugeVoting = await deployContract<GaugeVoting>(
         hre,
         new GaugeVoting__factory(deployer),
         "GaugeVoting",
-        [await oldGaugeVoting.wmxLocker(), await oldGaugeVoting.booster(), await oldGaugeVoting.bribeVoter()],
+        gaugeVotingArgs,
         {},
         true,
         waitForBlocks,
@@ -1102,15 +1107,35 @@ task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskAr
     await newGaugeVoting.setFactories(ZERO_ADDRESS, bribesRewardFactory.address, await oldGaugeVoting.stakingToken()).then(tx => tx.wait());
     await newGaugeVoting.registerCreatedLpTokens(rewards).then(tx => tx.wait());
 
-    console.log('lpTokensToMigrate', lpTokensToMigrate);
-    await newGaugeVoting.registerLpTokens(lpTokensToMigrate).then(tx => tx.wait());
+    if (lpTokensToMigrate.length) {
+        console.log('lpTokensToMigrate', lpTokensToMigrate);
+        await newGaugeVoting.registerLpTokens(lpTokensToMigrate).then(tx => tx.wait());
+    }
 
-    const lpTokensToDeactivate = ['0xf9bdc872d75f76b946e0770f96851b1f2f653cac', '0x3c42e4f84573ab8c88c8e479b7dc38a7e678d688'];
-    console.log('lpTokensToDeactivate', lpTokensToDeactivate);
-    for (let i = 0; i < lpTokensToDeactivate.length; i++) {
-        await newGaugeVoting.setLpTokenStatus(lpTokensToDeactivate[i], '1').then(tx => tx.wait());
+    const lpTokensToDeactivate = [];
+    if (lpTokensToDeactivate.length) {
+        console.log('lpTokensToDeactivate', lpTokensToDeactivate);
+        for (let i = 0; i < lpTokensToDeactivate.length; i++) {
+            await newGaugeVoting.setLpTokenStatus(lpTokensToDeactivate[i], '1').then(tx => tx.wait());
+        }
     }
 
     await newGaugeVoting.approveRewards().then(tx => tx.wait());
     await newGaugeVoting.transferOwnership(daoMultisig).then(tx => tx.wait());
+
+    // const gaugeVotingLensArgs = [
+    //     newGaugeVoting.address,
+    //     '0x036e464b3fA3f31468C4Df419BF24BBb561e9E38'
+    // ];
+    // fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
+    // const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+    //     hre,
+    //     new GaugeVotingLens__factory(deployer),
+    //     "GaugeVotingLens",
+    //     gaugeVotingLensArgs,
+    //     {},
+    //     true,
+    //     waitForBlocks,
+    // );
+    // console.log('gaugeVotingLens', gaugeVotingLens.address);
 });
