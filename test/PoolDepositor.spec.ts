@@ -73,8 +73,8 @@ describe("PoolDepositor", () => {
         daoSigner = accounts[6];
         await setup();
 
-        await poolDepositor.approveSpendingByPool([underlying.address, mocks.weth.address, mocks.lptoken.address], mocks.pool.address);
-        await poolDepositor.approveSpendingByPool([mocks.lptoken.address], booster.address);
+        const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+        await poolDepositor.approveSpendingMultiplePools(Array.from(Array(poolLength).keys())).then(tx => tx.wait());
     });
 
     describe("deposit", async () => {
@@ -162,8 +162,8 @@ describe("PoolDepositor", () => {
 
             await contracts.voterProxy.connect(daoSigner).setLpTokensPid(mocks.masterWombat.address);
 
-            await poolDepositor.approveSpendingByPool([mocks.weth.address, nativeLptoken.address], pool.address);
-            await poolDepositor.approveSpendingByPool([nativeLptoken.address], booster.address);
+            const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+            await poolDepositor.approveSpendingMultiplePools(Array.from(Array(poolLength).keys())).then(tx => tx.wait());
             await poolDepositor.setBoosterLpTokensPid();
         });
 

@@ -19,10 +19,8 @@ import {
     BribesTokenFactory,
     BribesRewardPool__factory,
     BribesRewardPool,
-    ITokenMinter__factory,
     BribesVotingToken__factory,
     GaugeVotingLens,
-    GaugeVotingLens__factory,
 } from "../types/generated";
 import { Signer } from "ethers";
 import {getTimestamp, increaseTime} from "../test-utils/time";
@@ -323,6 +321,7 @@ describe("GaugeVoting", () => {
         it("GaugeVoting config should be able to change by owner", async () => {
             // expect(await gaugeVotingLens.getPools(ZERO_ADDRESS).then(pools => pools.map(p => p.lpToken))).deep.eq([lptoken1.address, lptoken2.address]);
             expect(await gaugeVoting.getLpTokensAdded()).deep.eq([lptoken1.address, lptoken2.address]);
+            expect(await gaugeVoting.getLpTokensRewardPools()).deep.eq([await gaugeVoting.lpTokenRewards(lptoken1.address), await gaugeVoting.lpTokenRewards(lptoken2.address)]);
             expect(await gaugeVoting.votePeriod()).eq(0);
             expect(await gaugeVoting.voteThreshold()).eq(0);
             expect(await gaugeVoting.voteIncentive()).eq(0);
@@ -528,9 +527,7 @@ describe("GaugeVoting", () => {
             expect(await gaugeVoting.boostedUserVotes(aliceAddress, true)).eq(0);
             expect(await reward1.balanceOf(aliceAddress)).eq(simpleToExactAmount(10));
 
-
             await gaugeVoting.connect(daoSigner).setVotingConfig(0, 0, 0, false, true);
-
             res = await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
 
             TransferIncentiveRewards = res.events.filter(e => e.event === 'TransferRewards' && !e.args.queueRewards)[0];
@@ -567,6 +564,68 @@ describe("GaugeVoting", () => {
                 expect(await token.balanceOf(aliceAddress)).gt(aliceBalancesBefore[i]);
                 expect(claimableRewards.amounts[i]).eq(0);
             }
+        });
+
+        it("GaugeVoting should burn deprecated BribesRewardPool", async () => {
+            await cvxLocker.connect(alice).processExpiredLocks(true).then(tx => tx.wait());
+            await gaugeVoting.connect(alice).vote([lptoken1.address, lptoken2.address], [simpleToExactAmount(1), simpleToExactAmount(1)]).then(tx => tx.wait());
+            await gaugeVoting.connect(poker).voteExecute(pokerAddress).then(tx => tx.wait());
+
+            const stakingToken = BribesVotingToken__factory.connect(await gaugeVoting.stakingToken(), deployer);
+
+            const newGaugeVoting = await deployContract<GaugeVoting>(
+                hre,
+                new GaugeVoting__factory(deployer),
+                "GaugeVoting",
+                [
+                    cvxLocker.address,
+                    booster.address,
+                    wombatVoter.address
+                ],
+                {},
+                true,
+            );
+            await booster.connect(daoSigner).setVoteDelegate(newGaugeVoting.address, true).then(tx => tx.wait());
+            const rewardPoolFactory = await deployContract<BribesRewardFactory>(
+                hre,
+                new BribesRewardFactory__factory(deployer),
+                "BribesRewardFactory",
+                [newGaugeVoting.address],
+                {},
+                true,
+            );
+
+            await gaugeVoting.connect(daoSigner).migrateStakingToken(newGaugeVoting.address).then(tx => tx.wait());
+            await newGaugeVoting.setFactories(ZERO_ADDRESS, rewardPoolFactory.address, stakingToken.address).then(tx => tx.wait());
+
+            const rewardPool1Address = await gaugeVoting.lpTokenRewards(lptoken1.address);
+            const rewardPool2Address = await gaugeVoting.lpTokenRewards(lptoken2.address);
+            await newGaugeVoting.registerCreatedLpTokens([rewardPool1Address]).then(tx => tx.wait());
+            await newGaugeVoting.registerLpTokens([lptoken2.address]).then(tx => tx.wait());
+
+            await newGaugeVoting.transferOwnership(await daoSigner.getAddress()).then(tx => tx.wait());
+
+            await expect(newGaugeVoting.burnDeprecatedPools([rewardPool1Address])).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(newGaugeVoting.connect(daoSigner).burnDeprecatedPools([rewardPool1Address])).to.be.revertedWith("!deprecated");
+
+            expect(await newGaugeVoting.getUserVoted(aliceAddress)).lt(await gaugeVoting.getUserVoted(aliceAddress));
+
+            expect(await stakingToken.balanceOf(rewardPool1Address)).gt(0);
+            const balance = await stakingToken.balanceOf(rewardPool2Address);
+            expect(balance).gt(0);
+            const totalSupplyBefore = await stakingToken.totalSupply();
+            await newGaugeVoting.connect(daoSigner).burnDeprecatedPools([rewardPool2Address]).then(tx => tx.wait());
+            expect(totalSupplyBefore).gt(await stakingToken.totalSupply());
+            expect(totalSupplyBefore.sub(balance)).eq(await stakingToken.totalSupply());
+            expect(await stakingToken.balanceOf(rewardPool2Address)).eq(0);
+
+            const deprecatedPool = BribesRewardPool__factory.connect(rewardPool2Address, deployer);
+
+            expect(await deprecatedPool.balanceOf(aliceAddress)).gt(0);
+
+            const rewardTokenBalance = await rewardToken1.balanceOf(aliceAddress);
+            await reward1["getReward(address,bool)"](aliceAddress, false).then(tx => tx.wait());
+            expect(await rewardToken1.balanceOf(aliceAddress)).gt(rewardTokenBalance);
         });
     });
 });

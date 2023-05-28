@@ -432,36 +432,9 @@ task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskA
         waitForBlocks,
     );
     console.log('poolDepositor', poolDepositor.address);
-
-    const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
-
-    const tokensByPool = {};
-    const poolLength = await masterWombat.poolLength().then(l => parseInt(l.toString()));
-    for (let i = 0; i < poolLength; i++) {
-        const {lpToken} = await masterWombat.poolInfo(i);
-        const asset = Asset__factory.connect(lpToken, deployer);
-        const [pool, underlying] = await Promise.all([
-            asset.pool(),
-            asset.underlyingToken(),
-        ]);
-        if (!tokensByPool[pool]) {
-            tokensByPool[pool] = [];
-        }
-        tokensByPool[pool] = tokensByPool[pool].concat([underlying, lpToken]);
-    }
-
-    const pools = []
-    _.forEach(tokensByPool, (tokens, pool) => {
-        pools.push({
-            address: pool,
-            tokens: _.uniq(tokens)
-        })
-    })
-
-    for (let i = 0; i < pools.length; i++) {
-        await poolDepositor.approveSpendingByPool(pools[i].tokens, pools[i].address);
-        await poolDepositor.approveSpendingByPool(pools[i].tokens, bnbConfig.booster);
-    }
+    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
+    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    await poolDepositor.approveSpendingMultiplePools(Array.from(Array(poolLength).keys())).then(tx => tx.wait());
 });
 
 task("deploy-booster-earmark:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
@@ -605,7 +578,7 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     console.log('poolDepositor', poolDepositor.address);
 
     const masterWombat = MasterWombatV2__factory.connect(networkConfig.masterWombat, deployer);
-    await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+    await approvePoolDepositor(poolDepositor, deployer);
 });
 
 task("deploy-wom-swap-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
@@ -655,7 +628,7 @@ task("pool-depositor:bnb").setAction(async function (taskArguments: TaskArgument
     );
     console.log('poolDepositor', poolDepositor.address);
     const masterWombat = MasterWombatV2__factory.connect(bnbConfig.masterWombat, deployer);
-    await approvePoolDepositor(masterWombat, poolDepositor, deployer);
+    await approvePoolDepositor(poolDepositor, deployer);
 });
 
 function csvToAccountsAndAmounts(csvName) {
