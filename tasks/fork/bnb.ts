@@ -447,10 +447,10 @@ task("test-fork:booster-migrate").setAction(async function (taskArguments: TaskA
 
     const boosterOwner = await impersonate(await booster.owner(), true);
     if ((await booster.poolManager()) === oldBoosterEarmark.address) {
-        await oldBoosterEarmark.connect(boosterOwner).setBoosterPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
     } else {
         await booster.connect(boosterOwner).setPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
     }
+    await oldBoosterEarmark.connect(boosterOwner).setBoosterPoolManager(boosterMigrator.address).then(tx => tx.wait(1));
     await oldBoosterEarmark.connect(boosterOwner).transferOwnership(boosterMigrator.address).then(tx => tx.wait(1));
     await booster.connect(boosterOwner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));
     await voterProxy.connect(boosterOwner).setOwner(boosterMigrator.address).then(tx => tx.wait(1));

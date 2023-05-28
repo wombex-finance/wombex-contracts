@@ -4,6 +4,7 @@ async function approvePoolDepositor(poolDepositor, signer) {
     const booster = Booster__factory.connect(await poolDepositor.booster(), signer);
     const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
     await poolDepositor.approveSpendingMultiplePools(Array.from(Array(poolLength).keys())).then(tx => tx.wait());
+    await poolDepositor.setBoosterLpTokensPid().then(tx => tx.wait());
 }
 
 async function getBoosterValues(booster: Booster, boosterEarmark: BoosterEarmark) {
