@@ -13,6 +13,7 @@ const { DUNE_API_KEY } = process.env;
 
 function getHolders(network, token, blocknumber = 0) {
     const client = new DuneClient(DUNE_API_KEY);
+    //https://dune.com/queries/2505458?category=canonical&chai_t6c1ea=arbitrum&addres_t6c1ea=0xC27625c523fF0403b7c43394E473A1D41729Aa05&blocknumbe_t6c1ea=0
     const queryID = 2505458;
     const parameters = [
         QueryParameter.text("chai", network),
