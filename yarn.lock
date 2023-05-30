@@ -13,6 +13,7 @@ __metadata:
     "@codechecks/client": ^0.1.12
     "@commitlint/cli": ^14.1.0
     "@commitlint/config-conventional": ^14.1.0
+    "@cowprotocol/ts-dune-client": ^0.0.2
     "@ethersproject/abi": ^5.5.0
     "@ethersproject/abstract-signer": ^5.5.0
     "@ethersproject/bignumber": ^5.5.0
@@ -375,6 +376,16 @@ __metadata:
   dependencies:
     chalk: ^4.0.0
   checksum: 93af3c26c36f3b11d99f0cbbb09c8952581eed2a6b7763eb728c0e7e7ecff5072de064a208b80225fb51533823af84ee3117d9c2efbcb63d1f5cfbf6fbfb8ed8
+  languageName: node
+  linkType: hard
+
+"@cowprotocol/ts-dune-client@npm:^0.0.2":
+  version: 0.0.2
+  resolution: "@cowprotocol/ts-dune-client@npm:0.0.2"
+  dependencies:
+    cross-fetch: ^3.1.5
+    loglevel: ^1.8.0
+  checksum: 5de25436e541a783dabb5b044fae14269650b3326b9ae9eb1a1d7dbe3e8361308293b1a02d5d5c18704b09ee5142103f811cc62f107b408e9e8a675e75ba2a69
   languageName: node
   linkType: hard
 
@@ -4769,6 +4780,15 @@ __metadata:
   dependencies:
     node-fetch: 2.6.7
   checksum: f6b8c6ee3ef993ace6277fd789c71b6acf1b504fd5f5c7128df4ef2f125a429e29cd62dc8c127523f04a5f2fa4771ed80e3f3d9695617f441425045f505cf3bb
+  languageName: node
+  linkType: hard
+
+"cross-fetch@npm:^3.1.5":
+  version: 3.1.6
+  resolution: "cross-fetch@npm:3.1.6"
+  dependencies:
+    node-fetch: ^2.6.11
+  checksum: 704b3519ab7de488328cc49a52cf1aa14132ec748382be5b9557b22398c33ffa7f8c2530e8a97ed8cb55da52b0a9740a9791d361271c4591910501682d981d9c
   languageName: node
   linkType: hard
 
@@ -9678,6 +9698,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"loglevel@npm:^1.8.0":
+  version: 1.8.1
+  resolution: "loglevel@npm:1.8.1"
+  checksum: a1a62db40291aaeaef2f612334c49e531bff71cc1d01a2acab689ab80d59e092f852ab164a5aedc1a752fdc46b7b162cb097d8a9eb2cf0b299511106c29af61d
+  languageName: node
+  linkType: hard
+
 "longest@npm:^2.0.1":
   version: 2.0.1
   resolution: "longest@npm:2.0.1"
@@ -10699,6 +10726,20 @@ __metadata:
     encoding:
       optional: true
   checksum: 8d816ffd1ee22cab8301c7756ef04f3437f18dace86a1dae22cf81db8ef29c0bf6655f3215cb0cdb22b420b6fe141e64b26905e7f33f9377a7fa59135ea3e10b
+  languageName: node
+  linkType: hard
+
+"node-fetch@npm:^2.6.11":
+  version: 2.6.11
+  resolution: "node-fetch@npm:2.6.11"
+  dependencies:
+    whatwg-url: ^5.0.0
+  peerDependencies:
+    encoding: ^0.1.0
+  peerDependenciesMeta:
+    encoding:
+      optional: true
+  checksum: 249d0666a9497553384d46b5ab296ba223521ac88fed4d8a17d6ee6c2efb0fc890f3e8091cafe7f9fba8151a5b8d925db2671543b3409a56c3cd522b468b47b3
   languageName: node
   linkType: hard
 

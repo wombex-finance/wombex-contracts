@@ -27,6 +27,7 @@
         "export-sol": "sh ./copy-to-public-repo.sh"
     },
     "dependencies": {
+        "@cowprotocol/ts-dune-client": "^0.0.2",
         "@openzeppelin/contracts-0.6": "npm:@openzeppelin/contracts@3.4.0",
         "hardhat-contract-sizer": "^2.6.1",
         "lodash": "^4.17.21"
