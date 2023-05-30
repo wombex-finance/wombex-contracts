@@ -573,6 +573,8 @@ task("deploy-migrators:bnb").setAction(async function (taskArguments: TaskArgume
     await newBooster.setOwner(boosterMigrator.address).then(tx => tx.wait(1));
     await newBoosterEarmark.transferOwnership(boosterMigrator.address).then(tx => tx.wait(1));
 
+    await boosterMigrator.transferOwnership(await booster.owner()).then(tx => tx.wait(1));
+
     const poolDepositorArgs = [networkConfig.weth, newBooster.address, networkConfig.masterWombat];
     fs.writeFileSync('./args/poolDepositor.js', 'module.exports = ' + JSON.stringify(poolDepositorArgs));
     const poolDepositor = await deployContract<PoolDepositor>(
@@ -1107,7 +1109,7 @@ task("gauge-voting-migrate:bnb").setAction(async function (taskArguments: TaskAr
 
     const gaugeVotingLensArgs = [
         newGaugeVoting.address,
-        '0x036e464b3fA3f31468C4Df419BF24BBb561e9E38'
+        '0xe400486ac923c9e99a23043c2e3a82eb02e7ee70'
     ];
     fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
     const gaugeVotingLens = await deployContract<GaugeVotingLens>(

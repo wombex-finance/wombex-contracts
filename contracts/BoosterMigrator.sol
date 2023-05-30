@@ -112,9 +112,8 @@ contract BoosterMigrator is Ownable {
         newBooster.setFeeManager(Booster(oldBooster).feeManager());
         newBooster.setPaused(true);
 
-        IMinter(Booster(oldBooster).cvx()).updateOperator();
-
-        require(IMinter(Booster(oldBooster).cvx()).operator() == address(newBooster), "!operator");
+//        IMinter(Booster(oldBooster).cvx()).updateOperator();
+//        require(IMinter(Booster(oldBooster).cvx()).operator() == address(newBooster), "!operator");
 
         Booster(oldBooster).setOwner(boosterOwner);
         voterProxy.setOwner(boosterOwner);
