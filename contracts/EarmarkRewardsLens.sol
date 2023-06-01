@@ -3,16 +3,37 @@ pragma solidity 0.8.11;
 
 import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
 import "./Interfaces.sol";
+import "./WombexLensUI.sol";
 
 contract EarmarkRewardsLens {
+    uint256 public constant MAX_UINT = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint256 public constant DENOMINATOR = 10000;
+
     IStaker public voterProxy;
+    WombexLensUI public wombexLensUI;
     IBooster public booster;
     IBoosterEarmark public boosterEarmark;
     address public crv;
     uint256 public maxPidsToExecute;
 
-    constructor(IStaker _voterProxy, uint256 _maxPidsToExecute) {
+    struct PendingReward {
+        address token;
+        string symbol;
+        uint8 decimals;
+        uint256 totalAmount;
+        uint256 earmarkAmount;
+        uint256 usdPrice;
+    }
+
+    struct Pool {
+        address lpToken;
+        string symbol;
+        uint256 pid;
+    }
+
+    constructor(IStaker _voterProxy, WombexLensUI _wombexLensUI, uint256 _maxPidsToExecute) {
         voterProxy = _voterProxy;
+        wombexLensUI = _wombexLensUI;
         maxPidsToExecute = _maxPidsToExecute;
         updateBooster();
     }
@@ -74,7 +95,6 @@ contract EarmarkRewardsLens {
         }
     }
 
-
     function getEarmarkablePools() public view returns(bool[] memory earmarkablePools, uint256 poolsCount) {
         uint256 poolLen = booster.poolLength();
         earmarkablePools = new bool[](poolLen);
@@ -111,27 +131,26 @@ contract EarmarkRewardsLens {
         }
     }
 
-    function getPidsToEarmark() public view returns(uint256[] memory pids) {
+    function getPidsToEarmark(bool _useMaxPidsCount) public view returns(uint256[] memory pids) {
         (bool[] memory earmarkablePools, uint256 poolsCount) = getEarmarkablePools();
+        if (_useMaxPidsCount) {
+            poolsCount = poolsCount > maxPidsToExecute ? maxPidsToExecute : poolsCount;
+        }
         pids = new uint256[](poolsCount);
         uint256 curIndex = 0;
         for (uint256 i = 0; i < earmarkablePools.length; i++) {
             if (earmarkablePools[i]) {
                 pids[curIndex] = i;
                 curIndex++;
+                if (_useMaxPidsCount && curIndex == maxPidsToExecute) {
+                    break;
+                }
             }
         }
     }
 
     function earmarkResolver() public view returns(bool execute, bytes memory data) {
-        uint256[] memory pidsToExecute = getPidsToEarmark();
-        if (pidsToExecute.length > maxPidsToExecute) {
-            uint256[] memory pids = new uint256[](maxPidsToExecute);
-            for (uint256 i = 0; i < maxPidsToExecute; i++) {
-                pids[i] = pidsToExecute[i];
-            }
-            pidsToExecute = pids;
-        }
+        uint256[] memory pidsToExecute = getPidsToEarmark(true);
         return (
             pidsToExecute.length > 0,
             abi.encodeWithSelector(IBoosterEarmark.earmarkRewards.selector, pidsToExecute)
@@ -143,6 +162,111 @@ contract EarmarkRewardsLens {
         pidsNextExecuteOn = new uint256[](poolLen);
         for (uint256 i = 0; i < poolLen; i++) {
             pidsNextExecuteOn[i] = boosterEarmark.getEarmarkPoolExecuteOn(i);
+        }
+    }
+
+    function getPoolPendingRewards(uint256 _pid) public returns(PendingReward[] memory rewards) {
+        uint256 earmarkIncentive = IBoosterEarmark(booster.earmarkDelegate()).earmarkIncentive();
+        IBooster.PoolInfo memory poolInfo = booster.poolInfo(_pid);
+
+        uint256 wmPid = voterProxy.lpTokenToPid(poolInfo.gauge, poolInfo.lptoken);
+        uint256 crvIndex = MAX_UINT;
+        (
+            uint256 womPendingRewards,
+            IERC20[] memory bonusTokenAddresses,
+            ,
+            uint256[] memory pendingBonusRewards
+        ) = IMasterWombatV2(poolInfo.gauge).pendingTokens(wmPid, address(voterProxy));
+
+        for (uint256 i = 0; i < bonusTokenAddresses.length; i++) {
+            if (address(bonusTokenAddresses[i]) == crv) {
+                crvIndex = i;
+                pendingBonusRewards[i] += womPendingRewards;
+            }
+        }
+
+        rewards = new PendingReward[](crvIndex == MAX_UINT ? bonusTokenAddresses.length + 1 : bonusTokenAddresses.length);
+        uint256 womPrice = wombexLensUI.estimateInBUSDEther(crv, 1 ether, 18);
+        uint256 curIndex = 0;
+        if (crvIndex == MAX_UINT) {
+            uint256 rewardsAmount = womPendingRewards + booster.lpPendingRewards(poolInfo.lptoken, crv);
+            rewards[curIndex] = PendingReward(crv, "WOM", uint8(18), womPendingRewards, womPendingRewards * earmarkIncentive / DENOMINATOR, womPrice);
+            curIndex++;
+        }
+
+        for (uint256 i = 0; i < bonusTokenAddresses.length; i++) {
+            address rewardToken = address(bonusTokenAddresses[i]);
+            string memory symbol;
+            try ERC20(rewardToken).symbol() returns (string memory _symbol) {
+                symbol = symbol;
+            } catch { }
+
+            uint256 rewardsAmount = pendingBonusRewards[i] + booster.lpPendingRewards(poolInfo.lptoken, rewardToken);
+            rewards[curIndex] = PendingReward(
+                rewardToken,
+                symbol,
+                uint8(18),
+                rewardsAmount,
+                rewardsAmount * earmarkIncentive / DENOMINATOR,
+                wombexLensUI.estimateInBUSDEther(rewardToken, 1 ether, 18)
+            );
+            curIndex++;
+        }
+    }
+
+    function getTokenDecimals(address _token) public view returns (uint8 decimals) {
+        try ERC20(_token).decimals() returns (uint8 _decimals) {
+            decimals = _decimals;
+        } catch {
+            decimals = uint8(18);
+        }
+    }
+
+    function getRewardsToExecute() public returns (uint256 earmarkIncentive, PendingReward[] memory rewards, Pool[] memory pools) {
+        earmarkIncentive = IBoosterEarmark(booster.earmarkDelegate()).earmarkIncentive();
+
+        address[] memory tokens = boosterEarmark.distributionTokenList();
+        rewards = new PendingReward[](tokens.length);
+
+        uint256[] memory pidsToExecute = getPidsToEarmark(true);
+        pools = new Pool[](pidsToExecute.length);
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            rewards[i].token = tokens[i];
+            try ERC20(tokens[i]).symbol() returns (string memory _symbol) {
+                rewards[i].symbol = _symbol;
+            } catch { }
+            for (uint256 j = 0; j < pidsToExecute.length; j++) {
+                IBooster.PoolInfo memory poolInfo = booster.poolInfo(pidsToExecute[j]);
+                if (i == 0) {
+                    pools[j].lpToken = poolInfo.lptoken;
+                    pools[j].pid = pidsToExecute[j];
+                    try ERC20(pools[j].lpToken).symbol() returns (string memory _symbol) {
+                        pools[j].symbol = _symbol;
+                    } catch { }
+                }
+
+                uint256 wmPid = voterProxy.lpTokenToPid(poolInfo.gauge, poolInfo.lptoken);
+                (
+                    uint256 pendingRewards,
+                    IERC20[] memory bonusTokenAddresses,
+                    ,
+                    uint256[] memory pendingBonusRewards
+                ) = IMasterWombatV2(poolInfo.gauge).pendingTokens(wmPid, address(voterProxy));
+
+                if (tokens[i] == crv) {
+                    rewards[i].totalAmount += pendingRewards;
+                }
+
+                for (uint256 k = 0; k < bonusTokenAddresses.length; k++) {
+                    if (address(bonusTokenAddresses[k]) == tokens[i]) {
+                        rewards[i].totalAmount += pendingBonusRewards[k];
+                    }
+                }
+            }
+            rewards[i].earmarkAmount = rewards[i].totalAmount * earmarkIncentive / DENOMINATOR;
+            rewards[i].decimals = getTokenDecimals(tokens[i]);
+            rewards[i].usdPrice = wombexLensUI.estimateInBUSDEther(crv, 10 ** rewards[i].decimals, rewards[i].decimals);
         }
     }
 }

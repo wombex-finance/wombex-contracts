@@ -947,7 +947,7 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
         maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    const earmarkRewardsLensArgs = [networkConfig.voterProxy, 5];
+    const earmarkRewardsLensArgs = [networkConfig.voterProxy, '0xe400486ac923c9e99a23043c2e3a82eb02e7ee70', 15];
     fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
     const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
         hre,
