@@ -165,18 +165,19 @@ contract EarmarkRewardsLens {
         }
     }
 
-    function getPoolPendingRewards(uint256 _pid) public returns(PendingReward[] memory rewards) {
-        uint256 earmarkIncentive = IBoosterEarmark(booster.earmarkDelegate()).earmarkIncentive();
+    function getPoolPendingRewards(uint256 _pid) public returns(uint256 earmarkIncentive, uint256 executeOn, PendingReward[] memory rewards) {
+        executeOn = boosterEarmark.getEarmarkPoolExecuteOn(_pid);
+        earmarkIncentive = IBoosterEarmark(booster.earmarkDelegate()).earmarkIncentive();
         IBooster.PoolInfo memory poolInfo = booster.poolInfo(_pid);
 
-        uint256 wmPid = voterProxy.lpTokenToPid(poolInfo.gauge, poolInfo.lptoken);
         uint256 crvIndex = MAX_UINT;
-        (
-            uint256 womPendingRewards,
-            IERC20[] memory bonusTokenAddresses,
-            ,
-            uint256[] memory pendingBonusRewards
-        ) = IMasterWombatV2(poolInfo.gauge).pendingTokens(wmPid, address(voterProxy));
+        uint256 womPendingRewards;
+        IERC20[] memory bonusTokenAddresses;
+        uint256[] memory pendingBonusRewards;
+        {
+            uint256 wmPid = voterProxy.lpTokenToPid(poolInfo.gauge, poolInfo.lptoken);
+            (womPendingRewards, bonusTokenAddresses, , pendingBonusRewards) = IMasterWombatV2(poolInfo.gauge).pendingTokens(wmPid, address(voterProxy));
+        }
 
         for (uint256 i = 0; i < bonusTokenAddresses.length; i++) {
             if (address(bonusTokenAddresses[i]) == crv) {
@@ -186,29 +187,31 @@ contract EarmarkRewardsLens {
         }
 
         rewards = new PendingReward[](crvIndex == MAX_UINT ? bonusTokenAddresses.length + 1 : bonusTokenAddresses.length);
-        uint256 womPrice = wombexLensUI.estimateInBUSDEther(crv, 1 ether, 18);
         uint256 curIndex = 0;
-        if (crvIndex == MAX_UINT) {
-            uint256 rewardsAmount = womPendingRewards + booster.lpPendingRewards(poolInfo.lptoken, crv);
-            rewards[curIndex] = PendingReward(crv, "WOM", uint8(18), womPendingRewards, womPendingRewards * earmarkIncentive / DENOMINATOR, womPrice);
-            curIndex++;
+        {
+            uint256 womPrice = wombexLensUI.estimateInBUSDEther(crv, 1 ether, 18);
+            if (crvIndex == MAX_UINT) {
+                uint256 rewardsAmount = womPendingRewards + booster.lpPendingRewards(poolInfo.lptoken, crv);
+                rewards[curIndex] = PendingReward(crv, "WOM", uint8(18), womPendingRewards, womPendingRewards * earmarkIncentive / DENOMINATOR, womPrice);
+                curIndex++;
+            }
         }
 
         for (uint256 i = 0; i < bonusTokenAddresses.length; i++) {
-            address rewardToken = address(bonusTokenAddresses[i]);
             string memory symbol;
-            try ERC20(rewardToken).symbol() returns (string memory _symbol) {
+            try ERC20(address(bonusTokenAddresses[i])).symbol() returns (string memory _symbol) {
                 symbol = symbol;
             } catch { }
 
-            uint256 rewardsAmount = pendingBonusRewards[i] + booster.lpPendingRewards(poolInfo.lptoken, rewardToken);
+            uint256 rewardsAmount = pendingBonusRewards[i] + booster.lpPendingRewards(poolInfo.lptoken, address(bonusTokenAddresses[i]));
+            uint8 decimals = getTokenDecimals(address(bonusTokenAddresses[i]));
             rewards[curIndex] = PendingReward(
-                rewardToken,
+                address(bonusTokenAddresses[i]),
                 symbol,
-                uint8(18),
+                decimals,
                 rewardsAmount,
                 rewardsAmount * earmarkIncentive / DENOMINATOR,
-                wombexLensUI.estimateInBUSDEther(rewardToken, 1 ether, 18)
+                wombexLensUI.estimateInBUSDEther(address(bonusTokenAddresses[i]), 10 ** decimals, decimals)
             );
             curIndex++;
         }
