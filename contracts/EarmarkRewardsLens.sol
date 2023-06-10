@@ -104,31 +104,36 @@ contract EarmarkRewardsLens {
             if (p.shutdown || !boosterEarmark.isEarmarkPoolAvailable(i, p)) {
                 continue;
             }
-
-            (address token , uint256 periodFinish, , , , , , , bool paused) = IRewards(p.crvRewards).tokenRewards(crv);
-            if (token == crv && periodFinish < block.timestamp && IERC20(crv).balanceOf(p.crvRewards) > 1000 ether) {
-                earmarkablePools[i] = true;
+            earmarkablePools[i] = isPoolRewardsAvailableByPool(p);
+            if (earmarkablePools[i]) {
                 poolsCount++;
-                continue;
-            }
-
-            (uint256 pendingRewards, , , uint256[] memory pendingBonusRewards) = IMasterWombatV2(p.gauge).pendingTokens(
-                voterProxy.lpTokenToPid(p.gauge, p.lptoken),
-                address(voterProxy)
-            );
-            if (pendingRewards != 0) {
-                earmarkablePools[i] = true;
-                poolsCount++;
-                continue;
-            }
-            for (uint256 j = 0; j < pendingBonusRewards.length; j++) {
-                if (pendingBonusRewards[j] != 0) {
-                    earmarkablePools[i] = true;
-                    poolsCount++;
-                    break;
-                }
             }
         }
+    }
+
+    function isPoolRewardsAvailable(uint256 pid) public view returns(bool) {
+        return isPoolRewardsAvailableByPool(booster.poolInfo(pid));
+    }
+
+    function isPoolRewardsAvailableByPool(IBooster.PoolInfo memory p) public view returns(bool) {
+        (address token , uint256 periodFinish, , , , , , , bool paused) = IRewards(p.crvRewards).tokenRewards(crv);
+        if (token == crv && periodFinish < block.timestamp && IERC20(crv).balanceOf(p.crvRewards) > 1000 ether) {
+            return true;
+        }
+
+        (uint256 pendingRewards, , , uint256[] memory pendingBonusRewards) = IMasterWombatV2(p.gauge).pendingTokens(
+            voterProxy.lpTokenToPid(p.gauge, p.lptoken),
+            address(voterProxy)
+        );
+        if (pendingRewards != 0) {
+            return true;
+        }
+        for (uint256 j = 0; j < pendingBonusRewards.length; j++) {
+            if (pendingBonusRewards[j] != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function getPidsToEarmark(bool _useMaxPidsCount) public view returns(uint256[] memory pids) {
@@ -161,7 +166,10 @@ contract EarmarkRewardsLens {
         uint256 poolLen = booster.poolLength();
         pidsNextExecuteOn = new uint256[](poolLen);
         for (uint256 i = 0; i < poolLen; i++) {
-            pidsNextExecuteOn[i] = boosterEarmark.getEarmarkPoolExecuteOn(i);
+            pidsNextExecuteOn[i] = isPoolRewardsAvailable(i) ? boosterEarmark.getEarmarkPoolExecuteOn(i) : 0;
+            if (pidsNextExecuteOn[i] == 0) {
+                pidsNextExecuteOn[i] = MAX_UINT;
+            }
         }
     }
 
