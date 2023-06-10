@@ -819,6 +819,7 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     await lens.setUsdStableTokens(['0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', '0x55d398326f99059fF775485246999027B3197955', '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5', '0x90C97F71E18723b0Cf0dfa30ee176Ab653E89F40', '0x14016E85a25aeb13065688cAFB43044C2ef86784', '0x4268B8F0B87b6Eae5d897996E6b845ddbD99Adf3', '0xFa4BA88Cf97e282c505BEa095297786c16070129', '0x0A3BB08b3a15A19b4De82F8AcFc862606FB69A2D', '0xd17479997F34dd9156Deef8F95A52D81D265be9c', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xB0B195aEFA3650A6908f15CdaC7D92F8a5791B0B'], true).then(tx => tx.wait());
     await lens.setSwapTokenByPool(['0x0415023846Ff1C6016c4d9621de12b24B2402979'], '0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e').then(tx => tx.wait());
     await lens.setSwapTokenByPool(['0xa2e3356610840701bdf5611a53974510ae27e2e1'], '0x8b892b6Ea1d0e5B29b719d6Bd6eb9354f1cDE060').then(tx => tx.wait());
+    await lens.setSwapTokenByPool(['0x52F24a5e03aee338Da5fd9Df68D2b6FAe1178827'], '0x6F1c689235580341562cdc3304E923cC8fad5bFa').then(tx => tx.wait());
     await lens.setPoolsForToken(['0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'], '0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x0520451B19AD0bb00eD35ef391086A692CFC74B2', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
@@ -826,6 +827,8 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x2Ea772346486972E7690219c190dAdDa40Ac5dA4'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x8b892b6Ea1d0e5B29b719d6Bd6eb9354f1cDE060'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
+    await lens.setPoolsForToken(['0x1b507b97c89eDE3E40d1b2Ed92972197c6276D35'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
+    await lens.setPoolsForToken(['0x6F1c689235580341562cdc3304E923cC8fad5bFa'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
     await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8', '0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
     await lens.setTokenSwapThroughToken(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], ['0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c']).then(tx => tx.wait());
     await lens.setTokensTargetStable(['0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0x90c97f71e18723b0cf0dfa30ee176ab653e89f40').then(tx => tx.wait());
