@@ -849,7 +849,6 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     );
     console.log('gaugeVotingLens', gaugeVotingLens.address);
 
-    // console.log('getProtocolStats', await lens.callStatic.getProtocolStats('0x561050FFB188420D2605714F84EdA714DA58da69'));
     // console.log('getTotalRevenue', await lens.callStatic.getTotalRevenue('0x561050FFB188420D2605714F84EdA714DA58da69'));
     // const booster = Booster__factory.connect('0x561050FFB188420D2605714F84EdA714DA58da69', deployer);
     // const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
@@ -950,7 +949,9 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
         maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    const earmarkRewardsLensArgs = [networkConfig.voterProxy, '0xe400486ac923c9e99a23043c2e3a82eb02e7ee70', 15];
+    const wombexLensUI = WombexLensUI__factory.connect('0xe400486ac923c9e99a23043c2e3a82eb02e7ee70', deployer);
+
+    const earmarkRewardsLensArgs = [networkConfig.voterProxy, wombexLensUI.address, 15];
     fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
     const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
         hre,
@@ -961,8 +962,9 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
         true,
         waitForBlocks,
     );
-    // const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xb76591973f0649a1978D7Caf3B93f7aa8Da5E162', deployer);
-    // console.log('earmarkRewardsLens', earmarkRewardsLens.address);
+    console.log('crv', await earmarkRewardsLens.crv());
+    console.log('estimateInBUSDEther', await wombexLensUI.callStatic.estimateInBUSDEther(await earmarkRewardsLens.crv(), simpleToExactAmount(1), 18));
+    console.log('getRewardsToExecute', await earmarkRewardsLens.callStatic.getRewardsToExecute().then(r => r.rewards));
     // const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
     // tokensSymbols.map((symbol, index) => {
     //     console.log(symbol, diffBalances[index]);

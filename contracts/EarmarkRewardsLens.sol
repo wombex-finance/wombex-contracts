@@ -208,7 +208,7 @@ contract EarmarkRewardsLens {
         for (uint256 i = 0; i < bonusTokenAddresses.length; i++) {
             string memory symbol;
             try ERC20(address(bonusTokenAddresses[i])).symbol() returns (string memory _symbol) {
-                symbol = symbol;
+                symbol = _symbol;
             } catch { }
 
             uint256 rewardsAmount = pendingBonusRewards[i] + booster.lpPendingRewards(poolInfo.lptoken, address(bonusTokenAddresses[i]));
@@ -277,7 +277,7 @@ contract EarmarkRewardsLens {
             }
             rewards[i].earmarkAmount = rewards[i].totalAmount * earmarkIncentive / DENOMINATOR;
             rewards[i].decimals = getTokenDecimals(tokens[i]);
-            rewards[i].usdPrice = wombexLensUI.estimateInBUSDEther(crv, 10 ** rewards[i].decimals, rewards[i].decimals);
+            rewards[i].usdPrice = wombexLensUI.estimateInBUSDEther(tokens[i], 10 ** rewards[i].decimals, rewards[i].decimals);
         }
     }
 }

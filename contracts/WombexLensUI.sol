@@ -444,7 +444,7 @@ contract WombexLensUI is Ownable {
     ) public returns (uint256 result) {
         address tokenOut = getTokenToWithdrawFromPool(_womPool);
         if (tokenOut == address(0)) {
-            revert("stable not found for pool");
+            return 0;
         }
         return quotePotentialWithdrawalTokenToBUSD(_womPool, _fromToken, tokenOut, _lpTokenAmountIn);
     }
