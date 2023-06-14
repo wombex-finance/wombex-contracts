@@ -6,6 +6,7 @@ import "solidity-coverage";
 import "@nomiclabs/hardhat-etherscan";
 require('hardhat-contract-sizer');
 import "./tasks/coverage";
+import "./tasks/lens";
 
 import { resolve } from "path";
 
@@ -23,6 +24,7 @@ const chainIds = {
     ropsten: 3,
     bnbt: 97,
     bnb: 56,
+    arbitrum: 42161
 };
 
 const compilerSettings = {
@@ -52,7 +54,7 @@ const config: HardhatUserConfig = {
         currency: "USD",
         enabled: false,
         excludeContracts: [],
-        src: "./contracts",
+        src: process.env.SRC || "./contracts",
     },
     networks: {
         hardhat: {
@@ -87,11 +89,18 @@ const config: HardhatUserConfig = {
             initialBaseFeePerGas: 10000000000,
             accounts
         },
+        arbitrum: {
+            chainId: chainIds.arbitrum,
+            url: process.env.NODE_URL || "",
+            gasPrice: 100000000,
+            initialBaseFeePerGas: 100000000,
+            accounts
+        },
     },
     paths: {
         artifacts: "./artifacts",
         cache: "./cache",
-        sources: "./contracts",
+        sources: process.env.SRC || "./contracts",
         tests: "./test",
     },
     solidity: {

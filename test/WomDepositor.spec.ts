@@ -12,7 +12,7 @@ import { ONE_HOUR, ONE_WEEK } from "../test-utils/constants";
 import { simpleToExactAmount } from "../test-utils/math";
 import {
     BaseRewardPool, DepositorMigrator, DepositorMigrator__factory,
-    VeWom, VoterProxy, WomDepositor, WomDepositorV2__factory
+    VeWom, VoterProxy, WomDepositor, WomDepositorV2__factory, WomDepositorV3
 } from "../types/generated";
 import {deployContract} from "../tasks/utils";
 
@@ -21,7 +21,7 @@ describe("WomDepositor", () => {
     let mocks, veWom: VeWom;
     let deployer: Signer;
     let contracts: SystemDeployed;
-    let womDepositor: WomDepositor, cvxCrvRewards: BaseRewardPool, voterProxy: VoterProxy;
+    let womDepositor: WomDepositorV3, cvxCrvRewards: BaseRewardPool, voterProxy: VoterProxy;
     let daoSigner: Signer, alice: Signer, bob: Signer;
     let daoAddress: string, aliceAddress: string, bobAddress: string;
 
@@ -60,6 +60,23 @@ describe("WomDepositor", () => {
 
         expect(await womDepositor.lockDays()).to.be.eq(14);
         expect(await womDepositor.smartLockPeriod()).to.be.eq(60 * 60);
+    });
+
+    it("setMintManager and mint should work properly", async () => {
+        await expect(womDepositor.connect(alice).mint(aliceAddress, simpleToExactAmount(100))).to.be.revertedWith("!mintManager");
+
+        expect(await womDepositor.mintManagers(aliceAddress)).to.be.eq(false);
+
+        await expect(womDepositor.setMintManager(aliceAddress, true)).to.be.revertedWith("Ownable: caller is not the owner");
+        await womDepositor.connect(daoSigner).setMintManager(aliceAddress, true);
+
+        expect(await womDepositor.mintManagers(aliceAddress)).to.be.eq(true);
+
+        expect(await contracts.cvxCrv.balanceOf(aliceAddress)).to.be.eq(0);
+
+        await womDepositor.connect(alice).mint(aliceAddress, simpleToExactAmount(100));
+
+        expect(await contracts.cvxCrv.balanceOf(aliceAddress)).to.be.eq(simpleToExactAmount(100));
     });
 
     it("deposit do not trigger lock, until smart lock period reached", async () => {
@@ -452,9 +469,8 @@ describe("WomDepositor", () => {
 
         const newWomDepositor = WomDepositorV2__factory.connect(migrated.args.newDepositor, deployer);
 
-        await newWomDepositor.connect(daoSigner).setBooster(contracts.booster.address, '0').then(tx => tx.wait(1));
+        await newWomDepositor.connect(daoSigner).setBooster(contracts.boosterEarmark.address, '0').then(tx => tx.wait(1));
         await contracts.cvxStakingProxy.connect(daoSigner).setConfig(newWomDepositor.address, contracts.cvxLocker.address).then(tx => tx.wait(1));
-        await contracts.cvxStakingProxy.connect(daoSigner).setApprovals().then(tx => tx.wait(1));
 
         expect(await womDepositor.currentSlot()).eq(15);
         expect(await newWomDepositor.currentSlot()).eq(15);

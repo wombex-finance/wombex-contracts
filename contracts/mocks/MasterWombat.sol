@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-0.8/utils/structs/EnumerableSet.sol";
 import '@openzeppelin/contracts-0.8/utils/math/SafeMath.sol';
+import "../Interfaces.sol";
 
 library DSMath {
     uint256 public constant WAD = 10 ** 18;
@@ -160,10 +161,14 @@ contract MasterWombatV2 {
         uint40 lastRewardTimestamp; // Last timestamp that WOMs distribution occurs.
     }
 
+    address public owner;
+
     // Wom token
     IERC20 public wom;
     // Venom does not seem to hurt the Wombat, it only makes it stronger.
     IVeWom public veWom;
+    // New Master Wombat address for future migrations
+    IMasterWombatV2 public newMasterWombat;
     // WOM tokens created per second.
     uint104 public womPerSec;
     // Emissions: both must add to 1000 => 100%
@@ -224,6 +229,10 @@ contract MasterWombatV2 {
 
     function setPause(bool _pause) external {
         pause = _pause;
+    }
+
+    function setNewMasterWombat(IMasterWombatV2 _newMasterWombat) external {
+        newMasterWombat = _newMasterWombat;
     }
 
     /// @notice returns pool length
@@ -368,6 +377,10 @@ contract MasterWombatV2 {
                 bonusTokenSymbols[i] = IERC20Metadata(address(bonusTokenAddresses[i])).symbol();
             }
         }
+    }
+
+    function unpause() public {
+
     }
 
     /// @notice Update reward variables for all pools.
@@ -755,6 +768,33 @@ contract MasterWombatV2 {
             );
             // also, update sumOfFactors
             pool.sumOfFactors = pool.sumOfFactors + newFactor - oldFactor;
+        }
+    }
+
+    function notifyRewardAmount(address _lpToken, uint256 _amount) external {
+
+    }
+
+    /// @notice Helper function to migrate fund from multiple pools to the new MasterWombat.
+    /// @notice user must initiate transaction from masterchef
+    /// @dev Assume the orginal MasterWombat has stopped emisions
+    /// hence we can skip updatePool() to save gas cost
+    function migrate(uint256[] calldata _pids) external {
+        require(address(newMasterWombat) != (address(0)), 'to where?');
+
+        _multiClaim(_pids);
+        for (uint256 i = 0; i < _pids.length; ++i) {
+            uint256 pid = _pids[i];
+            UserInfo storage user = userInfo[pid][msg.sender];
+
+            if (user.amount > 0) {
+                PoolInfo storage pool = poolInfo[pid];
+                pool.lpToken.approve(address(newMasterWombat), user.amount);
+                newMasterWombat.depositFor(pid, user.amount, msg.sender);
+
+                pool.sumOfFactors -= user.factor;
+                delete userInfo[pid][msg.sender];
+            }
         }
     }
 

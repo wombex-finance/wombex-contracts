@@ -3,8 +3,8 @@ pragma solidity 0.8.11;
 
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts-0.8/security/ReentrancyGuard.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable-0.8/access/OwnableUpgradeable.sol";
+import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable-0.8/security/ReentrancyGuardUpgradeable.sol";
 import {WmxMath, WmxMath32, WmxMath112, WmxMath224} from "./WmxMath.sol";
 import "./Interfaces.sol";
 
@@ -20,7 +20,7 @@ interface IRewardStaking {
  *          to depositors.
  * @dev     Invdividual and delegatee vote power lookups both use independent accounting mechanisms.
  */
-contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
+contract WmxLocker is ReentrancyGuardUpgradeable, OwnableUpgradeable, IWmxLocker {
     using WmxMath for uint256;
     using WmxMath224 for uint224;
     using WmxMath112 for uint112;
@@ -43,17 +43,9 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
         uint128 rewardPerTokenPaid;
         uint128 rewards;
     }
-    struct EarnedData {
-        address token;
-        uint256 amount;
-    }
     struct Balances {
         uint112 locked;
         uint32 nextUnlockIndex;
-    }
-    struct LockedBalance {
-        uint112 amount;
-        uint32 unlockTime;
     }
     struct Epoch {
         uint224 supply;
@@ -102,22 +94,22 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
     //     Blacklisted smart contract interactions
     mapping(address => bool) public blacklist;
     //     Tokens
-    IERC20 public immutable stakingToken;
-    address public immutable wmxWom;
+    IERC20 public stakingToken;
+    address public wmxWom;
     //     Denom for calcs
     uint256 public constant denominator = 10000;
     //     Staking wmxWom
-    address public immutable wmxWomStaking;
+    address public wmxWomStaking;
     //     Incentives
-    uint256 public kickRewardPerEpoch = 100;
-    uint256 public kickRewardEpochDelay = 3;
+    uint256 public kickRewardPerEpoch;
+    uint256 public kickRewardEpochDelay;
     //     Shutdown
     bool public isShutdown = false;
 
     // Basic token data
     string private _name;
     string private _symbol;
-    uint8 private immutable _decimals;
+    uint8 private _decimals;
 
     /* ========== EVENTS ========== */
 
@@ -142,6 +134,8 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
                     CONSTRUCTOR
     ****************************************/
 
+    constructor() { }
+
     /**
      * @param _nameArg          Token name, simples
      * @param _symbolArg        Token symbol
@@ -149,13 +143,16 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
      * @param _wmxWom           wmxWom
      * @param _wmxWomStaking    wmxWom rewards
      */
-    constructor(
+    function initialize(
         string memory _nameArg,
         string memory _symbolArg,
         address _stakingToken,
         address _wmxWom,
-        address _wmxWomStaking
-    ) Ownable() {
+        address _wmxWomStaking,
+        address _owner
+    ) initializer external {
+        __Ownable_init();
+        __ReentrancyGuard_init();
         _name = _nameArg;
         _symbol = _symbolArg;
         _decimals = 18;
@@ -163,6 +160,11 @@ contract WmxLocker is ReentrancyGuard, Ownable, IWmxLocker {
         stakingToken = IERC20(_stakingToken);
         wmxWom = _wmxWom;
         wmxWomStaking = _wmxWomStaking;
+
+        _transferOwnership(_owner);
+
+        kickRewardPerEpoch = 100;
+        kickRewardEpochDelay = 3;
 
         uint256 currentEpoch = block.timestamp.div(rewardsDuration).mul(rewardsDuration);
         epochs.push(Epoch({ supply: 0, date: uint32(currentEpoch) }));

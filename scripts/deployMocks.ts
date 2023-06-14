@@ -9,11 +9,23 @@ import {
     MockVoting__factory,
     MockWalletChecker,
     MockWalletChecker__factory,
-    VoterProxy, VoterProxy__factory,
-    VeWom, VeWom__factory,
-    MasterWombatV2, MasterWombatV2__factory,
-    MultiRewarderPerSec, MultiRewarderPerSec__factory,
-    WETH, WETH__factory, Pool__factory, Pool, Asset, Asset__factory,
+    VoterProxy,
+    VoterProxy__factory,
+    VeWom,
+    VeWom__factory,
+    MasterWombatV2,
+    MasterWombatV2__factory,
+    MultiRewarderPerSec,
+    MultiRewarderPerSec__factory,
+    WETH,
+    WETH__factory,
+    Pool__factory,
+    Pool,
+    Asset,
+    Asset__factory,
+    ProxyFactory,
+    ProxyFactory__factory,
+    WmxLocker__factory,
 } from "../types/generated";
 import {deployContract, waitForTx} from "../tasks/utils";
 import { MultisigConfig, DistroList, ExtSystemConfig, NamingConfig } from "./deploySystem";
@@ -404,15 +416,34 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
     config.masterWombat = masterWombat.address;
     config.veWom = veWom.address;
 
-    const voterProxy = await deployContract<VoterProxy>(
+    const proxyFactory = await deployContract<ProxyFactory>(
+        hre,
+        new ProxyFactory__factory(deployer),
+        "ProxyFactory",
+        [ZERO_ADDRESS],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    await proxyFactory.createProxyAdmin(await deployer.getAddress()).then(tx => tx.wait());
+
+    let voterProxy = await deployContract<VoterProxy>(
         hre,
         new VoterProxy__factory(deployer),
         "VoterProxy",
-        [wom.address, veWom.address, weth.address],
+        [],
         {},
         true,
         waitForBlocks,
     );
+
+    const res = await proxyFactory.build(
+        voterProxy.address,
+        voterProxy.interface.encodeFunctionData('initialize', [wom.address, veWom.address, weth.address, await deployer.getAddress()])
+    ).then(tx => tx.wait());
+    const {proxy} = res.events.filter(e => e.event === 'BuildProxy')[0].args;
+    voterProxy = VoterProxy__factory.connect(proxy, deployer);
+
     console.log('voterProxy', voterProxy.address);
 
     return {
@@ -424,6 +455,7 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
         voterProxy,
         veWom,
         masterWombat,
+        proxyFactory,
         crvMinter: null,
         crv: wom,
         feeDistribution: null,

@@ -1,0 +1,38 @@
+import { task } from "hardhat/config";
+const ethers = require('ethers');
+const fs = require('fs');
+const path = require('path');
+
+const LENS_ADDRESS = '0xf5c285c77ac0d4668cf8749309aa3db99a138d85';
+const BOOSTER_ADDRESS = '0x561050FFB188420D2605714F84EdA714DA58da69';
+const METHOD_NAME = 'getApys1';
+
+// example: hardhat lens:poker --network bsc
+task("lens:apys")
+    .setAction(async function (taskArgs, hre, runSuper) {
+        const { user } = taskArgs;
+        const Lens = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../../out/WombexLensUI.sol/WombexLensUI.json`)).toString());
+        const lens = new ethers.Contract(LENS_ADDRESS, Lens.abi, hre.ethers.provider);
+        let data = lens.interface.encodeFunctionData(METHOD_NAME, [BOOSTER_ADDRESS]);
+
+        const params = [
+          {
+            from: "0x0000000000000000000000000000000000000001",
+            to: LENS_ADDRESS,
+            value: '0x0',
+            data,
+          },
+          "latest",
+          {
+            [LENS_ADDRESS]: {
+              balance: '0x0',
+              code: Lens.deployedBytecode.object,
+            },
+          },
+        ];
+
+        const result = await hre.ethers.provider.send("eth_call", params);
+        // console.log('result', result);
+
+        console.log(lens.interface.decodeFunctionResult(METHOD_NAME, result));
+    });
