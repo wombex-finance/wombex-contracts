@@ -130,6 +130,7 @@ contract WombexLensUI is Ownable {
         uint128 amount;
         uint128 usdAmount;
         uint8 decimals;
+        uint128 periodFinish;
     }
 
     constructor(
@@ -659,26 +660,26 @@ contract WombexLensUI is Ownable {
         uint256 len = rewardTokens.length;
         rewards = new RewardItem[](len + 1);
         uint256 earnedWom;
+        uint256 womPeriodFinish;
         for (uint256 i = 0; i < earnedRewards.length; i++) {
             IBaseRewardPool4626.RewardState memory tokenRewards = IBaseRewardPool4626(_rewardsPool).tokenRewards(rewardTokens[i]);
-            if (earnedRewards[i] == 0 && tokenRewards.periodFinish < block.timestamp) {
-                continue;
-            }
             if (rewardTokens[i] == WOM_TOKEN) {
                 earnedWom = earnedRewards[i];
+                womPeriodFinish = tokenRewards.periodFinish;
             }
             uint8 decimals = getTokenDecimals(rewardTokens[i]);
             rewards[i] = RewardItem(
                 rewardTokens[i],
                 uint128(earnedRewards[i]),
                 uint128(estimateInBUSDEther(rewardTokens[i], earnedRewards[i], decimals)),
-                decimals
+                decimals,
+                uint128(tokenRewards.periodFinish)
             );
         }
         if (earnedWom > 0) {
             uint256 earned = ITokenMinter(WMX_MINTER).getFactAmounMint(earnedWom);
             earned = _mintRatio > 0 ? earned * _mintRatio / 10000 : earned;
-            rewards[len] = RewardItem(WMX_TOKEN, uint128(earned), uint128(estimateInBUSD(WMX_TOKEN, earned, uint8(18))), uint8(18));
+            rewards[len] = RewardItem(WMX_TOKEN, uint128(earned), uint128(estimateInBUSD(WMX_TOKEN, earned, uint8(18))), uint8(18), uint128(womPeriodFinish));
         }
     }
 
@@ -689,12 +690,14 @@ contract WombexLensUI is Ownable {
 
         rewards = new RewardItem[](userRewards.length);
         for (uint256 i = 0; i < userRewards.length; i++) {
+            IWmxLockerExt.LockerRewardData memory tokenRewards = IWmxLockerExt(_locker).rewardData(userRewards[i].token);
             uint8 decimals = getTokenDecimals(userRewards[i].token);
             rewards[i] = RewardItem(
                 userRewards[i].token,
                 uint128(userRewards[i].amount),
                 uint128(estimateInBUSDEther(userRewards[i].token, userRewards[i].amount, decimals)),
-                decimals
+                decimals,
+                uint128(tokenRewards.periodFinish)
             );
         }
     }

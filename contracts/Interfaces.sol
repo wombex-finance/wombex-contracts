@@ -88,6 +88,17 @@ interface IWmxLocker {
     );
 }
 
+interface IWmxLockerExt {
+    struct LockerRewardData {
+        uint32 periodFinish;
+        uint32 lastUpdateTime;
+        uint96 rewardRate;
+        uint96 rewardPerTokenStored;
+    }
+
+    function rewardData(address token) external view returns (LockerRewardData memory);
+}
+
 interface IBribeVoter {
     function vote(IERC20[] calldata _lpVote, int256[] calldata _deltas) external returns (uint256[][] memory bribeRewards);
     function votes(address _user, address _lpToken) external view returns (uint256);

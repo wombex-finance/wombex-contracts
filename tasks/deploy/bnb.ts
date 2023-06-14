@@ -833,10 +833,7 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     await lens.setTokenSwapThroughToken(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], ['0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c']).then(tx => tx.wait());
     await lens.setTokensTargetStable(['0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0x90c97f71e18723b0cf0dfa30ee176ab653e89f40').then(tx => tx.wait());
 
-    const gaugeVotingLensArgs = [
-        '0x3E4Bb4C5862ff6739177E3770b914534a7378CdE',
-        lens.address,
-    ];
+    const gaugeVotingLensArgs = ['0x6D1Fce96E26D7E48e8eCc88A7D9D8241c00e9af8', lens.address];
     fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
     const gaugeVotingLens = await deployContract<GaugeVotingLens>(
         hre,
@@ -849,7 +846,7 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     );
     console.log('gaugeVotingLens', gaugeVotingLens.address);
 
-    // console.log('getTotalRevenue', await lens.callStatic.getTotalRevenue('0x561050FFB188420D2605714F84EdA714DA58da69'));
+    // console.log('getPools', await gaugeVotingLens.callStatic.getPools('0x561050FFB188420D2605714F84EdA714DA58da69').then(pools => pools.map(p => p.userRewardItems)));
     // const booster = Booster__factory.connect('0x561050FFB188420D2605714F84EdA714DA58da69', deployer);
     // const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
     // for (let i = 0; i < poolLength; i++) {
@@ -949,7 +946,7 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
         maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    const wombexLensUI = WombexLensUI__factory.connect('0xe400486ac923c9e99a23043c2e3a82eb02e7ee70', deployer);
+    const wombexLensUI = WombexLensUI__factory.connect('0x1F804313a3f58A7df6Ad373Bd1B41AE8f3f7841D', deployer);
 
     const earmarkRewardsLensArgs = [networkConfig.voterProxy, wombexLensUI.address, 15];
     fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
@@ -962,9 +959,9 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
         true,
         waitForBlocks,
     );
-    console.log('crv', await earmarkRewardsLens.crv());
-    console.log('estimateInBUSDEther', await wombexLensUI.callStatic.estimateInBUSDEther(await earmarkRewardsLens.crv(), simpleToExactAmount(1), 18));
-    console.log('getRewardsToExecute', await earmarkRewardsLens.callStatic.getRewardsToExecute().then(r => r.rewards));
+    // console.log('crv', await earmarkRewardsLens.crv());
+    // console.log('estimateInBUSDEther', await wombexLensUI.callStatic.estimateInBUSDEther(await earmarkRewardsLens.crv(), simpleToExactAmount(1), 18));
+    // console.log('getRewardsToExecute', await earmarkRewardsLens.callStatic.getRewardsToExecute().then(r => r.rewards));
     // const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
     // tokensSymbols.map((symbol, index) => {
     //     console.log(symbol, diffBalances[index]);

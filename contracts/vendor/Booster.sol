@@ -676,9 +676,6 @@ contract Booster{
 
         uint256 sum = 0;
         for (uint256 i = 0; i < tLen; i++) {
-            if (_transferAmount[i] == 0) {
-                continue;
-            }
             sum = sum.add(_transferAmount[i]);
             if (_callQueue[i]) {
                 IRewards(_transferTo[i]).queueNewRewards(_rewardToken, _transferAmount[i]);

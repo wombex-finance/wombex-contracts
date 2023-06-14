@@ -13,6 +13,7 @@ import "./GaugeVotingLens.sol";
 contract GaugeVotingLens {
     GaugeVoting public gaugeVoting;
     address public wmx;
+    address public wom;
     IERC20 public veWom;
     address public stakingToken;
     address public voterProxy;
@@ -52,6 +53,7 @@ contract GaugeVotingLens {
     constructor(GaugeVoting _gaugeVoting, WombexLensUI _wombexLensUI) {
         gaugeVoting = _gaugeVoting;
         wmx = _wombexLensUI.WMX_TOKEN();
+        wom = _wombexLensUI.WOM_TOKEN();
         stakingToken = address(_gaugeVoting.stakingToken());
         veWom = _gaugeVoting.veWom();
         voterProxy = _gaugeVoting.voterProxy();

@@ -117,9 +117,9 @@ contract EarmarkRewardsLens {
 
     function isPoolRewardsAvailableByPool(IBooster.PoolInfo memory p) public view returns(bool) {
         (address token , uint256 periodFinish, , , , , , , bool paused) = IRewards(p.crvRewards).tokenRewards(crv);
-        if (token == crv && periodFinish < block.timestamp && IERC20(crv).balanceOf(p.crvRewards) > 1000 ether) {
-            return true;
-        }
+//        if (token == crv && periodFinish < block.timestamp && IERC20(crv).balanceOf(p.crvRewards) > 1000 ether) {
+//            return true;
+//        }
 
         (uint256 pendingRewards, , , uint256[] memory pendingBonusRewards) = IMasterWombatV2(p.gauge).pendingTokens(
             voterProxy.lpTokenToPid(p.gauge, p.lptoken),
