@@ -31,7 +31,6 @@ task("check:gauge-voting-balances").setAction(async function (taskArguments: Tas
     const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
 
     const deployer = await getSigner(hre);
-    const deployerAddress = await deployer.getAddress();
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
@@ -41,6 +40,8 @@ task("check:gauge-voting-balances").setAction(async function (taskArguments: Tas
 
     const gaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
     const stakingTokenAddress = await gaugeVoting.stakingToken();
+    const ownerAddress = await gaugeVoting.owner();
+    console.log('ownerAddress', ownerAddress);
     const holders = await getHolders(network, stakingTokenAddress);
     console.log('stakingTokenAddress', stakingTokenAddress, 'holders', holders);
 
@@ -69,7 +70,9 @@ task("check:gauge-voting-balances").setAction(async function (taskArguments: Tas
     });
 
     console.log('usersBalanceChangedSum', usersBalanceChangedSum, 'usersBalanceChanged', usersBalanceChanged.length, usersBalanceChanged);
-    // for (let i = 0; i < usersBalanceChanged.length; i++) {
-    //     await gaugeVoting.onVotesChanged(usersBalanceChanged[i], deployerAddress).then(tx => tx.wait());
-    // }
+    for (let i = 0; i < usersBalanceChanged.length; i++) {
+        await gaugeVoting.onVotesChanged(usersBalanceChanged[i], ownerAddress).then(tx => tx.wait()).catch(e => {
+            console.error('failed for address', usersBalanceChanged[i]);
+        });
+    }
 });
