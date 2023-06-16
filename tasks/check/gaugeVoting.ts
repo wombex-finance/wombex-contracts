@@ -72,7 +72,7 @@ task("check:gauge-voting-balances").setAction(async function (taskArguments: Tas
     console.log('usersBalanceChangedSum', usersBalanceChangedSum, 'usersBalanceChanged', usersBalanceChanged.length, usersBalanceChanged);
     for (let i = 0; i < usersBalanceChanged.length; i++) {
         await gaugeVoting.onVotesChanged(usersBalanceChanged[i], ownerAddress).then(tx => tx.wait()).catch(e => {
-            console.error('failed for address', usersBalanceChanged[i]);
+            console.error('failed for address', usersBalanceChanged[i], e.message);
         });
     }
 });

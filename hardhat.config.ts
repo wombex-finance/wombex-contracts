@@ -80,7 +80,8 @@ const config: HardhatUserConfig = {
         bnb: {
             chainId: chainIds.bnb,
             url: process.env.NODE_URL || "",
-            gasPrice: 10000000000
+            gasPrice: 10000000000,
+            gasMultiplier: 1.2
         },
         bnbt: {
             chainId: chainIds.bnbt,
@@ -94,6 +95,7 @@ const config: HardhatUserConfig = {
             url: process.env.NODE_URL || "",
             gasPrice: 100000000,
             initialBaseFeePerGas: 100000000,
+            gasMultiplier: 1.2,
             accounts
         },
     },
