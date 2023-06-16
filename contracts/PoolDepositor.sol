@@ -3,6 +3,7 @@ pragma solidity 0.8.11;
 
 import "./Interfaces.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-0.8/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts-0.8/utils/Address.sol";
 import "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-0.8/access/Ownable.sol";
@@ -173,20 +174,25 @@ contract PoolDepositor is Ownable {
         return IPool(pool).quotePotentialDeposit(underlying, _amount);
     }
 
+    function getTokenDecimals(address _token) public view returns (uint8 decimals) {
+        try ERC20(_token).decimals() returns (uint8 _decimals) {
+            decimals = _decimals;
+        } catch {
+            decimals = uint8(18);
+        }
+    }
+
     function getWithdrawAmountOut(
         address _lptoken,
-        address _underlying,
+        address _tokenOut,
         uint256 _amount
     ) external view returns (uint256 amount, uint256 fee) {
         address pool = IAsset(_lptoken).pool();
         address lpTokenUnderlying = IAsset(_lptoken).underlyingToken();
         (amount, fee) = IPool(pool).quotePotentialWithdraw(lpTokenUnderlying, _amount);
 
-        if (_underlying != lpTokenUnderlying) {
-            uint256 fromAmount;
-            (amount, fromAmount) = IPool(pool).quotePotentialWithdrawFromOtherAsset(lpTokenUnderlying, _underlying, _amount);
-            uint256 scaleFactor = (fromAmount * 1 ether) / amount;
-            fee = (fee  * 1 ether) / scaleFactor;
+        if (_tokenOut != lpTokenUnderlying) {
+            (amount, ) = IPool(pool).quotePotentialWithdrawFromOtherAsset(lpTokenUnderlying, _tokenOut, _amount);
         }
     }
 }
