@@ -253,6 +253,12 @@ interface IPool {
         uint256 liquidity
     ) external view returns (uint256 amount, uint256 fee);
 
+    function quotePotentialWithdrawFromOtherAsset(
+        address fromToken,
+        address toToken,
+        uint256 liquidity
+    ) external view virtual returns (uint256 amount, uint256 withdrewAmount);
+
     function withdrawFromOtherAsset(
         address fromToken,
         address toToken,

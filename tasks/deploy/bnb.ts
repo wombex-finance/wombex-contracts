@@ -407,13 +407,14 @@ task("deploy-erdp:bnb").setAction(async function (taskArguments: TaskArguments, 
 task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
 
+    const network = process.env.NETWORK || hre.network.name;
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
         maxPriorityFeePerGas: null,
-        gasPrice: ethers.BigNumber.from(5000000000),
+        gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const bnbConfig = JSON.parse(fs.readFileSync(`./${network}.json`, {encoding: 'utf8'}));
 
     const args = [
         bnbConfig.weth,
@@ -435,6 +436,8 @@ task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskA
     const booster = Booster__factory.connect(bnbConfig.booster, deployer);
     const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
     await poolDepositor.approveSpendingMultiplePools(Array.from(Array(poolLength).keys())).then(tx => tx.wait());
+    await poolDepositor.setBoosterLpTokensPid().then(tx => tx.wait());
+    await poolDepositor.transferOwnership(await booster.owner()).then(tx => tx.wait());
 });
 
 task("deploy-booster-earmark:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
