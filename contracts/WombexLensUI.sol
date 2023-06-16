@@ -13,6 +13,11 @@ interface FraxRouter {
     function getAmountsOutWithTwamm(uint amountIn, address[] memory path) external returns (uint[] memory amounts);
 }
 
+interface IFireBirdPair {
+    function current(address tokenIn, uint256 amountIn) external view returns (uint256 amountOut);
+    function token1() external view returns (address);
+}
+
 interface QuoterV2 {
     struct QuoteExactInputSingleParams {
         address tokenIn;
@@ -194,42 +199,6 @@ contract WombexLensUI is Ownable {
         for (uint256 i = 0; i < _tokens.length; i++) {
             tokenSwapToTargetStable[_tokens[i]] = _targetStable;
         }
-    }
-
-    function getApys1(
-        IBooster _booster
-    ) public returns(PoolValues[] memory) {
-        uint256 mintRatio = _booster.mintRatio();
-        uint256 len = _booster.poolLength();
-        PoolValues[] memory result = new PoolValues[](len);
-        uint256 wmxUsdPrice = estimateInBUSD(WMX_TOKEN, 1 ether, uint8(18));
-
-        for (uint256 i = 0; i < len; i++) {
-            IBooster.PoolInfo memory poolInfo = _booster.poolInfo(i);
-            IBaseRewardPool4626 crvRewards = IBaseRewardPool4626(poolInfo.crvRewards);
-            address pool = IWomAsset(poolInfo.lptoken).pool();
-
-            PoolValues memory pValues;
-
-            pValues.pid = i;
-            pValues.symbol = ERC20(poolInfo.lptoken).symbol();
-            pValues.rewardPool = poolInfo.crvRewards;
-
-            // 1. Calculate Tvl
-            address underlyingToken = IWomAsset(poolInfo.lptoken).underlyingToken();
-            pValues.lpTokenPrice = getLpUsdOut(pool, underlyingToken, 1 ether);
-            pValues.lpTokenBalance = ERC20(poolInfo.crvRewards).totalSupply();
-            pValues.tvl = pValues.lpTokenBalance * pValues.lpTokenPrice / 1 ether;
-
-            // 2. Calculate APYs
-            if (pValues.tvl > 10) {
-                (pValues.tokenAprs, pValues.totalApr, pValues.itemApr, pValues.wmxApr) = getRewardPoolApys(crvRewards, pValues.tvl, wmxUsdPrice, mintRatio);
-            }
-
-            result[i] = pValues;
-        }
-
-        return result;
     }
 
     function getRewardPoolApys(
@@ -492,6 +461,13 @@ contract WombexLensUI is Ownable {
         // 1. All the USD stable tokens are roughly estimated as $1.
         if (isUsdStableToken[_token]) {
             return _amountIn;
+        }
+
+        if (_token == 0x46F74778b265Df3a15EC9695CCd2fD3869ca848c) {
+            IFireBirdPair pair = IFireBirdPair(0x64209162E6AbcBb5726EB4353eF551c76dB0C340);
+            uint256 tokenPrice = pair.current(_token, 1 ether);
+            _token = pair.token1();
+            _amountIn = (tokenPrice * _amountIn) / 1 ether;
         }
 
         address router = UNISWAP_ROUTER;

@@ -292,12 +292,14 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     await new Promise((resolve) => setTimeout(resolve, 3000));
     await lens.setUsdStableTokens(['0xff970a61a04b1ca14834a43f5de4533ebddb5cc8', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xeb8e93a0c7504bffd8a8ffa56cd754c63aaebfe8', '0xfea7a6a0b346362bf88a9e4a88416b77a57d6c2a', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f', '0x3f56e0c36d275367b8c502090edf38289b3dea0d', '0xb0b195aefa3650a6908f15cdac7d92f8a5791b0b', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f'], true).then(tx => tx.wait());
     await lens.setSwapTokenByPool(['0xEfF2B1353Cdcaa2C3279C2bfdE72120c7FfB5E24'], '0xEE9b42b40852a53c7361F527e638B485D49750cD').then(tx => tx.wait());
+    await lens.setSwapTokenByPool(['0xe05a08226c49b636acf99c40da8dc6af83ce5bb3'], '0xB9bdfE449Da096256Fe7954Ef61A18eE195Db77B').then(tx => tx.wait());
     await lens.setPoolsForToken(['0xEE9b42b40852a53c7361F527e638B485D49750cD'], '0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96').then(tx => tx.wait());
+    await lens.setPoolsForToken(['0xB9bdfE449Da096256Fe7954Ef61A18eE195Db77B'], '0x82af49447d8a07e3bd95bd0d56f35241523fbab1').then(tx => tx.wait());
     await lens.setTokenUniV3(['0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], true).then(tx => tx.wait());
-    await lens.setTokensTargetStable(['0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8').then(tx => tx.wait());
     await lens.setTokensToRouter(['0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'], '0xCAAaB0A72f781B92bA63Af27477aA46aB8F653E7').then(tx => tx.wait());
+    await lens.setTokensTargetStable(['0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8').then(tx => tx.wait());
     await lens.setTokensTargetStable(['0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'], '0x17fc002b466eec40dae837fc4be5c67993ddbd6f').then(tx => tx.wait());
-    // console.log('getBribeTotalApr', await lens.callStatic.getBribeTotalApr('0x24d2f6be2bf9cdf3627f720cf09d4551580c1ec1', '0x3f90a5a47364c0467031fb00246192d40e3d2d9d', '0xbd7568d25338940ba212e3f299d2ccc138fa35f0', '9464106345051990800395'));
+    console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0x46F74778b265Df3a15EC9695CCd2fD3869ca848c', simpleToExactAmount(1), 18));
 
     // const lens = WombexLensUI__factory.connect('0xa2a791c8ad4f3363c3997a565f9d7c19e870c83e', deployer);
     console.log('lens', lens.address);
