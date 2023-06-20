@@ -109,41 +109,46 @@ task("info:lpRewards")
 
 task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, hre) {
     const {network} = hre.hardhatArguments;
-    const bnbtConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
+    const poolConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
     const deployerAddress = '0x177e3a199205227d0c3c86e0333125ff08fe7d81';
 
-    const proxyFactory = ProxyFactory__factory.connect(bnbtConfig.proxyFactory, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'proxyFactory', bnbtConfig.proxyFactory, [
-        ZERO_ADDRESS
-    ]);
+    if (poolConfig.proxyFactory) {
+        const proxyFactory = ProxyFactory__factory.connect(poolConfig.proxyFactory, hre.ethers.provider);
+        await writeArgsAndVerify(hre, 'proxyFactory', poolConfig.proxyFactory, [
+            ZERO_ADDRESS
+        ]);
 
-    const proxyAdmin = ProxyAdmin__factory.connect(await proxyFactory.proxyAdmin(), hre.ethers.provider);
-    writeArgs('proxyFactory', []);
+        const proxyAdmin = ProxyAdmin__factory.connect(await proxyFactory.proxyAdmin(), hre.ethers.provider);
+        writeArgs('proxyFactory', []);
 
-    const voterProxy = VoterProxy__factory.connect(bnbtConfig.voterProxy, hre.ethers.provider);
-    const voterProxyImpl = await proxyAdmin.getProxyImplementation(bnbtConfig.voterProxy);
-    await writeArgsAndVerify(hre, 'voterProxy', bnbtConfig.voterProxy, [
-        voterProxyImpl,
-        proxyAdmin.address,
-        voterProxy.interface.encodeFunctionData('initialize', [bnbtConfig.token, bnbtConfig.veWom, bnbtConfig.weth, deployerAddress])
-    ]);
+        const voterProxy = VoterProxy__factory.connect(poolConfig.voterProxy, hre.ethers.provider);
+        const voterProxyImpl = await proxyAdmin.getProxyImplementation(poolConfig.voterProxy);
+        await writeArgsAndVerify(hre, 'voterProxy', poolConfig.voterProxy, [
+            voterProxyImpl,
+            proxyAdmin.address,
+            voterProxy.interface.encodeFunctionData('initialize', [poolConfig.token, poolConfig.veWom, poolConfig.weth, deployerAddress])
+        ]);
 
-    console.log('voterProxyImpl', voterProxyImpl);
-    await writeArgsAndVerify(hre, 'voterProxyImpl', voterProxyImpl, []);
+        console.log('voterProxyImpl', voterProxyImpl);
+        await writeArgsAndVerify(hre, 'voterProxyImpl', voterProxyImpl, []);
 
-    // const cvx = Wmx__factory.connect(bnbtConfig.cvx, hre.ethers.provider);
-    // await writeArgsAndVerify(hre, 'cvx', bnbtConfig.cvx, [
+        console.log('cvxLockerImpl', await proxyAdmin.getProxyImplementation(poolConfig.cvxLocker));
+        await writeArgsAndVerify(hre, 'cvxLockerImpl', await proxyAdmin.getProxyImplementation(poolConfig.cvxLocker), []);
+    }
+
+    // const cvx = Wmx__factory.connect(poolConfig.cvx, hre.ethers.provider);
+    // await writeArgsAndVerify(hre, 'cvx', poolConfig.cvx, [
     //     await cvx.vProxy(),
     //     await cvx.name(),
     //     await cvx.symbol()
     // ]);
 
-    const booster = Booster__factory.connect(bnbtConfig.booster, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'booster', bnbtConfig.booster, [
-        bnbtConfig.voterProxy,
+    const booster = Booster__factory.connect(poolConfig.booster, hre.ethers.provider);
+    await writeArgsAndVerify(hre, 'booster', poolConfig.booster, [
+        poolConfig.voterProxy,
         await booster.reservoirMinter(),
-        bnbtConfig.cvx,
-        bnbtConfig.wom,
+        poolConfig.cvx,
+        poolConfig.wom,
         await booster.weth(),
         await booster.minMintRatio().then(r => r.toString()),
         await booster.maxMintRatio().then(r => r.toString())
@@ -155,7 +160,8 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         await boosterEarmark.weth(),
     ]);
 
-    const boosterPool = await booster.poolInfo('0');
+    const poolLen = await booster.poolLength().then(poolLen => parseInt(poolLen.toString()));
+    const boosterPool = await booster.poolInfo(poolLen - 1);
     const crvRewards = BaseRewardPool4626__factory.connect(boosterPool.crvRewards, hre.ethers.provider);
     console.log('crvRewards', crvRewards.address);
     await writeArgsAndVerify(hre, 'crvRewards', crvRewards.address, [
@@ -165,6 +171,7 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         await crvRewards.operator(),
         await crvRewards.asset()
     ]);
+
     const depositToken = DepositToken__factory.connect(boosterPool.token, hre.ethers.provider);
     console.log('depositToken', depositToken.address);
     await writeArgsAndVerify(hre, 'depositToken', depositToken.address, [
@@ -174,39 +181,39 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         'wmx'
     ], 'vendor/DepositToken.sol:DepositToken');
 
-    if (bnbtConfig.minter) {
-        const minter = WmxMinter__factory.connect(bnbtConfig.minter, hre.ethers.provider);
-        await writeArgsAndVerify(hre, 'minter', bnbtConfig.minter, [
-            bnbtConfig.cvx,
+    if (poolConfig.minter) {
+        const minter = WmxMinter__factory.connect(poolConfig.minter, hre.ethers.provider);
+        await writeArgsAndVerify(hre, 'minter', poolConfig.minter, [
+            poolConfig.cvx,
             await minter.owner()
         ]);
     }
 
-    if (bnbtConfig.reservoirMinter) {
-        const reservoirMinter = ReservoirMinter__factory.connect(bnbtConfig.reservoirMinter, hre.ethers.provider);
-        await writeArgsAndVerify(hre, 'reservoirMinter', bnbtConfig.reservoirMinter, [
+    if (poolConfig.reservoirMinter) {
+        const reservoirMinter = ReservoirMinter__factory.connect(poolConfig.reservoirMinter, hre.ethers.provider);
+        await writeArgsAndVerify(hre, 'reservoirMinter', poolConfig.reservoirMinter, [
             await reservoirMinter.token(),
             await reservoirMinter.totalSupply()
         ]);
     }
 
-    const cvxCrv = CvxCrvToken__factory.connect(bnbtConfig.cvxCrv, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'cvxCrv', bnbtConfig.cvxCrv, [
+    const cvxCrv = CvxCrvToken__factory.connect(poolConfig.cvxCrv, hre.ethers.provider);
+    await writeArgsAndVerify(hre, 'cvxCrv', poolConfig.cvxCrv, [
         await cvxCrv.name(),
         await cvxCrv.symbol()
     ]);
 
-    const cvxCrvRewards = BaseRewardPool__factory.connect(bnbtConfig.cvxCrvRewards, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'cvxCrvRewards', bnbtConfig.cvxCrvRewards, [
+    const cvxCrvRewards = BaseRewardPool__factory.connect(poolConfig.cvxCrvRewards, hre.ethers.provider);
+    await writeArgsAndVerify(hre, 'cvxCrvRewards', poolConfig.cvxCrvRewards, [
         await cvxCrvRewards.pid().then(r => r.toString()),
         await cvxCrvRewards.stakingToken(),
         await cvxCrvRewards.boosterRewardToken(),
         await cvxCrvRewards.operator()
     ]);
 
-    if (bnbtConfig.initialCvxCrvStaking) {
-        const initialCvxCrvStaking = WmxRewardPool__factory.connect(bnbtConfig.initialCvxCrvStaking, hre.ethers.provider);
-        await writeArgsAndVerify(hre, 'initialCvxCrvStaking', bnbtConfig.initialCvxCrvStaking, [
+    if (poolConfig.initialCvxCrvStaking) {
+        const initialCvxCrvStaking = WmxRewardPool__factory.connect(poolConfig.initialCvxCrvStaking, hre.ethers.provider);
+        await writeArgsAndVerify(hre, 'initialCvxCrvStaking', poolConfig.initialCvxCrvStaking, [
             await initialCvxCrvStaking.stakingToken(),
             await initialCvxCrvStaking.rewardToken(),
             await initialCvxCrvStaking.rewardManager(),
@@ -216,8 +223,8 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         ]);
     }
 
-    const crvDepositor = WomDepositorV3__factory.connect(bnbtConfig.crvDepositor, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'crvDepositor', bnbtConfig.crvDepositor, [
+    const crvDepositor = WomDepositorV3__factory.connect(poolConfig.crvDepositor, hre.ethers.provider);
+    await writeArgsAndVerify(hre, 'crvDepositor', poolConfig.crvDepositor, [
         await crvDepositor.wom(),
         await crvDepositor.staker(),
         await crvDepositor.minter(),
@@ -225,11 +232,8 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         await crvDepositor.oldDepositor(),
     ]);
 
-    console.log('cvxLockerImpl', await proxyAdmin.getProxyImplementation(bnbtConfig.cvxLocker));
-    await writeArgsAndVerify(hre, 'cvxLockerImpl', await proxyAdmin.getProxyImplementation(bnbtConfig.cvxLocker), []);
-
-    const cvxStakingProxy = WomStakingProxy__factory.connect(bnbtConfig.cvxStakingProxy, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'cvxStakingProxy', bnbtConfig.cvxStakingProxy, [
+    const cvxStakingProxy = WomStakingProxy__factory.connect(poolConfig.cvxStakingProxy, hre.ethers.provider);
+    await writeArgsAndVerify(hre, 'cvxStakingProxy', poolConfig.cvxStakingProxy, [
         await cvxStakingProxy.wom(),
         await cvxStakingProxy.wmx(),
         await cvxStakingProxy.wmxWom(),
@@ -237,56 +241,59 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         await cvxStakingProxy.rewards(),
     ]);
 
-    const penaltyForwarder = WmxPenaltyForwarder__factory.connect(bnbtConfig.penaltyForwarder, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'penaltyForwarder', bnbtConfig.penaltyForwarder, [
+    const penaltyForwarder = WmxPenaltyForwarder__factory.connect(poolConfig.penaltyForwarder, hre.ethers.provider);
+    await writeArgsAndVerify(hre, 'penaltyForwarder', poolConfig.penaltyForwarder, [
         await penaltyForwarder.distributor(),
         await penaltyForwarder.token(),
         await penaltyForwarder.distributionDelay().then(r => r.toString()),
         await penaltyForwarder.owner(),
     ]);
 
-    const extraRewardsDistributor = ExtraRewardsDistributor__factory.connect(bnbtConfig.extraRewardsDistributor, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'extraRewardsDistributor', bnbtConfig.extraRewardsDistributor, [
+    const extraRewardsDistributor = ExtraRewardsDistributor__factory.connect(poolConfig.extraRewardsDistributor, hre.ethers.provider);
+    await writeArgsAndVerify(hre, 'extraRewardsDistributor', poolConfig.extraRewardsDistributor, [
         await extraRewardsDistributor.wmxLocker(),
     ]);
 
-    const claimZap = WmxClaimZap__factory.connect(bnbtConfig.claimZap, hre.ethers.provider);
-    await writeArgsAndVerify(hre, 'claimZap', bnbtConfig.claimZap, [
-        await claimZap.wom(),
-        await claimZap.wmx(),
-        await claimZap.womWmx(),
-        await claimZap.womDepositor(),
-        await claimZap.wmxWomRewards(),
-        await claimZap.extraRewardsDistributor(),
-        await claimZap.womSwapDepositor(),
-        await claimZap.locker(),
-        await claimZap.owner()
-    ]);
+    // const claimZap = WmxClaimZap__factory.connect(poolConfig.claimZap, hre.ethers.provider);
+    // await writeArgsAndVerify(hre, 'claimZap', poolConfig.claimZap, [
+    //     await claimZap.wom(),
+    //     await claimZap.wmx(),
+    //     await claimZap.womWmx(),
+    //     await claimZap.womDepositor(),
+    //     await claimZap.wmxWomRewards(),
+    //     await claimZap.extraRewardsDistributor(),
+    //     await claimZap.womSwapDepositor(),
+    //     await claimZap.locker(),
+    //     await claimZap.owner()
+    // ]);
 
-    const poolDepositor = PoolDepositor__factory.connect(bnbtConfig.poolDepositor, hre.ethers.provider);
-    await writeArgsAndVerify(hre,'poolDepositor', bnbtConfig.poolDepositor, [
+    const poolDepositor = PoolDepositor__factory.connect(poolConfig.poolDepositor, hre.ethers.provider);
+    await writeArgsAndVerify(hre,'poolDepositor', poolConfig.poolDepositor, [
         await poolDepositor.weth(),
         await poolDepositor.booster(),
         await poolDepositor.masterWombat(),
     ]);
 
-    const wombexUiLens = WombexLensUI__factory.connect(bnbtConfig.wombexUiLens, hre.ethers.provider);
-    await writeArgsAndVerify(hre,'wombexUiLens', bnbtConfig.wombexUiLens, [
-        await wombexUiLens.UNISWAP_ROUTER(),
-        await wombexUiLens.UNISWAP_V3_QUOTER(),
-        await wombexUiLens.MAIN_STABLE_TOKEN(),
-        await wombexUiLens.WOM_TOKEN(),
-        await wombexUiLens.WMX_TOKEN(),
-        await wombexUiLens.WMX_MINTER(),
-        await wombexUiLens.WETH_TOKEN(),
-        await wombexUiLens.WMX_WOM_TOKEN(),
-        await wombexUiLens.WOM_WMX_POOL(),
-    ]);
+    if (poolConfig.wombexUiLens) {
+        const wombexUiLens = WombexLensUI__factory.connect(poolConfig.wombexUiLens, hre.ethers.provider);
+        await writeArgsAndVerify(hre,'wombexUiLens', poolConfig.wombexUiLens, [
+            await wombexUiLens.UNISWAP_ROUTER(),
+            await wombexUiLens.UNISWAP_V3_QUOTER(),
+            await wombexUiLens.MAIN_STABLE_TOKEN(),
+            await wombexUiLens.WOM_TOKEN(),
+            await wombexUiLens.WMX_TOKEN(),
+            await wombexUiLens.WMX_MINTER(),
+            await wombexUiLens.WETH_TOKEN(),
+            await wombexUiLens.WMX_WOM_TOKEN(),
+        ]);
+    }
 
-    const wmxRewardPoolLens = WmxRewardPoolLens__factory.connect(bnbtConfig.wmxRewardPoolLens, hre.ethers.provider);
-    await writeArgsAndVerify(hre,'wmxRewardPoolLens', bnbtConfig.wmxRewardPoolLens, [
-        await wmxRewardPoolLens.wmxRewardPoolFactory(),
-    ]);
+    if(poolConfig.wmxRewardPoolLens) {
+        const wmxRewardPoolLens = WmxRewardPoolLens__factory.connect(poolConfig.wmxRewardPoolLens, hre.ethers.provider);
+        await writeArgsAndVerify(hre,'wmxRewardPoolLens', poolConfig.wmxRewardPoolLens, [
+            await wmxRewardPoolLens.wmxRewardPoolFactory(),
+        ]);
+    }
 
     if (process.env.wmxRewardPool) {
         const wmxRewardPoolV2 = WmxRewardPoolV2__factory.connect(process.env.wmxRewardPool, hre.ethers.provider);
@@ -300,19 +307,19 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
             '66000',
             await wmxRewardPoolV2.duration(),
             await wmxRewardPoolV2.maxCap(),
-            [bnbtConfig.crvDepositor]
+            [poolConfig.crvDepositor]
         ]);
     }
 
-    const gaugeVoting = GaugeVoting__factory.connect(bnbtConfig.gaugeVoting, hre.ethers.provider);
-    await writeArgsAndVerify(hre,'gaugeVoting', bnbtConfig.gaugeVoting, [
+    const gaugeVoting = GaugeVoting__factory.connect(poolConfig.gaugeVoting, hre.ethers.provider);
+    await writeArgsAndVerify(hre,'gaugeVoting', poolConfig.gaugeVoting, [
         await gaugeVoting.wmxLocker(),
         await gaugeVoting.booster(),
         await gaugeVoting.bribeVoter()
     ]);
     const lpTokensAdded = await gaugeVoting.getLpTokensAdded();
     if (lpTokensAdded.length) {
-        const bribeRewards = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lpTokensAdded[0]), hre.ethers.provider);
+        const bribeRewards = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lpTokensAdded[lpTokensAdded.length - 1]), hre.ethers.provider);
         await writeArgsAndVerify(hre,'bribeRewards', bribeRewards.address, [
             await bribeRewards.stakingToken(),
             await bribeRewards.operator(),
@@ -320,19 +327,19 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
             await bribeRewards.callOperatorOnGetReward(),
         ]);
     }
-    await writeArgsAndVerify(hre,'gaugeVotingLens', bnbtConfig.gaugeVotingLens, [
-        bnbtConfig.gaugeVoting
+    await writeArgsAndVerify(hre,'gaugeVotingLens', poolConfig.gaugeVotingLens, [
+        poolConfig.gaugeVoting
     ]);
     await writeArgsAndVerify(hre,'bribeRewardsFactory', await gaugeVoting.bribeRewardsFactory(), [
-        bnbtConfig.gaugeVoting
+        poolConfig.gaugeVoting
     ]);
     await writeArgsAndVerify(hre,'bribeTokenFactory', await gaugeVoting.tokenFactory(), [
-        bnbtConfig.gaugeVoting
+        poolConfig.gaugeVoting
     ]);
 });
 
 async function verify(networkName, address, argsName, contractName = null) {
-    if (await getAbi(networkName, address)) {
+    if (!address || await getAbi(networkName, address)) {
         return;
     }
     console.log('Verify started for contract', argsName);
@@ -357,7 +364,8 @@ async function verify(networkName, address, argsName, contractName = null) {
 
 function getAbi(networkName, address) {
     const apiUri = {
-        'arbitrum': 'https://api.arbiscan.io/'
+        'arbitrum': 'https://api.arbiscan.io',
+        'bnb': 'https://api.bscscan.com'
     }
     return axios
         .get(`${apiUri[networkName]}/api?module=contract&action=getabi&address=${address}&apikey=${process.env.ETHERSCAN_KEY}`)
@@ -365,6 +373,9 @@ function getAbi(networkName, address) {
 }
 
 function writeArgsAndVerify(hre, name, address, args, contractName = null) {
+    if(address === ZERO_ADDRESS) {
+        return;
+    }
     console.log('writeArgsAndVerify', name, address);
     writeArgs(name, args);
     return verify(hre.network.name, address, name, contractName);
