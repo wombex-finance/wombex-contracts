@@ -470,13 +470,13 @@ contract WombexLensUI is Ownable {
             _amountIn = (tokenPrice * _amountIn) / 1 ether;
         }
 
-        address router = UNISWAP_ROUTER;
-
-        if (tokenToRouter[_token] != address(0)) {
-            router = tokenToRouter[_token];
-        }
         if (swapTokenByPool[_token] != address(0)) {
             (_amountIn, _token) = tokenToPoolToken(_token, _amountIn);
+        }
+
+        address router = UNISWAP_ROUTER;
+        if (tokenToRouter[_token] != address(0)) {
+            router = tokenToRouter[_token];
         }
 
         address targetStable = MAIN_STABLE_TOKEN;
