@@ -33,7 +33,7 @@ import {
     BribesRewardFactory__factory, GaugeVotingLens__factory, GaugeVotingLens, BaseRewardPool4626__factory,
     EarmarkRewardsLens__factory,
     LensPoker,
-    LensPoker__factory, EarmarkRewardsLens
+    LensPoker__factory, EarmarkRewardsLens, BaseRewardPoolLocked__factory
 } from "../../types/generated";
 import {BN, impersonate, simpleToExactAmount, ZERO_ADDRESS, increaseTime} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
