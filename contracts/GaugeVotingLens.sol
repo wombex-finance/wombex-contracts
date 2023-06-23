@@ -106,6 +106,28 @@ contract GaugeVotingLens {
         }
     }
 
+    function getPoolWithPrices(address _lpToken, uint256[] memory rewardTokenPrices) public returns (Pool memory pool) {
+        pool.rewards = gaugeVoting.lpTokenRewards(_lpToken);
+        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSD(wmx, 1 ether, 18);
+        uint256 bribeAprItem;
+        uint256 bribeApr;
+        (pool.bribeAprs, bribeAprItem, bribeApr) = wombexLensUI.getBribeApys(
+            voterProxy,
+            bribeVoter,
+            _lpToken,
+            (stakingTokenPrice * IERC20(pool.rewards).totalSupply()) / 1 ether,
+            (IERC20(stakingToken).totalSupply() * stakingTokenPrice) / 1 ether,
+            veWom.balanceOf(voterProxy),
+            rewardTokenPrices
+        );
+        pool.bribeAprItem = uint128(bribeAprItem);
+        pool.bribeApr = uint128(bribeApr);
+        pool.lpToken = _lpToken;
+        pool.isActive = isLpActive(_lpToken);
+        pool.name = ERC20(_lpToken).name();
+        pool.symbol = ERC20(_lpToken).symbol();
+    }
+
     function isLpActive(address _lpToken) public view returns(bool) {
         return gaugeVoting.lpTokenStatus(_lpToken) == GaugeVoting.LpTokenStatus.ACTIVE;
     }

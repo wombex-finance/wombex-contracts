@@ -64,6 +64,7 @@ interface IBaseRewardPool4626 {
         uint256 historicalRewards;
         bool paused;
     }
+    function totalSupply() external view returns (uint256);
     function asset() external view returns (address);
     function rewardTokensList() external view returns (address[] memory);
     function tokenRewards(address _token) external view returns (RewardState memory);
@@ -179,6 +180,32 @@ contract WombexLensUI is Ownable {
         }
     }
 
+    struct RewardPoolInput {
+        IBooster booster;
+        uint256 poolId;
+        address lpToken;
+        address crvRewards;
+    }
+
+    function getRewardPoolApys(
+        RewardPoolInput memory input,
+        uint256[] memory rewardTokenPrices
+    ) public returns(
+        PoolValuesTokenApr[] memory aprs,
+        uint256 aprTotal,
+        uint256 aprItem,
+        uint256 wmxApr
+    ) {
+        address underlyingToken = IWomAsset(input.lpToken).underlyingToken();
+        return getRewardPoolApys(
+            IBaseRewardPool4626(input.crvRewards),
+            getLpUsdOut(IWomAsset(input.lpToken).pool(), underlyingToken, IBaseRewardPool4626(input.crvRewards).totalSupply()),
+            estimateInBUSDEther(WMX_TOKEN, 1 ether, uint8(18)),
+            getPoolMintRatio(input.booster, input.poolId, input.booster.mintRatio()),
+            rewardTokenPrices
+        );
+    }
+
     function getRewardPoolApys(
         IBaseRewardPool4626 crvRewards,
         uint256 poolTvl,
@@ -223,23 +250,14 @@ contract WombexLensUI is Ownable {
         aprTotal += wmxApr;
     }
 
-    function getRewardPoolTotalApr(
-        IBaseRewardPool4626 crvRewards,
-        uint256 poolTvl,
-        uint256 wmxUsdPrice,
-        uint256 mintRatio
-    ) public returns(uint256 aprItem, uint256 aprTotal) {
-        uint256[] memory prices = new uint256[](0);
-        (, aprTotal, aprItem, ) = getRewardPoolApys(crvRewards, poolTvl, wmxUsdPrice, mintRatio, prices);
-    }
-
     function getRewardPoolTotalApr128(
         IBaseRewardPool4626 crvRewards,
         uint256 poolTvl,
         uint256 wmxUsdPrice,
         uint256 mintRatio
     ) public returns(uint128 aprItem128, uint128 aprTotal128) {
-        (uint256 aprItem, uint256 aprTotal) = getRewardPoolTotalApr(crvRewards, poolTvl, wmxUsdPrice, mintRatio);
+        uint256[] memory prices = new uint256[](0);
+        (, uint256 aprTotal, uint256 aprItem, ) = getRewardPoolApys(crvRewards, poolTvl, wmxUsdPrice, mintRatio, prices);
         aprTotal128 = uint128(aprTotal);
         aprItem128 = uint128(aprItem);
     }
@@ -285,18 +303,6 @@ contract WombexLensUI is Ownable {
         }
     }
 
-    function getBribeTotalApr(
-        address voterProxy,
-        IBribeVoter bribesVoter,
-        address lpToken,
-        uint256 poolTvl,
-        uint256 allPoolsTvl,
-        uint256 veWomBalance
-    ) public returns(uint256 aprItem, uint256 aprTotal, PoolValuesTokenApr[] memory aprs) {
-        uint256[] memory prices = new uint256[](0);
-        (aprs, aprItem, aprTotal) = getBribeApys(voterProxy, bribesVoter, lpToken, poolTvl, allPoolsTvl, veWomBalance, prices);
-    }
-
     function getBribeTotalApr128(
         address voterProxy,
         IBribeVoter bribesVoter,
@@ -305,9 +311,10 @@ contract WombexLensUI is Ownable {
         uint256 allPoolsTvl,
         uint256 veWomBalance
     ) public returns(uint128 aprItem128, uint128 aprTotal128, PoolValuesTokenApr[] memory aprs) {
+        uint256[] memory prices = new uint256[](0);
         uint256 aprItem;
         uint256 aprTotal;
-        (aprItem, aprTotal, aprs) = getBribeTotalApr(voterProxy, bribesVoter, lpToken, poolTvl, allPoolsTvl, veWomBalance);
+        (aprs, aprItem, aprTotal) = getBribeApys(voterProxy, bribesVoter, lpToken, poolTvl, allPoolsTvl, veWomBalance, prices);
         aprItem128 = uint128(aprItem);
         aprTotal128 = uint128(aprTotal);
     }
