@@ -301,7 +301,7 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     await lens.setTokensToRouter(['0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'], '0xCAAaB0A72f781B92bA63Af27477aA46aB8F653E7').then(tx => tx.wait());
     await lens.setTokensTargetStable(['0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8').then(tx => tx.wait());
     await lens.setTokensTargetStable(['0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'], '0x17fc002b466eec40dae837fc4be5c67993ddbd6f').then(tx => tx.wait());
-    console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0x46F74778b265Df3a15EC9695CCd2fD3869ca848c', simpleToExactAmount(1), 18));
+    // console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0x46F74778b265Df3a15EC9695CCd2fD3869ca848c', simpleToExactAmount(1), 18));
 
     // const lens = WombexLensUI__factory.connect('0xa2a791c8ad4f3363c3997a565f9d7c19e870c83e', deployer);
     console.log('lens', lens.address);

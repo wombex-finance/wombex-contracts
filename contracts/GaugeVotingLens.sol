@@ -76,7 +76,7 @@ contract GaugeVotingLens {
             votes = new int256[](lpTokens.length);
         }
         pools = new Pool[](lpTokens.length);
-        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSD(wmx, 1 ether, 18);
+        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSDEther(wmx, 1 ether, 18);
         uint256 stakingTotalSupply = IERC20(stakingToken).totalSupply();
         uint256 veWomBalance = veWom.balanceOf(voterProxy);
         for (uint256 i = 0; i < lpTokens.length; i++) {
@@ -108,7 +108,7 @@ contract GaugeVotingLens {
 
     function getPoolWithPrices(address _lpToken, uint256[] memory rewardTokenPrices) public returns (Pool memory pool) {
         pool.rewards = gaugeVoting.lpTokenRewards(_lpToken);
-        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSD(wmx, 1 ether, 18);
+        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSDEther(wmx, 1 ether, 18);
         uint256 bribeAprItem;
         uint256 bribeApr;
         (pool.bribeAprs, bribeAprItem, bribeApr) = wombexLensUI.getBribeApys(

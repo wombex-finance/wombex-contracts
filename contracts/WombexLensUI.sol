@@ -77,13 +77,13 @@ contract WombexLensUI is Ownable {
     address public UNISWAP_V3_QUOTER;
 
     address public MAIN_STABLE_TOKEN;
-    uint8 public MAIN_STABLE_TOKEN_DECIMALS;
+    uint8 internal MAIN_STABLE_TOKEN_DECIMALS;
 
+    address internal WETH_TOKEN;
+    address internal WMX_WOM_TOKEN;
     address public WOM_TOKEN;
     address public WMX_TOKEN;
     address public WMX_MINTER;
-    address public WETH_TOKEN;
-    address public WMX_WOM_TOKEN;
 
     mapping(address => address) public swapTokenByPool;
     mapping(address => bool) public isUsdStableToken;
@@ -185,25 +185,29 @@ contract WombexLensUI is Ownable {
         uint256 poolId;
         address lpToken;
         address crvRewards;
+        uint256[] rewardTokenPrices;
+    }
+    struct RewardPoolApyOutput {
+        PoolValuesTokenApr[] aprs;
+        uint256 aprTotal;
+        uint256 aprItem;
+        uint256 wmxApr;
+        uint256 tvl;
     }
 
-    function getRewardPoolApys(
-        RewardPoolInput memory input,
-        uint256[] memory rewardTokenPrices
-    ) public returns(
-        PoolValuesTokenApr[] memory aprs,
-        uint256 aprTotal,
-        uint256 aprItem,
-        uint256 wmxApr
-    ) {
-        address underlyingToken = IWomAsset(input.lpToken).underlyingToken();
-        return getRewardPoolApys(
-            IBaseRewardPool4626(input.crvRewards),
-            getLpUsdOut(IWomAsset(input.lpToken).pool(), underlyingToken, IBaseRewardPool4626(input.crvRewards).totalSupply()),
-            estimateInBUSDEther(WMX_TOKEN, 1 ether, uint8(18)),
-            getPoolMintRatio(input.booster, input.poolId, input.booster.mintRatio()),
-            rewardTokenPrices
-        );
+    function getRewardPoolApys(RewardPoolInput[] memory input) public returns (RewardPoolApyOutput[] memory output) {
+        output = new RewardPoolApyOutput[](input.length);
+        uint256 wmxPrice = estimateInBUSDEther(WMX_TOKEN, 1 ether, uint8(18));
+        for (uint256 i = 0; i < input.length; i++) {
+            output[i].tvl = IBaseRewardPool4626(input[i].crvRewards).totalSupply() * getLpUsdOut(IWomAsset(input[i].lpToken).pool(), IWomAsset(input[i].lpToken).underlyingToken(), 1 ether) / 1 ether;
+            (output[i].aprs, output[i].aprTotal, output[i].aprItem, output[i].wmxApr) = getRewardPoolApys(
+                IBaseRewardPool4626(input[i].crvRewards),
+                output[i].tvl,
+                address(input[i].booster) == address(0) ? 0 : wmxPrice,
+                address(input[i].booster) == address(0) ? 0 : getPoolMintRatio(input[i].booster, input[i].poolId, input[i].booster.mintRatio()),
+                input[i].rewardTokenPrices
+            );
+        }
     }
 
     function getRewardPoolApys(
@@ -230,7 +234,7 @@ contract WombexLensUI is Ownable {
                 continue;
             }
 
-            if (aprs[i].token == WOM_TOKEN) {
+            if (aprs[i].token == WOM_TOKEN && poolTvl != 0) {
                 uint256 factAmountMint = IWmx(WMX_MINTER).getFactAmounMint(rewardState.rewardRate * 365 days);
                 uint256 wmxRate = factAmountMint;
                 if (mintRatio > 0) {
@@ -243,7 +247,7 @@ contract WombexLensUI is Ownable {
             uint8 decimals = getTokenDecimals(aprs[i].token);
             uint256 usdPrice = rewardTokenPrices.length == 0 ? estimateInBUSDEther(aprs[i].token, 10 ** decimals, decimals) : rewardTokenPrices[i];
             aprs[i].rewardRate = uint128(rewardState.rewardRate * 10 ** (18 - decimals));
-            aprs[i].apr = uint128(uint256(aprs[i].rewardRate) * 365 days * usdPrice * 100 / poolTvl / 1e16);
+            aprs[i].apr = poolTvl == 0 ? 0 : uint128(uint256(aprs[i].rewardRate) * 365 days * usdPrice * 100 / poolTvl / 1e16);
             aprItem += uint256(aprs[i].rewardRate) * 365 days * usdPrice / 1e16;
             aprTotal += aprs[i].apr;
         }
@@ -320,7 +324,6 @@ contract WombexLensUI is Ownable {
     }
 
     function getTvl(IBooster _booster) public returns(uint256 tvlSum) {
-        uint256 mintRatio = _booster.mintRatio();
         uint256 len = _booster.poolLength();
 
         for (uint256 i = 0; i < len; i++) {
@@ -330,12 +333,11 @@ contract WombexLensUI is Ownable {
             tvlSum += ERC20(poolInfo.crvRewards).totalSupply() * getLpUsdOut(pool, underlyingToken, 1 ether) / 1 ether;
         }
         address voterProxy = _booster.voterProxy();
-        tvlSum += estimateInBUSD(WOM_TOKEN, ERC20(IStaker(voterProxy).veWom()).balanceOf(voterProxy), 18);
-        tvlSum += estimateInBUSD(WMX_TOKEN, ERC20(WMX_TOKEN).balanceOf(_booster.cvxLocker()), 18);
+        tvlSum += _estimateInBUSD(WOM_TOKEN, ERC20(IStaker(voterProxy).veWom()).balanceOf(voterProxy), 18);
+        tvlSum += _estimateInBUSD(WMX_TOKEN, ERC20(WMX_TOKEN).balanceOf(_booster.cvxLocker()), 18);
     }
 
     function getTotalRevenue(IBooster _booster, address[] memory _oldCrvRewards, uint256 _revenueRatio) public returns(uint256 totalRevenueSum, uint256 totalWomSum) {
-        uint256 mintRatio = _booster.mintRatio();
         uint256 len = _booster.poolLength();
 
         for (uint256 i = 0; i < len; i++) {
@@ -440,14 +442,12 @@ contract WombexLensUI is Ownable {
             try IWomPool(_womPool).quotePotentialWithdraw(_tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut) {
                 uint8 decimals = getTokenDecimals(_tokenOut);
                 return estimateInBUSDEther(_tokenOut, tokenAmountOut, decimals);
-            } catch {
-            }
+            } catch {}
         } else {
             try IWomPool(_womPool).quotePotentialWithdrawFromOtherAsset(_fromToken, _tokenOut, _lpTokenAmountIn) returns (uint256 tokenAmountOut, uint256 withdrewAmount) {
                 uint8 decimals = getTokenDecimals(_tokenOut);
                 return estimateInBUSDEther(_tokenOut, tokenAmountOut, decimals);
-            } catch {
-            }
+            } catch {}
         }
         return 0;
     }
@@ -461,16 +461,15 @@ contract WombexLensUI is Ownable {
         uint8 decimals = getTokenDecimals(_token);
         try IWomPool(pool).quotePotentialSwap(_token, resToken, int256(10 ** decimals)) returns (uint256 potentialOutcome, uint256 haircut) {
             resAmount = potentialOutcome * _tokenAmount / (10 ** decimals);
-        } catch {
-        }
+        } catch {}
     }
 
     function estimateInBUSDEther(address _token, uint256 _amountIn, uint256 _decimals) public returns (uint256 result) {
-        return estimateInBUSD(_token, _amountIn, _decimals) * 10 ** (18 - _decimals);
+        return _estimateInBUSD(_token, _amountIn, _decimals) * 10 ** (18 - _decimals);
     }
 
     // Estimates a token equivalent in USD (BUSD) using a Uniswap-compatible router
-    function estimateInBUSD(address _token, uint256 _amountIn, uint256 _decimals) public returns (uint256 result) {
+    function _estimateInBUSD(address _token, uint256 _amountIn, uint256 _decimals) internal returns (uint256 result) {
         if (_amountIn == 0) {
             return 0;
         }
@@ -515,19 +514,16 @@ contract WombexLensUI is Ownable {
         if (router == 0xCAAaB0A72f781B92bA63Af27477aA46aB8F653E7) { // frax router
             try FraxRouter(router).getAmountsOutWithTwamm(oneUnit, path) returns (uint256[] memory amountsOut) {
                 result = _amountIn * amountsOut[amountsOut.length - 1] / oneUnit;
-            } catch {
-            }
+            } catch {}
         } else if (tokenUniV3[_token]) {
             QuoterV2.QuoteExactInputSingleParams memory params = QuoterV2.QuoteExactInputSingleParams(_token, targetStable, oneUnit, 3000, 0);
             try QuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(params) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate) {
                 result = _amountIn * amountOut / oneUnit;
-            } catch {
-            }
+            } catch {}
         } else {
             try IUniswapV2Router01(router).getAmountsOut(oneUnit, path) returns (uint256[] memory amountsOut) {
                 result = _amountIn * amountsOut[amountsOut.length - 1] / oneUnit;
-            } catch {
-            }
+            } catch {}
         }
     }
 
@@ -542,8 +538,8 @@ contract WombexLensUI is Ownable {
         RewardContractData memory locker
     ) {
         pools = getUserBalances(_booster, _user, allBoosterPoolIds(_booster));
-        wmxWom = getUserWmxWom(_booster, _booster.crvLockRewards(), _user);
-        locker = getUserLocker(_booster.cvxLocker(), _user);
+        wmxWom = _getUserWmxWom(_booster, _booster.crvLockRewards(), _user);
+        locker = _getUserLocker(_booster.cvxLocker(), _user);
     }
 
     function allBoosterPoolIds(IBooster _booster) public view returns (uint256[] memory) {
@@ -555,26 +551,26 @@ contract WombexLensUI is Ownable {
         return poolIds;
     }
 
-    function getUserWmxWom(
+    function _getUserWmxWom(
         IBooster _booster,
         address _crvLockRewards,
         address _user
-    ) public returns (RewardContractData memory data) {
+    ) internal returns (RewardContractData memory data) {
         RewardItem[] memory rewards = getUserPendingRewards(_booster.mintRatio(), _crvLockRewards, _user);
         uint256 wmxWomBalance = ERC20(_crvLockRewards).balanceOf(_user);
         (uint256 womBalance, ) = tokenToPoolToken(WMX_WOM_TOKEN, wmxWomBalance);
         data = RewardContractData(_crvLockRewards, uint128(wmxWomBalance), uint128(womBalance), uint128(0), uint8(18), rewards);
-        data.usdBalance = uint128(estimateInBUSD(WMX_WOM_TOKEN, data.underlyingBalance, uint8(18)));
+        data.usdBalance = uint128(_estimateInBUSD(WMX_WOM_TOKEN, data.underlyingBalance, uint8(18)));
     }
 
-    function getUserLocker(
+    function _getUserLocker(
         address _locker,
         address _user
-    ) public returns (RewardContractData memory data) {
-        RewardItem[] memory rewards = getUserLockerPendingRewards(_locker, _user);
+    ) internal returns (RewardContractData memory data) {
+        RewardItem[] memory rewards = _getUserLockerPendingRewards(_locker, _user);
         (uint256 balance, , , ) = IWmxLocker(_locker).lockedBalances(_user);
         data = RewardContractData(_locker, uint128(balance), uint128(balance), uint128(0), uint8(18), rewards);
-        data.usdBalance = uint128(estimateInBUSD(WMX_TOKEN, data.underlyingBalance, uint8(18)));
+        data.usdBalance = uint128(_estimateInBUSD(WMX_TOKEN, data.underlyingBalance, uint8(18)));
     }
 
     function getUserBalances(
@@ -624,8 +620,7 @@ contract WombexLensUI is Ownable {
         resMintRatio = defaultMintRatio;
         try _booster.customMintRatio(pid) returns (uint256 _customMintRatio) {
             resMintRatio = _customMintRatio == 0 ? defaultMintRatio : _customMintRatio;
-        } catch {
-        }
+        } catch {}
     }
 
     function getTokenDecimals(address _token) public view returns (uint8 decimals) {
@@ -664,11 +659,11 @@ contract WombexLensUI is Ownable {
         if (earnedWom > 0) {
             uint256 earned = ITokenMinter(WMX_MINTER).getFactAmounMint(earnedWom);
             earned = _mintRatio > 0 ? earned * _mintRatio / 10000 : earned;
-            rewards[len] = RewardItem(WMX_TOKEN, uint128(earned), uint128(estimateInBUSD(WMX_TOKEN, earned, uint8(18))), uint8(18), uint128(womPeriodFinish));
+            rewards[len] = RewardItem(WMX_TOKEN, uint128(earned), uint128(_estimateInBUSD(WMX_TOKEN, earned, uint8(18))), uint8(18), uint128(womPeriodFinish));
         }
     }
 
-    function getUserLockerPendingRewards(address _locker, address _user) public
+    function _getUserLockerPendingRewards(address _locker, address _user) internal
         returns (RewardItem[] memory rewards)
     {
         IWmxLocker.EarnedData[] memory userRewards = IWmxLocker(_locker).claimableRewards(_user);
