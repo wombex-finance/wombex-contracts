@@ -114,15 +114,11 @@ contract BoosterLensUI is Ownable {
     function getBoostRatio(IMasterWombatV3 _masterWombat, address lpToken) public view returns (uint256) {
         uint256 wmPid = voterProxy.lpTokenToPid(address(_masterWombat), lpToken);
         IMasterWombatV3.UserInfo memory ui = _masterWombat.userInfo(wmPid, address(voterProxy));
-        if (ui.amount == 0) {
+        IMasterWombatV3.PoolInfoV3 memory pi = _masterWombat.poolInfoV3(wmPid);
+        if (ui.amount == 0 || pi.accWomPerShare == 0) {
           return 0;
         }
-        IMasterWombatV3.PoolInfoV3 memory pi = _masterWombat.poolInfoV3(wmPid);
-        if (pi.accWomPerShare == 0) {
-            return 0;
-        }
-        uint256 p1 = ui.amount * pi.accWomPerShare + ui.factor * pi.accWomPerFactorShare;
-        uint256 p2 = ui.amount * pi.accWomPerShare;
-        return p1 / (p2 / 1 ether);
+        uint256 userAmountPerShare = (ui.amount / 1e9) * pi.accWomPerShare;
+        return (userAmountPerShare + (ui.factor / 1e9) * pi.accWomPerFactorShare) / (userAmountPerShare / 1 ether);
     }
 }
