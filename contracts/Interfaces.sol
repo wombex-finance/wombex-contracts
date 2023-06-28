@@ -212,6 +212,7 @@ interface IStaker{
     function lpTokenToPid(address, address) external view returns (uint256);
     function operator() external view returns (address);
     function depositor() external view returns (address);
+    function wom() external view returns (address);
     function veWom() external view returns (address);
     function execute(address _to, uint256 _value, bytes calldata _data) external returns (bool, bytes memory);
     function setVote(bytes32 hash, bool valid) external;
@@ -369,6 +370,7 @@ interface IBooster {
     }
 
     function crv() external view returns (address);
+    function cvx() external view returns (address);
     function owner() external view returns (address);
     function voterProxy() external view returns (address);
     function earmarkDelegate() external view returns (address);

@@ -55,8 +55,17 @@ import {
     BribesTokenFactory__factory,
     BribesTokenFactory,
     DepositToken,
-    DepositToken__factory, BaseRewardPoolLocked, BaseRewardPoolLocked__factory, MultiStaker__factory, MultiStaker,
-    EarmarkRewardsLens__factory, EarmarkRewardsLens, MintManager, MintManager__factory
+    DepositToken__factory,
+    BaseRewardPoolLocked,
+    BaseRewardPoolLocked__factory,
+    MultiStaker__factory,
+    MultiStaker,
+    EarmarkRewardsLens__factory,
+    EarmarkRewardsLens,
+    MintManager,
+    MintManager__factory,
+    BoosterLensUI,
+    BoosterLensUI__factory
 } from "../../types/generated";
 import {
     createTreeWithAccounts,
@@ -865,6 +874,31 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     //     const {crvRewards} = await booster.poolInfo(i);
     //     console.log(i, 'getPoolRewardsInUsd', await lens.callStatic.getPoolRewardsInUsd(crvRewards).then(r => ethers.utils.formatEther(r)));
     // }
+});
+
+task("booster-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+    })) as any;
+
+    const boosterLensArgs = [
+        '0x7d84a8977095a0cB4EA3C5CDE105276217754E7c',
+        '0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569'
+    ];
+    fs.writeFileSync('./args/boosterLens.js', 'module.exports = ' + JSON.stringify(boosterLensArgs));
+    const boosterLens = await deployContract<BoosterLensUI>(
+        hre,
+        new BoosterLensUI__factory(deployer),
+        "BoosterLensUI",
+        boosterLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('boosterLens', boosterLens.address);
+    console.log('getBoostRatioList', await boosterLens.callStatic.getBoostRatioList('0x489833311676B566f888119c29bd997Dc6C95830', '0xa4A1533f5F939D6718B0d5CE2850F2ff55206967').then(list => list.map(br => ethers.utils.formatEther(br.value))))
 });
 
 task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
