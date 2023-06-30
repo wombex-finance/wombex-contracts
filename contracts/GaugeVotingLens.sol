@@ -128,6 +128,17 @@ contract GaugeVotingLens {
         pool.symbol = ERC20(_lpToken).symbol();
     }
 
+    struct PoolInput {
+        address lpToken;
+        uint256[] rewardTokenPrices;
+    }
+    function getPoolsWithPrices(PoolInput[] memory poolInputs) public returns (Pool[] memory pools) {
+        pools = new Pool[](poolInputs.length);
+        for(uint256 i = 0; i < pools.length; i++) {
+            pools[i] = getPoolWithPrices(poolInputs[i].lpToken, poolInputs[i].rewardTokenPrices);
+        }
+    }
+
     function isLpActive(address _lpToken) public view returns(bool) {
         return gaugeVoting.lpTokenStatus(_lpToken) == GaugeVoting.LpTokenStatus.ACTIVE;
     }

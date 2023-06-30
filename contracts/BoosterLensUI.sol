@@ -94,12 +94,12 @@ contract BoosterLensUI is Ownable {
         uint256 value;
     }
 
-    function getRewardPoolStats(IMasterWombatV3 _masterWombat, WombexLensUI.RewardPoolInput[] memory apyInput) public returns (
+    function getRewardPoolStats(IMasterWombatV3 _masterWombat, IBooster _booster, WombexLensUI.RewardPoolInput[] memory apyInput) public returns (
         WombexLensUI.RewardPoolApyOutput[] memory apyList,
         BoostRatio[] memory boostRatioList
     ) {
         apyList = wombexLensUI.getRewardPoolApys(apyInput);
-        boostRatioList = getBoostRatioList(_masterWombat, apyInput[0].booster);
+        boostRatioList = getBoostRatioList(_masterWombat, _booster);
     }
 
     function getBoostRatioList(IMasterWombatV3 _masterWombat, IBooster _booster) public view returns (BoostRatio[] memory boostRatioList) {
@@ -107,13 +107,13 @@ contract BoosterLensUI is Ownable {
         boostRatioList = new BoostRatio[](poolLen);
         for (uint256 i = 0; i < poolLen; i++) {
             IBooster.PoolInfo memory pi = _booster.poolInfo(i);
-            boostRatioList[i] = BoostRatio(pi.lptoken, getBoostRatio(_masterWombat, pi.lptoken));
+            boostRatioList[i] = BoostRatio(pi.lptoken, getBoostRatio(_masterWombat, pi.lptoken, address(voterProxy)));
         }
     }
 
-    function getBoostRatio(IMasterWombatV3 _masterWombat, address lpToken) public view returns (uint256) {
+    function getBoostRatio(IMasterWombatV3 _masterWombat, address lpToken, address _user) public view returns (uint256) {
         uint256 wmPid = voterProxy.lpTokenToPid(address(_masterWombat), lpToken);
-        IMasterWombatV3.UserInfo memory ui = _masterWombat.userInfo(wmPid, address(voterProxy));
+        IMasterWombatV3.UserInfo memory ui = _masterWombat.userInfo(wmPid, _user);
         IMasterWombatV3.PoolInfoV3 memory pi = _masterWombat.poolInfoV3(wmPid);
         if (ui.amount == 0 || pi.accWomPerShare == 0) {
           return 0;
