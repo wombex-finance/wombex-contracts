@@ -89,25 +89,27 @@ contract BoosterLensUI is Ownable {
         }
     }
 
-    struct BoostRatio {
+    struct RatioItem {
         address lpToken;
         uint256 value;
     }
 
     function getRewardPoolStats(IMasterWombatV3 _masterWombat, IBooster _booster, WombexLensUI.RewardPoolInput[] memory apyInput) public returns (
         WombexLensUI.RewardPoolApyOutput[] memory apyList,
-        BoostRatio[] memory boostRatioList
+        RatioItem[] memory boostRatioList,
+        RatioItem[] memory coverageRatioList
     ) {
         apyList = wombexLensUI.getRewardPoolApys(apyInput);
         boostRatioList = getBoostRatioList(_masterWombat, _booster);
+        coverageRatioList = getCoverageRatioList(_booster);
     }
 
-    function getBoostRatioList(IMasterWombatV3 _masterWombat, IBooster _booster) public view returns (BoostRatio[] memory boostRatioList) {
+    function getBoostRatioList(IMasterWombatV3 _masterWombat, IBooster _booster) public view returns (RatioItem[] memory boostRatioList) {
         uint256 poolLen = _booster.poolLength();
-        boostRatioList = new BoostRatio[](poolLen);
+        boostRatioList = new RatioItem[](poolLen);
         for (uint256 i = 0; i < poolLen; i++) {
             IBooster.PoolInfo memory pi = _booster.poolInfo(i);
-            boostRatioList[i] = BoostRatio(pi.lptoken, getBoostRatio(_masterWombat, pi.lptoken, address(voterProxy)));
+            boostRatioList[i] = RatioItem(pi.lptoken, getBoostRatio(_masterWombat, pi.lptoken, address(voterProxy)));
         }
     }
 
@@ -120,5 +122,23 @@ contract BoosterLensUI is Ownable {
         }
         uint256 userAmountPerShare = (ui.amount / 1e9) * pi.accWomPerShare;
         return (userAmountPerShare + (ui.factor / 1e9) * pi.accWomPerFactorShare) / (userAmountPerShare / 1 ether);
+    }
+
+    function getCoverageRatioList(IBooster _booster) public view returns (RatioItem[] memory boostRatioList) {
+        uint256 poolLen = _booster.poolLength();
+        boostRatioList = new RatioItem[](poolLen);
+        for (uint256 i = 0; i < poolLen; i++) {
+            IBooster.PoolInfo memory pi = _booster.poolInfo(i);
+            boostRatioList[i] = RatioItem(pi.lptoken, getCoverageRatio(pi.lptoken));
+        }
+    }
+
+    function getCoverageRatio(address _lpToken) public view returns (uint256) {
+        IAsset asset = IAsset(_lpToken);
+        uint256 liability = asset.liability();
+        if (liability == 0) {
+            return 0;
+        }
+        return ((asset.cash() * 1e9) / liability) * 1e9;
     }
 }
