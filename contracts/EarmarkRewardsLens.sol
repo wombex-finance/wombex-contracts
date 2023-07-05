@@ -96,6 +96,7 @@ contract EarmarkRewardsLens {
     }
 
     function getEarmarkablePools() public view returns(bool[] memory earmarkablePools, uint256 poolsCount) {
+        uint256 earmarkPeriod = boosterEarmark.earmarkPeriod();
         uint256 poolLen = booster.poolLength();
         earmarkablePools = new bool[](poolLen);
 
@@ -104,32 +105,34 @@ contract EarmarkRewardsLens {
             if (p.shutdown || !boosterEarmark.isEarmarkPoolAvailable(i, p)) {
                 continue;
             }
-            earmarkablePools[i] = isPoolRewardsAvailableByPool(p);
+            earmarkablePools[i] = isPoolRewardsAvailableByPool(i, p, earmarkPeriod);
             if (earmarkablePools[i]) {
                 poolsCount++;
             }
         }
     }
 
-    function isPoolRewardsAvailable(uint256 pid) public view returns(bool) {
-        return isPoolRewardsAvailableByPool(booster.poolInfo(pid));
+    function isPoolRewardsAvailable(uint256 _pid) public view returns(bool) {
+        return isPoolRewardsAvailableByPool(_pid, booster.poolInfo(_pid), boosterEarmark.earmarkPeriod());
     }
 
-    function isPoolRewardsAvailableByPool(IBooster.PoolInfo memory p) public view returns(bool) {
-        (address token , uint256 periodFinish, , , , , , , bool paused) = IRewards(p.crvRewards).tokenRewards(crv);
+    function isPoolRewardsAvailableByPool(uint256 _pid, IBooster.PoolInfo memory _p, uint256 _earmarkPeriod) public view returns(bool) {
+        (address token , uint256 periodFinish, , , , , , , bool paused) = IRewards(_p.crvRewards).tokenRewards(crv);
 //        if (token == crv && periodFinish < block.timestamp && IERC20(crv).balanceOf(p.crvRewards) > 1000 ether) {
 //            return true;
 //        }
 
-        (uint256 pendingRewards, , , uint256[] memory pendingBonusRewards) = IMasterWombatV2(p.gauge).pendingTokens(
-            voterProxy.lpTokenToPid(p.gauge, p.lptoken),
+        (uint256 pendingRewards, IERC20[] memory bonusTokenAddresses, , uint256[] memory pendingBonusRewards) = IMasterWombatV2(_p.gauge).pendingTokens(
+            voterProxy.lpTokenToPid(_p.gauge, _p.lptoken),
             address(voterProxy)
         );
-        if (pendingRewards != 0) {
+        bool readyToExecute = boosterEarmark.lastEarmarkAt(_pid) + _earmarkPeriod < block.timestamp;
+        if (pendingRewards != 0 && !paused && (readyToExecute || periodFinish < block.timestamp)) {
             return true;
         }
-        for (uint256 j = 0; j < pendingBonusRewards.length; j++) {
-            if (pendingBonusRewards[j] != 0) {
+        for (uint256 i = 0; i < pendingBonusRewards.length; i++) {
+            ( , periodFinish, , , , , , , paused) = IRewards(_p.crvRewards).tokenRewards(address(bonusTokenAddresses[i]));
+            if (pendingBonusRewards[i] != 0 && !paused && (readyToExecute || periodFinish < block.timestamp)) {
                 return true;
             }
         }
