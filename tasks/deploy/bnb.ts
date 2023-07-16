@@ -818,7 +818,7 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     ];
     fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
 
-    // const lens = WombexLensUI__factory.connect('0xA557e3D026eA201Eb3B0e04A64d93761ca2cC42b', deployer);
+    // const lens = WombexLensUI__factory.connect('0x7d84a8977095a0cB4EA3C5CDE105276217754E7c', deployer);
     const lens = await deployContract<WombexLensUI>(
         hre,
         new WombexLensUI__factory(deployer),
@@ -879,13 +879,16 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
 task("booster-lens:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
 
+    const network = process.env.NETWORK || hre.network.name;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
+
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
     const boosterLensArgs = [
-        '0x7d84a8977095a0cB4EA3C5CDE105276217754E7c',
-        '0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569'
+        '0x53def0a5dB716f6ac4884F1A89eB11B50F570B70',
+        networkConfig.voterProxy
     ];
     fs.writeFileSync('./args/boosterLens.js', 'module.exports = ' + JSON.stringify(boosterLensArgs));
     const boosterLens = await deployContract<BoosterLensUI>(
@@ -898,7 +901,7 @@ task("booster-lens:bnb").setAction(async function (taskArguments: TaskArguments,
         waitForBlocks,
     );
     console.log('boosterLens', boosterLens.address);
-    console.log('getBoostRatioList', await boosterLens.callStatic.getBoostRatioList('0x489833311676B566f888119c29bd997Dc6C95830', '0xa4A1533f5F939D6718B0d5CE2850F2ff55206967').then(list => list.map(br => ethers.utils.formatEther(br.value))))
+    // console.log('getBoostRatioList', await boosterLens.callStatic.getBoostRatioList('0x489833311676B566f888119c29bd997Dc6C95830', '0xa4A1533f5F939D6718B0d5CE2850F2ff55206967').then(list => list.map(br => ethers.utils.formatEther(br.value))))
 });
 
 task("wom-staking-proxy:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
@@ -992,7 +995,7 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
         maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    const wombexLensUI = WombexLensUI__factory.connect('0x1F804313a3f58A7df6Ad373Bd1B41AE8f3f7841D', deployer);
+    const wombexLensUI = WombexLensUI__factory.connect('0x53def0a5dB716f6ac4884F1A89eB11B50F570B70', deployer);
 
     const earmarkRewardsLensArgs = [networkConfig.voterProxy, wombexLensUI.address, 15];
     fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
@@ -1005,6 +1008,8 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
         true,
         waitForBlocks,
     );
+    console.log('getPoolsQueue', await earmarkRewardsLens.getPoolsQueue());
+    console.log('getPidsToEarmark', await earmarkRewardsLens.getPidsToEarmark(false));
     // console.log('crv', await earmarkRewardsLens.crv());
     // console.log('estimateInBUSDEther', await wombexLensUI.callStatic.estimateInBUSDEther(await earmarkRewardsLens.crv(), simpleToExactAmount(1), 18));
     // console.log('getRewardsToExecute', await earmarkRewardsLens.callStatic.getRewardsToExecute().then(r => r.rewards));

@@ -278,6 +278,7 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
         '0xEfF2B1353Cdcaa2C3279C2bfdE72120c7FfB5E24', //_WMX_WOM_TOKEN
     ];
     fs.writeFileSync('./args/wombexLensUi.js', 'module.exports = ' + JSON.stringify(args));
+    // const lens = WombexLensUI__factory.connect('0x53def0a5dB716f6ac4884F1A89eB11B50F570B70', deployer);
     const lens = await deployContract<WombexLensUI>(
         hre,
         new WombexLensUI__factory(deployer),
@@ -287,7 +288,6 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
         true,
         waitForBlocks,
     );
-    // const lens = WombexLensUI__factory.connect('0xe400486ac923c9e99a23043c2e3a82eb02e7ee70', deployer);
     console.log('estimateInBUSDEther', await lens.callStatic.estimateInBUSDEther(await lens.WOM_TOKEN(), simpleToExactAmount(1), 18));
     await new Promise((resolve) => setTimeout(resolve, 3000));
     await lens.setUsdStableTokens(['0xff970a61a04b1ca14834a43f5de4533ebddb5cc8', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xeb8e93a0c7504bffd8a8ffa56cd754c63aaebfe8', '0xfea7a6a0b346362bf88a9e4a88416b77a57d6c2a', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f', '0x3f56e0c36d275367b8c502090edf38289b3dea0d', '0xb0b195aefa3650a6908f15cdac7d92f8a5791b0b', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f'], true).then(tx => tx.wait());
