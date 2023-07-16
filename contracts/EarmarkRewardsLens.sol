@@ -105,7 +105,7 @@ contract EarmarkRewardsLens {
             if (p.shutdown || !boosterEarmark.isEarmarkPoolAvailable(i, p)) {
                 continue;
             }
-            earmarkablePools[i] = isPoolRewardsAvailableByPool(i, p, earmarkPeriod);
+            earmarkablePools[i] = poolRewardsAvailableByPoolOn(i, p, earmarkPeriod) < block.timestamp;
             if (earmarkablePools[i]) {
                 poolsCount++;
             }
@@ -113,10 +113,10 @@ contract EarmarkRewardsLens {
     }
 
     function isPoolRewardsAvailable(uint256 _pid) public view returns(bool) {
-        return isPoolRewardsAvailableByPool(_pid, booster.poolInfo(_pid), boosterEarmark.earmarkPeriod());
+        return poolRewardsAvailableByPoolOn(_pid, booster.poolInfo(_pid), boosterEarmark.earmarkPeriod()) < block.timestamp;
     }
 
-    function isPoolRewardsAvailableByPool(uint256 _pid, IBooster.PoolInfo memory _p, uint256 _earmarkPeriod) public view returns(bool) {
+    function poolRewardsAvailableByPoolOn(uint256 _pid, IBooster.PoolInfo memory _p, uint256 _earmarkPeriod) public view returns (uint256) {
         (address token , uint256 periodFinish, , , , , , , bool paused) = IRewards(_p.crvRewards).tokenRewards(crv);
 //        if (token == crv && periodFinish < block.timestamp && IERC20(crv).balanceOf(p.crvRewards) > 1000 ether) {
 //            return true;
@@ -126,17 +126,18 @@ contract EarmarkRewardsLens {
             voterProxy.lpTokenToPid(_p.gauge, _p.lptoken),
             address(voterProxy)
         );
-        bool readyToExecute = boosterEarmark.lastEarmarkAt(_pid) + _earmarkPeriod < block.timestamp;
-        if (pendingRewards != 0 && !paused && (readyToExecute || periodFinish < block.timestamp)) {
-            return true;
+        uint256 nextEarmarkOn = boosterEarmark.lastEarmarkAt(_pid) + _earmarkPeriod;
+        bool readyToExecute = nextEarmarkOn < block.timestamp;
+        if (pendingRewards != 0 && !paused) {
+            return periodFinish > nextEarmarkOn ? nextEarmarkOn : periodFinish;
         }
         for (uint256 i = 0; i < pendingBonusRewards.length; i++) {
             ( , periodFinish, , , , , , , paused) = IRewards(_p.crvRewards).tokenRewards(address(bonusTokenAddresses[i]));
-            if (pendingBonusRewards[i] != 0 && !paused && (readyToExecute || periodFinish < block.timestamp)) {
-                return true;
+            if (pendingBonusRewards[i] != 0 && !paused) {
+                return periodFinish > nextEarmarkOn ? nextEarmarkOn : periodFinish;
             }
         }
-        return false;
+        return MAX_UINT;
     }
 
     function getPidsToEarmark(bool _useMaxPidsCount) public view returns(uint256[] memory pids) {
@@ -166,13 +167,11 @@ contract EarmarkRewardsLens {
     }
 
     function getPoolsQueue() public view returns(uint256[] memory pidsNextExecuteOn) {
+        uint256 earmarkPeriod = boosterEarmark.earmarkPeriod();
         uint256 poolLen = booster.poolLength();
         pidsNextExecuteOn = new uint256[](poolLen);
         for (uint256 i = 0; i < poolLen; i++) {
-            pidsNextExecuteOn[i] = isPoolRewardsAvailable(i) ? boosterEarmark.getEarmarkPoolExecuteOn(i) : 0;
-            if (pidsNextExecuteOn[i] == 0) {
-                pidsNextExecuteOn[i] = MAX_UINT;
-            }
+            pidsNextExecuteOn[i] = poolRewardsAvailableByPoolOn(i, booster.poolInfo(i), earmarkPeriod);
         }
     }
 
