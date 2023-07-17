@@ -13,6 +13,7 @@ contract BoosterEarmark is Ownable {
     address public voterProxy;
     address public depositor;
     address public mainRewardToken;
+    IRewardsManager public rewardsManager;
     address public weth;
 
     uint256 public earmarkIncentive;
@@ -45,6 +46,7 @@ contract BoosterEarmark is Ownable {
     event ClearDistributionApproval(address indexed distro, address[] tokens);
 
     event SetPoolManager(address poolManager);
+    event SetRewardsManager(address rewardsManager);
 
     event SetEarmarkConfig(uint256 earmarkIncentive, uint256 earmarkPeriod);
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
@@ -53,12 +55,21 @@ contract BoosterEarmark is Ownable {
 
     event ReleaseToken(address indexed token, uint256 amount, address indexed recipient);
 
-    constructor(address _booster, address _weth) {
+    constructor(address _booster, address _rewardsManager, address _weth) {
         booster = IBooster(_booster);
         mainRewardToken = booster.crv();
         voterProxy = IBooster(_booster).voterProxy();
         depositor = IStaker(voterProxy).depositor();
+        rewardsManager = IRewardsManager(_rewardsManager);
         weth = _weth;
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwnerOrRewardsManager() {
+        require(owner() == _msgSender() || address(rewardsManager) == _msgSender(), "not_owner_nor_rewards_manager");
+        _;
     }
 
     function updateBoosterAndDepositor() external onlyOwner {
@@ -84,6 +95,14 @@ contract BoosterEarmark is Ownable {
         require(_poolManager != address(0), "zero");
         booster.setPoolManager(_poolManager);
         emit SetPoolManager(_poolManager);
+    }
+
+    /**
+     * @notice Set rewardsManager
+     */
+    function setRewardsManager(address _rewardsManager) external onlyOwner {
+        rewardsManager = IRewardsManager(_rewardsManager);
+        emit SetRewardsManager(_rewardsManager);
     }
 
     /**
@@ -138,7 +157,7 @@ contract BoosterEarmark is Ownable {
         address[] memory _distros,
         uint256[] memory _shares,
         bool[] memory _callQueue
-    ) public onlyOwner {
+    ) public onlyOwnerOrRewardsManager {
         require(_distros.length > 0, "zero");
 
         if (distributionByTokens[_token].length == 0) {
@@ -288,9 +307,11 @@ contract BoosterEarmark is Ownable {
                 continue;
             }
             TokenDistro[] storage tDistros = _getDistributionByTokens(_pid, address(s.token));
+            if (tDistros.length == 0) {
+                rewardsManager.onNewRewardToken(address(s.token));
+                tDistros = _getDistributionByTokens(_pid, address(s.token));
+            }
             s.dLen = tDistros.length;
-            require(s.dLen > 0, "!dLen");
-
             s.earmarkIncentiveAmount = s.balance * earmarkIncentive / DENOMINATOR;
             s.sentSum = s.earmarkIncentiveAmount;
 
