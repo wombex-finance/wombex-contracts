@@ -55,12 +55,11 @@ contract BoosterEarmark is Ownable {
 
     event ReleaseToken(address indexed token, uint256 amount, address indexed recipient);
 
-    constructor(address _booster, address _rewardsManager, address _weth) {
+    constructor(address _booster, address _weth) {
         booster = IBooster(_booster);
         mainRewardToken = booster.crv();
         voterProxy = IBooster(_booster).voterProxy();
         depositor = IStaker(voterProxy).depositor();
-        rewardsManager = IRewardsManager(_rewardsManager);
         weth = _weth;
     }
 
