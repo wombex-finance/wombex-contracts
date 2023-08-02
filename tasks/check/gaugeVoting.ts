@@ -2,6 +2,7 @@ import {task} from "hardhat/config";
 import {TaskArguments} from "hardhat/types";
 import {getSigner} from "../utils";
 import {
+    BribesRewardPool__factory,
     GaugeVoting__factory,
 } from "../../types/generated";
 const fs = require('fs');
@@ -27,7 +28,7 @@ function getHolders(network, token, blocknumber = 0) {
 }
 
 task("check:gauge-voting-balances").setAction(async function (taskArguments: TaskArguments, hre) {
-    const network = process.env.NETWORK || hre.network.name;
+    const network = process.env.NETWORK ;; hre.network.name;
     const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
 
     const deployer = await getSigner(hre);
@@ -76,3 +77,60 @@ task("check:gauge-voting-balances").setAction(async function (taskArguments: Tas
         });
     }
 });
+
+
+task("check:gauge-voting-apy").setAction(async function (taskArguments: TaskArguments, hre) {
+    const network = process.env.NETWORK || hre.network.name;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
+
+    const deployer = await getSigner(hre);
+    const gaugeVoting = GaugeVoting__factory.connect(networkConfig.gaugeVoting, deployer);
+
+    const fromBlockTag = 113132111; // 0xaec8657c7cca90fce0b248a0e0792ef9fe53042c6b63711092b9742dfbfaf8a3
+    const toBlockTag = 113535507; // 0xa7f72c5d30fc8232d99b405fc28f01d967a7c48437ed0ae27f99ce511c22a21f
+    let blocksFromStart = 0;
+    function callOptions() {
+        let blockTag = fromBlockTag + blocksFromStart;
+        return {blockTag: blockTag > toBlockTag ? toBlockTag : blockTag}
+    }
+    const userWallet = '0x79a814508f32b540038f0fd20c4a849952569c8f';
+                // bob                                          usdc.e
+    const lps = ['0x06228b709ed3c8344ae61e64b48204174d2e48b5', '0x75eaa804518a66196946598317aed57ef86235fe'];
+    const symbols = ['BOB', 'USC.e'];
+    const rewardToken = '0xB0B195aEFA3650A6908f15CdaC7D92F8a5791B0B';
+
+    let csv = 'token;+blocks;pending;balanceOf;totalSupply;rewardTime;rate;rewardPerToken\n';
+    const step = Math.round((toBlockTag - fromBlockTag) / 10);
+    while (fromBlockTag + blocksFromStart < toBlockTag) {
+        const rewards = {}, rates = {}, balances = {}, supplies = {}, timeDiffs = {}, rewardsPerToken = {};
+        for(let j = 0; j < lps.length; j++) {
+            const lp = lps[j];
+            const rewardsPool = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lp), deployer);
+            const [pending, {rewardRate, lastUpdateTime}, balanceOf, totalSupply, lastApplicableTime, rewardPerToken] = await Promise.all([
+                rewardsPool.earned(rewardToken, userWallet, callOptions()).then(toEther),
+                rewardsPool.tokenRewards(rewardToken, callOptions()),
+                rewardsPool.balanceOf(userWallet, callOptions()).then(toEther),
+                rewardsPool.totalSupply(callOptions()).then(toEther),
+                rewardsPool.lastTimeRewardApplicable(rewardToken, callOptions()).then(t => t.toString()),
+                rewardsPool.rewardPerToken(rewardToken, callOptions()).then(toEther)
+            ])
+            rewards[j] = pending.toString();
+            rates[j] = rewardRate.toString();
+            supplies[j] = Math.round(totalSupply);
+            balances[j] = Math.round(balanceOf);
+            timeDiffs[j] = parseInt(lastApplicableTime.toString()) - parseInt(lastUpdateTime.toString());
+            rewardsPerToken[j] = rewardPerToken.toString();
+            csv += `${symbols[j]};${callOptions().blockTag - fromBlockTag};${rewards[j].replace('.', ',')};${balances[j]};${supplies[j]};${timeDiffs[j]};${rates[j]};${rewardsPerToken[j]}\n`;
+        }
+        console.log('+blocks', step, 'rewards', JSON.stringify(rewards, null, " "), 'rates', JSON.stringify(rates, null, " "), 'supplies', JSON.stringify(supplies, null, " "), 'timeDiffs', JSON.stringify(timeDiffs, null, " "));
+        blocksFromStart += step;
+    }
+
+    fs.writeFileSync('./rewardsAnalytics.csv', csv, {encoding:'utf8'});
+
+    // console.log('totalVotes', await gaugeVoting.callStatic.totalVotes({blockTag: 110535508}));
+});
+
+function toEther(wei) {
+    return Math.round(parseFloat(ethers.utils.formatEther(wei)) * 1e4) / 1e4;
+}
