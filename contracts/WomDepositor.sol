@@ -72,7 +72,6 @@ contract WomDepositor is Ownable {
     }
 
     function setLockConfig(uint256 _lockDays, uint256 _smartLockPeriod) external onlyOwner {
-        require(_smartLockPeriod <= 7 days, "MAX_SMART_LOCK_PERIOD");
         lockDays = _lockDays;
         smartLockPeriod = _smartLockPeriod;
 

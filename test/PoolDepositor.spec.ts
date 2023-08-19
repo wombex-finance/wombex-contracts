@@ -11,7 +11,7 @@ import {
 } from "../types/generated";
 import { Signer, BigNumber} from "ethers";
 import {deployContract, waitForTx} from "../tasks/utils";
-import {ZERO_ADDRESS} from "../test-utils";
+import {ZERO_ADDRESS, MAX_UINT256} from "../test-utils";
 
 type PoolInfo = {
     lptoken: string;
@@ -87,7 +87,7 @@ describe("PoolDepositor", () => {
             let tx = await underlying.connect(alice).approve(poolDepositor.address, amount);
             await tx.wait();
 
-            tx = await poolDepositor.connect(alice).deposit(mocks.lptoken.address, amount, 0, stake);
+            tx = await poolDepositor.connect(alice).deposit(mocks.lptoken.address, amount, 0, MAX_UINT256, stake);
             await tx.wait();
 
             expect(await crvRewards.balanceOf(aliceAddress)).to.equal(stakedBalanceBefore.add(amount));
@@ -102,7 +102,7 @@ describe("PoolDepositor", () => {
             let tx = await underlying.connect(alice).approve(poolDepositor.address, amount);
             await tx.wait();
 
-            tx = await poolDepositor.connect(alice).deposit(mocks.lptoken.address, amount, 0, stake);
+            tx = await poolDepositor.connect(alice).deposit(mocks.lptoken.address, amount, 0, MAX_UINT256, stake);
             await tx.wait();
 
             expect(await depositToken.balanceOf(aliceAddress)).to.equal(depositedBalanceBefore.add(amount));
@@ -119,7 +119,7 @@ describe("PoolDepositor", () => {
             let tx = await crvRewards.connect(alice).approve(poolDepositor.address, amount);
             await tx.wait();
 
-            tx = await poolDepositor.connect(alice).withdraw(mocks.lptoken.address, amount, 0, aliceAddress);
+            tx = await poolDepositor.connect(alice).withdraw(mocks.lptoken.address, amount, 0, MAX_UINT256, aliceAddress);
             await tx.wait();
 
             expect(await crvRewards.balanceOf(aliceAddress)).to.equal(stakedBalanceBefore.sub(amount));
@@ -175,7 +175,7 @@ describe("PoolDepositor", () => {
             let tx = await mocks.weth.connect(alice).approve(poolDepositor.address, amount);
             await tx.wait();
 
-            tx = await poolDepositor.connect(alice).depositNative(nativeLptoken.address, 0, stake, {
+            tx = await poolDepositor.connect(alice).depositNative(nativeLptoken.address, 0, MAX_UINT256, stake, {
                 value: amount
             });
             await tx.wait();
@@ -188,7 +188,7 @@ describe("PoolDepositor", () => {
             await tx.wait();
 
             const underlyingBalanceBefore = await alice.getBalance();
-            tx = await poolDepositor.connect(alice).withdrawNative(nativeLptoken.address, mocks.weth.address, amount, 0, aliceAddress);
+            tx = await poolDepositor.connect(alice).withdrawNative(nativeLptoken.address, mocks.weth.address, amount, 0, MAX_UINT256, aliceAddress);
             tx = await tx.wait();
 
             expect(await nativeCrvRewards.balanceOf(aliceAddress)).to.equal(stakedBalanceBefore.sub(amount));

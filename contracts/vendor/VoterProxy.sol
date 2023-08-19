@@ -39,6 +39,7 @@ contract VoterProxy is Initializable {
     bytes4 constant internal EIP1271_MAGIC_VALUE = 0x1626ba7e;
 
     event SetOwner(address newOwner);
+    event SetVeWom(address veWom);
     event SetGaugeLpTokenPid(address gauge, address lptoken, uint256 pid);
     event SetRewardDeposit(address withdrawer, address rewardDeposit);
     event SetDepositor(address depositor);
@@ -67,7 +68,9 @@ contract VoterProxy is Initializable {
         weth = _weth;
         owner = _owner;
 
-        IERC20(_wom).safeApprove(_veWom, type(uint256).max);
+        if (_veWom != address(0)) {
+            IERC20(_wom).safeApprove(_veWom, type(uint256).max);
+        }
     }
 
     receive() external payable {}
@@ -80,6 +83,13 @@ contract VoterProxy is Initializable {
         require(msg.sender == owner, "!auth");
         owner = _owner;
         emit SetOwner(_owner);
+    }
+
+    function setVeWom(address _veWom) external {
+        require(msg.sender == owner, "!auth");
+        veWom = _veWom;
+        IERC20(wom).safeApprove(_veWom, type(uint256).max);
+        emit SetVeWom(_veWom);
     }
 
     /**

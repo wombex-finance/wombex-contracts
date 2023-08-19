@@ -25,9 +25,8 @@ import {
     Asset__factory,
     ProxyFactory,
     ProxyFactory__factory,
-    WmxLocker__factory,
 } from "../types/generated";
-import {deployContract, waitForTx} from "../tasks/utils";
+import {deployContract} from "../tasks/utils";
 import { MultisigConfig, DistroList, ExtSystemConfig, NamingConfig } from "./deploySystem";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { BigNumber as BN } from "ethers";
@@ -278,7 +277,7 @@ async function deployBinanceTestMocks(tokenAddress, hre: HardhatRuntimeEnvironme
     };
 }
 
-async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Signer, addEthMultiRewarder = true) {
+async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Signer, addEthMultiRewarder = true, withVeWom = true) {
     const deployer = signer;
     const deployerAddress = await deployer.getAddress();
     const waitForBlocks = 1;
@@ -320,14 +319,17 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
         debug,
     );
 
-    const veWom = await deployContract<VeWom>(
-        hre,
-        new VeWom__factory(deployer),
-        "VeWom",
-        [wom.address, masterWombat.address],
-        {},
-        debug,
-    );
+    let veWom;
+    if (withVeWom) {
+        veWom = await deployContract<VeWom>(
+            hre,
+            new VeWom__factory(deployer),
+            "VeWom",
+            [wom.address, masterWombat.address],
+            {},
+            debug,
+        );
+    }
 
     const pool = await deployContract<Pool>(
         hre,
@@ -398,14 +400,13 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
         multiRewarderAddress = multiRewarder.address;
     }
 
-    let tx = await masterWombat.add('1', lptoken.address, multiRewarderAddress);
-    await waitForTx(tx, true, waitForBlocks);
+    await masterWombat.add('1', lptoken.address, multiRewarderAddress).then(tx => tx.wait());
 
-    tx = await wom.transfer(masterWombat.address, BN.from(10).pow(18).mul(10000));
-    await waitForTx(tx, true, waitForBlocks);
+    await wom.transfer(masterWombat.address, BN.from(10).pow(18).mul(10000)).then(tx => tx.wait());
 
-    tx = await masterWombat.setVeWom(veWom.address);
-    await waitForTx(tx, true, waitForBlocks);
+    if (veWom) {
+        await masterWombat.setVeWom(veWom.address).then(tx => tx.wait());
+    }
 
     config.weth = weth.address;
     config.token = wom.address;
@@ -414,7 +415,9 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
     config.voteParameter = voting.address;
     config.tokenBpt = zeroAddress;
     config.masterWombat = masterWombat.address;
-    config.veWom = veWom.address;
+    if (veWom) {
+        config.veWom = veWom.address;
+    }
 
     const proxyFactory = await deployContract<ProxyFactory>(
         hre,
@@ -439,7 +442,7 @@ async function deployTestFirstStage(hre: HardhatRuntimeEnvironment, signer: Sign
 
     const res = await proxyFactory.build(
         voterProxy.address,
-        voterProxy.interface.encodeFunctionData('initialize', [wom.address, veWom.address, weth.address, await deployer.getAddress()])
+        voterProxy.interface.encodeFunctionData('initialize', [wom.address, veWom ? veWom.address : ZERO_ADDRESS, weth.address, await deployer.getAddress()])
     ).then(tx => tx.wait());
     const {proxy} = res.events.filter(e => e.event === 'BuildProxy')[0].args;
     voterProxy = VoterProxy__factory.connect(proxy, deployer);

@@ -576,62 +576,37 @@ async function deployFirstStage(
     );
     console.log('penaltyForwarder', penaltyForwarder.address);
 
-    let tx = await wmxLocker.addReward(cvxCrv.address, wmxStakingProxy.address);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    tx = await wmxLocker.setApprovals();
-    await waitForTx(tx, debug, waitForBlocks);
-
+    await wmxLocker.addReward(cvxCrv.address, wmxStakingProxy.address).then(tx => tx.wait());
+    await wmxLocker.setApprovals().then(tx => tx.wait());
     console.log('voterProxy.setOperator')
-    tx = await voterProxy.setOperator(booster.address);
-    await waitForTx(tx, debug, waitForBlocks);
-
+    await voterProxy.setOperator(booster.address).then(tx => tx.wait());
     console.log('womDepositor.setLockConfig')
-    tx = await womDepositor.setLockConfig(1461, 2 * 60 * 60);
-    await waitForTx(tx, debug, waitForBlocks);
+    await womDepositor.setLockConfig(1461, 2 * 60 * 60).then(tx => tx.wait());
 
     console.log('cvxCrv.setOperator')
-    tx = await cvxCrv.setOperator(womDepositor.address);
-    await waitForTx(tx, debug, waitForBlocks);
-
+    await cvxCrv.setOperator(womDepositor.address).then(tx => tx.wait());
     console.log(' voterProxy.setDepositor')
-    tx = await voterProxy.setDepositor(womDepositor.address);
-    await waitForTx(tx, debug, waitForBlocks);
+    await voterProxy.setDepositor(womDepositor.address).then(tx => tx.wait());
 
     console.log('booster.setFactories')
-    tx = await booster.setFactories(rewardFactory.address, tokenFactory.address);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    console.log('booster.setVoteDelegate')
-    tx = await booster.setVoteDelegate(multisigs.daoMultisig, true);
-    await waitForTx(tx, debug, waitForBlocks);
+    await booster.setFactories(rewardFactory.address, tokenFactory.address).then(tx => tx.wait());
+    await booster.setVoteDelegate(multisigs.daoMultisig, true).then(tx => tx.wait());
 
     console.log('booster.setEarmarkConfig')
-    tx = await boosterEarmark.setEarmarkConfig(10, 60 * 60);
-    await waitForTx(tx, debug, waitForBlocks);
-
+    await boosterEarmark.setEarmarkConfig(10, 60 * 60).then(tx => tx.wait());
     await boosterEarmark.updateBoosterAndDepositor().then(tx => tx.wait());
 
     console.log('booster.setExtraRewardsDistributor')
-    tx = await booster.setExtraRewardsDistributor(extraRewardsDistributor.address);
-    await waitForTx(tx, debug, waitForBlocks);
-
+    await booster.setExtraRewardsDistributor(extraRewardsDistributor.address).then(tx => tx.wait());
     console.log('booster.setFeeManager')
-    tx = await booster.setFeeManager(multisigs.daoMultisig);
-    await waitForTx(tx, debug, waitForBlocks);
+    await booster.setFeeManager(multisigs.daoMultisig).then(tx => tx.wait());
 
     console.log('booster.modifyWhitelist')
-    tx = await extraRewardsDistributor.modifyWhitelist(penaltyForwarder.address, true);
-    await waitForTx(tx, debug, waitForBlocks);
+    await extraRewardsDistributor.modifyWhitelist(penaltyForwarder.address, true).then(tx => tx.wait());
+    await extraRewardsDistributor.modifyWhitelist(booster.address, true).then(tx => tx.wait());
 
-    tx = await extraRewardsDistributor.modifyWhitelist(booster.address, true);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    tx = await booster.setPoolManager(deployerAddress);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    tx = await booster.setPoolManager(boosterEarmark.address);
-    await waitForTx(tx, debug, waitForBlocks);
+    await booster.setPoolManager(deployerAddress).then(tx => tx.wait());
+    await booster.setPoolManager(boosterEarmark.address).then(tx => tx.wait());
 
     await updateDistributionByTokens(signer, {
         booster,
@@ -646,29 +621,17 @@ async function deployFirstStage(
     );
 
     await proxyFactory.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    await boosterEarmark.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
+    await wmxLocker.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
 
-    tx = await boosterEarmark.transferOwnership(multisigs.daoMultisig);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    tx = await wmxLocker.transferOwnership(multisigs.daoMultisig);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    tx = await wmxStakingProxy.transferOwnership(multisigs.daoMultisig);
-    await waitForTx(tx, debug, waitForBlocks);
-
+    await wmxStakingProxy.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
     console.log('voterProxy.setOwner')
-    tx = await voterProxy.setOwner(multisigs.daoMultisig);
-    await waitForTx(tx, debug, waitForBlocks);
+    await voterProxy.setOwner(multisigs.daoMultisig).then(tx => tx.wait());
+    await booster.setOwner(multisigs.daoMultisig).then(tx => tx.wait());
 
-    tx = await booster.setOwner(multisigs.daoMultisig);
-    await waitForTx(tx, debug, waitForBlocks);
-
-    tx = await womDepositor.transferOwnership(multisigs.daoMultisig);
-    await waitForTx(tx, debug, waitForBlocks);
-
+    await womDepositor.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
     console.log('booster.transferOwnership')
-    tx = await extraRewardsDistributor.transferOwnership(multisigs.daoMultisig);
-    await waitForTx(tx, debug, waitForBlocks);
+    await extraRewardsDistributor.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
 
     const claimZap = await deployContract<WmxClaimZap>(
         hre,
@@ -682,9 +645,7 @@ async function deployFirstStage(
     console.log('claimZap', claimZap.address)
 
     console.log('cvx.init')
-    tx = await cvx.init(multisigs.daoMultisig, minter.address);
-    await waitForTx(tx, debug, waitForBlocks);
-
+    await cvx.init(multisigs.daoMultisig, minter.address).then(tx => tx.wait());
 
     return {
         ...deployment,
@@ -1035,25 +996,22 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
     // function setFees(uint256 _lockFees, uint256 _stakerFees, uint256 _callerFees, uint256 _platform) external{
 
     console.log('voterProxy.setLpTokensPid', masterWombat.address);
-    let tx = await voterProxy.connect(signer).setLpTokensPid(masterWombat.address);
-    await waitForTx(tx, true, waitForBlocks);
+    await voterProxy.connect(signer).setLpTokensPid(masterWombat.address).then(tx => tx.wait());
 
     console.log('booster.updateDistributionByTokens', poolLength);
-    tx = await boosterEarmark.connect(signer).updateDistributionByTokens(
+    await boosterEarmark.connect(signer).updateDistributionByTokens(
         crv.address,
         [cvxCrvRewards.address, cvxStakingProxy.address],
         [500, 1000],
         [true, true]
-    );
-    await waitForTx(tx, true, waitForBlocks);
+    ).then(tx => tx.wait());
 
     for (let i = 0; i < poolLength; i++) {
         console.log('masterWombat.poolInfo');
         const {lpToken, rewarder} = await masterWombat.poolInfo(i);
 
         console.log('booster.addPool');
-        tx = await boosterEarmark.connect(signer).addPool(lpToken, masterWombat.address);
-        await waitForTx(tx, true, waitForBlocks);
+        await boosterEarmark.connect(signer).addPool(lpToken, masterWombat.address).then(tx => tx.wait());
 
         if (rewarder !== ZERO_ADDRESS) {
             const rewarderContract = await IMasterWombatRewarder__factory.connect(rewarder, signer);
@@ -1064,18 +1022,16 @@ async function updateDistributionByTokens(signer, deployment, waitForBlocks = 1)
                     token = weth.address;
                     console.log('tokens[i] = weth.address')
                 }
-                tx = await boosterEarmark.connect(signer).updateDistributionByTokens(
+                await boosterEarmark.connect(signer).updateDistributionByTokens(
                     token,
                     [cvxCrvRewards.address, cvxLocker.address],
                     [500, 1000],
                     [true, true]
-                );
-                await waitForTx(tx, true, waitForBlocks);
+                ).then(tx => tx.wait());
 
                 if (await cvxLocker.rewardData(token).then(rd => rd.lastUpdateTime.toString()) === '0') {
                     console.log('cvxLocker.connect(signer).addReward', token);
-                    tx = await cvxLocker.connect(signer).addReward(token, booster.address);
-                    await waitForTx(tx, true, waitForBlocks);
+                    await cvxLocker.connect(signer).addReward(token, booster.address).then(tx => tx.wait());
                 }
             }
         }

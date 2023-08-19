@@ -433,6 +433,12 @@ contract MasterWombatV2 {
         }
     }
 
+    function _setUserFactor(address _userAddress, UserInfo storage _user) internal {
+        if (address(veWom) != address(0)) {
+            _user.factor = to128(DSMath.sqrt(_user.amount * veWom.balanceOf(_userAddress), _user.amount));
+        }
+    }
+
     /// @notice Deposit LP tokens to MasterChef for WOM allocation on behalf of user
     /// @dev user must initiate transaction from masterchef
     /// @param _pid the pool id
@@ -467,7 +473,7 @@ contract MasterWombatV2 {
 
         // update boosted factor
         uint256 oldFactor = user.factor;
-        user.factor = to128(DSMath.sqrt(user.amount * veWom.balanceOf(_user), user.amount));
+        _setUserFactor(_user, user);
         pool.sumOfFactors = pool.sumOfFactors + user.factor - oldFactor;
 
         // update reward debt
@@ -511,7 +517,7 @@ contract MasterWombatV2 {
 
         // update boosted factor
         uint256 oldFactor = user.factor;
-        user.factor = to128(DSMath.sqrt(user.amount * veWom.balanceOf(msg.sender), user.amount));
+        _setUserFactor(msg.sender, user);
         pool.sumOfFactors = pool.sumOfFactors + user.factor - oldFactor;
 
         // update reward debt
@@ -637,7 +643,7 @@ contract MasterWombatV2 {
         user.amount -= to128(_amount);
 
         // update boosted factor
-        user.factor = to128(DSMath.sqrt(user.amount * veWom.balanceOf(msg.sender), user.amount));
+        _setUserFactor(msg.sender, user);
         pool.sumOfFactors = pool.sumOfFactors + user.factor - oldFactor;
 
         // update reward debt
