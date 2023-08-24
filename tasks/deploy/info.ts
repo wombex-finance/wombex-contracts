@@ -3,19 +3,29 @@ import { TaskArguments } from "hardhat/types";
 import {
     BaseRewardPool4626__factory,
     BaseRewardPool__factory,
-    Booster__factory, BoosterEarmark__factory, BribesRewardPool__factory,
+    Booster__factory,
+    BoosterEarmark__factory,
+    BribesRewardPool__factory,
     CvxCrvToken__factory,
     DepositToken__factory,
-    ExtraRewardsDistributor__factory, GaugeVoting__factory, GaugeVotingLens__factory,
+    ExtraRewardsDistributor__factory,
+    GaugeVoting__factory,
+    GaugeVotingLens__factory,
     PoolDepositor__factory,
-    ProxyAdmin__factory, ProxyFactory__factory, ReservoirMinter__factory,
+    ProxyAdmin__factory,
+    ProxyFactory__factory,
+    ReservoirMinter__factory,
     VoterProxy__factory,
     Wmx__factory,
     WmxClaimZap__factory,
     WmxLocker__factory,
     WmxMinter__factory,
     WmxPenaltyForwarder__factory,
-    WmxRewardPool__factory, WmxRewardPoolLens__factory, WmxRewardPoolV2__factory, WombexLensUI__factory,
+    WmxRewardPool__factory,
+    WmxRewardPoolFactory__factory,
+    WmxRewardPoolLens__factory,
+    WmxRewardPoolV2__factory,
+    WombexLensUI__factory,
     WomDepositorV3__factory,
     WomStakingProxy__factory
 } from "../../types/generated";
@@ -126,7 +136,7 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         await writeArgsAndVerify(hre, 'voterProxy', poolConfig.voterProxy, [
             voterProxyImpl,
             proxyAdmin.address,
-            voterProxy.interface.encodeFunctionData('initialize', [poolConfig.token, poolConfig.veWom, poolConfig.weth, deployerAddress])
+            voterProxy.interface.encodeFunctionData('initialize', [poolConfig.token, poolConfig.veWom || ZERO_ADDRESS, poolConfig.weth, deployerAddress])
         ]);
 
         console.log('voterProxyImpl', voterProxyImpl);
@@ -161,26 +171,27 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
     ]);
 
     const poolLen = await booster.poolLength().then(poolLen => parseInt(poolLen.toString()));
-    const boosterPool = await booster.poolInfo(poolLen - 1);
-    const crvRewards = BaseRewardPool4626__factory.connect(boosterPool.crvRewards, hre.ethers.provider);
-    console.log('crvRewards', crvRewards.address);
-    await writeArgsAndVerify(hre, 'crvRewards', crvRewards.address, [
-        await crvRewards.pid().then(r => r.toString()),
-        await crvRewards.stakingToken(),
-        await crvRewards.boosterRewardToken(),
-        await crvRewards.operator(),
-        await crvRewards.asset()
-    ]);
+    if (poolLen) {
+        const boosterPool = await booster.poolInfo(poolLen - 1);
+        const crvRewards = BaseRewardPool4626__factory.connect(boosterPool.crvRewards, hre.ethers.provider);
+        console.log('crvRewards', crvRewards.address);
+        await writeArgsAndVerify(hre, 'crvRewards', crvRewards.address, [
+            await crvRewards.pid().then(r => r.toString()),
+            await crvRewards.stakingToken(),
+            await crvRewards.boosterRewardToken(),
+            await crvRewards.operator(),
+            await crvRewards.asset()
+        ]);
 
-    const depositToken = DepositToken__factory.connect(boosterPool.token, hre.ethers.provider);
-    console.log('depositToken', depositToken.address);
-    await writeArgsAndVerify(hre, 'depositToken', depositToken.address, [
-        await depositToken.operator(),
-        boosterPool.lptoken,
-        " Wombex Deposit Token",
-        'wmx'
-    ], 'vendor/DepositToken.sol:DepositToken');
-
+        const depositToken = DepositToken__factory.connect(boosterPool.token, hre.ethers.provider);
+        console.log('depositToken', depositToken.address);
+        await writeArgsAndVerify(hre, 'depositToken', depositToken.address, [
+            await depositToken.operator(),
+            boosterPool.lptoken,
+            " Wombex Deposit Token",
+            'wmx'
+        ], 'vendor/DepositToken.sol:DepositToken');
+    }
     if (poolConfig.minter) {
         const minter = WmxMinter__factory.connect(poolConfig.minter, hre.ethers.provider);
         await writeArgsAndVerify(hre, 'minter', poolConfig.minter, [
@@ -295,6 +306,17 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         ]);
     }
 
+    if (poolConfig.wmxRewardPoolFactory) {
+        const wmxRewardPoolFactory = WmxRewardPoolFactory__factory.connect(poolConfig.wmxRewardPoolFactory, hre.ethers.provider);
+        await writeArgsAndVerify(hre, 'wmxRewardPoolFactory', poolConfig.wmxRewardPoolFactory, [
+            await wmxRewardPoolFactory.stakingToken(),
+            await wmxRewardPoolFactory.rewardToken(),
+            await wmxRewardPoolFactory.rewardManager(),
+            await wmxRewardPoolFactory.wmxLocker(),
+            [poolConfig.crvDepositor]
+        ]);
+    }
+
     if (process.env.wmxRewardPool) {
         const wmxRewardPoolV2 = WmxRewardPoolV2__factory.connect(process.env.wmxRewardPool, hre.ethers.provider);
         await writeArgsAndVerify(hre, 'wmxRewardPoolV2', process.env.wmxRewardPool, [
@@ -311,31 +333,33 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
         ]);
     }
 
-    const gaugeVoting = GaugeVoting__factory.connect(poolConfig.gaugeVoting, hre.ethers.provider);
-    await writeArgsAndVerify(hre,'gaugeVoting', poolConfig.gaugeVoting, [
-        await gaugeVoting.wmxLocker(),
-        await gaugeVoting.booster(),
-        await gaugeVoting.bribeVoter()
-    ]);
-    const lpTokensAdded = await gaugeVoting.getLpTokensAdded();
-    if (lpTokensAdded.length) {
-        const bribeRewards = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lpTokensAdded[lpTokensAdded.length - 1]), hre.ethers.provider);
-        await writeArgsAndVerify(hre,'bribeRewards', bribeRewards.address, [
-            await bribeRewards.stakingToken(),
-            await bribeRewards.operator(),
-            await bribeRewards.asset(),
-            await bribeRewards.callOperatorOnGetReward(),
+    if (poolConfig.gaugeVoting) {
+        const gaugeVoting = GaugeVoting__factory.connect(poolConfig.gaugeVoting, hre.ethers.provider);
+        await writeArgsAndVerify(hre,'gaugeVoting', poolConfig.gaugeVoting, [
+            await gaugeVoting.wmxLocker(),
+            await gaugeVoting.booster(),
+            await gaugeVoting.bribeVoter()
+        ]);
+        const lpTokensAdded = await gaugeVoting.getLpTokensAdded();
+        if (lpTokensAdded.length) {
+            const bribeRewards = BribesRewardPool__factory.connect(await gaugeVoting.lpTokenRewards(lpTokensAdded[lpTokensAdded.length - 1]), hre.ethers.provider);
+            await writeArgsAndVerify(hre,'bribeRewards', bribeRewards.address, [
+                await bribeRewards.stakingToken(),
+                await bribeRewards.operator(),
+                await bribeRewards.asset(),
+                await bribeRewards.callOperatorOnGetReward(),
+            ]);
+        }
+        await writeArgsAndVerify(hre,'gaugeVotingLens', poolConfig.gaugeVotingLens, [
+            poolConfig.gaugeVoting
+        ]);
+        await writeArgsAndVerify(hre,'bribeRewardsFactory', await gaugeVoting.bribeRewardsFactory(), [
+            poolConfig.gaugeVoting
+        ]);
+        await writeArgsAndVerify(hre,'bribeTokenFactory', await gaugeVoting.tokenFactory(), [
+            poolConfig.gaugeVoting
         ]);
     }
-    await writeArgsAndVerify(hre,'gaugeVotingLens', poolConfig.gaugeVotingLens, [
-        poolConfig.gaugeVoting
-    ]);
-    await writeArgsAndVerify(hre,'bribeRewardsFactory', await gaugeVoting.bribeRewardsFactory(), [
-        poolConfig.gaugeVoting
-    ]);
-    await writeArgsAndVerify(hre,'bribeTokenFactory', await gaugeVoting.tokenFactory(), [
-        poolConfig.gaugeVoting
-    ]);
 });
 
 async function verify(networkName, address, argsName, contractName = null) {
@@ -365,7 +389,8 @@ async function verify(networkName, address, argsName, contractName = null) {
 function getAbi(networkName, address) {
     const apiUri = {
         'arbitrum': 'https://api.arbiscan.io',
-        'bnb': 'https://api.bscscan.com'
+        'bnb': 'https://api.bscscan.com',
+        'mainnet': 'https://api.etherscan.io'
     }
     return axios
         .get(`${apiUri[networkName]}/api?module=contract&action=getabi&address=${address}&apikey=${process.env.ETHERSCAN_KEY}`)
