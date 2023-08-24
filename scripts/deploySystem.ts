@@ -763,7 +763,7 @@ async function deploySideChain(
     );
     console.log('boosterEarmark', boosterEarmark.address);
 
-    await booster.setEarmarkDelegate(boosterEarmark.address);
+    await booster.setEarmarkDelegate(boosterEarmark.address).then(tx => tx.wait());
 
     const poolDepositor = await deployContract<PoolDepositor>(
         hre,
@@ -908,17 +908,17 @@ async function deploySideChain(
     await booster.setPoolManager(deployerAddress).then(tx => tx.wait());
     await booster.setPoolManager(boosterEarmark.address).then(tx => tx.wait());
 
-    await updateDistributionByTokens(signer, {
-        booster,
-        boosterEarmark,
-        voterProxy,
-        cvxCrvRewards,
-        masterWombat: deployment.masterWombat,
-        cvxLocker: wmxLocker,
-        weth: deployment.weth,
-        crv: deployment.crv,
-        cvxStakingProxy: wmxStakingProxy}
-    );
+    // await updateDistributionByTokens(signer, {
+    //     booster,
+    //     boosterEarmark,
+    //     voterProxy,
+    //     cvxCrvRewards,
+    //     masterWombat: deployment.masterWombat,
+    //     cvxLocker: wmxLocker,
+    //     weth: deployment.weth,
+    //     crv: deployment.crv,
+    //     cvxStakingProxy: wmxStakingProxy}
+    // );
 
     await proxyFactory.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
     await boosterEarmark.transferOwnership(multisigs.daoMultisig).then(tx => tx.wait());
