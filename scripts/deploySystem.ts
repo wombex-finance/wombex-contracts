@@ -743,7 +743,7 @@ async function deploySideChain(
         hre,
         new Booster__factory(deployer),
         "Booster",
-        [voterProxy.address, reservoirMinter.address, cvx.address, token, deployment.weth.address, 5000, 15000],
+        [voterProxy.address, reservoirMinter.address, cvx.address, token, deployment.weth.address, 1000, 15000],
         {},
         debug,
         waitForBlocks,
@@ -901,7 +901,7 @@ async function deploySideChain(
     console.log('cvxCrv.setOperator')
     await cvxCrv.setOperator(womDepositor.address).then(tx => tx.wait());
     console.log('boosterEarmark.setEarmarkConfig')
-    await boosterEarmark.setEarmarkConfig(10, 24 * 60 * 60).then(tx => tx.wait());
+    await boosterEarmark.setEarmarkConfig(10, 100 * 24 * 60 * 60).then(tx => tx.wait());
     console.log('extraRewardsDistributor.modifyWhitelist')
     await extraRewardsDistributor.modifyWhitelist(penaltyForwarder.address, true).then(tx => tx.wait());
     await extraRewardsDistributor.modifyWhitelist(booster.address, true).then(tx => tx.wait());
