@@ -12,7 +12,7 @@ import {
     Wmx__factory,
 } from "../../types/generated";
 import {deploySideChain} from "../../scripts/deploySystem";
-import {ZERO_ADDRESS} from "../../test-utils";
+import {impersonate, ZERO_ADDRESS} from "../../test-utils";
 const fs = require('fs');
 const ethers = require('ethers');
 const waitForBlocks = 1;
@@ -23,13 +23,17 @@ task("deploy:mainnet").setAction(async function (taskArguments: TaskArguments, h
     const deployer = await getSigner(hre);
     const deployerAddress = await deployer.getAddress();
 
+    if (hre.network.name === 'forking') {
+        await impersonate(deployerAddress, true);
+    }
+
     const daoMultisig = '0x1e6C59aa5B72196666c13c0521774a6971e4e991';
     const vestingMultisig = daoMultisig;
     const treasuryMultisig = daoMultisig;
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: ethers.parseUnits('20', 'gwei'),
-        maxPriorityFeePerGas: ethers.parseUnits('2', 'gwei'),
+        maxFeePerGas: ethers.utils.parseUnits('20', 'gwei'),
+        maxPriorityFeePerGas: ethers.utils.parseUnits('2', 'gwei'),
     })) as any;
 
     console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
@@ -42,6 +46,7 @@ task("deploy:mainnet").setAction(async function (taskArguments: TaskArguments, h
 
     mainnetConfig.token = mainnetConfig.wom;
 
+    const balanceBefore = ethers.utils.formatEther(await hre.ethers.provider.getBalance(deployerAddress));
     const proxyFactory = await deployContract<ProxyFactory>(
         hre,
         new ProxyFactory__factory(deployer),
@@ -111,4 +116,7 @@ task("deploy:mainnet").setAction(async function (taskArguments: TaskArguments, h
         }
     });
     fs.writeFileSync('./mainnet.json', JSON.stringify(mainnetConfig), {encoding: 'utf8'});
+
+    const balanceAfter = ethers.utils.formatEther(await hre.ethers.provider.getBalance(deployerAddress));
+    console.log('balance spent', parseFloat(balanceBefore) - parseFloat(balanceAfter));
 });
