@@ -325,10 +325,11 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
             await wmxRewardPoolV2.rewardManager(),
             await wmxRewardPoolV2.wmxLocker(),
             await wmxRewardPoolV2.penaltyForwarder(),
-            await wmxRewardPoolV2.penaltyShare(),
+            await wmxRewardPoolV2.penaltyShare().then(r => r.toString()),
             '66000',
-            await wmxRewardPoolV2.duration(),
-            await wmxRewardPoolV2.maxCap(),
+            await wmxRewardPoolV2.duration().then(r => r.toString()),
+            await wmxRewardPoolV2.duration().then(r => r.toString()),
+            await wmxRewardPoolV2.maxCap().then(r => r.toString()),
             [poolConfig.crvDepositor]
         ]);
     }

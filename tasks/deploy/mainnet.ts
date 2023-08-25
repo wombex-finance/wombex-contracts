@@ -9,7 +9,7 @@ import {
     VoterProxy,
     VoterProxy__factory,
     WETH__factory,
-    Wmx__factory,
+    Wmx__factory, WmxRewardPoolLens, WmxRewardPoolLens__factory,
 } from "../../types/generated";
 import {deploySideChain} from "../../scripts/deploySystem";
 import {impersonate, ZERO_ADDRESS} from "../../test-utils";
@@ -119,4 +119,26 @@ task("deploy:mainnet").setAction(async function (taskArguments: TaskArguments, h
 
     const balanceAfter = ethers.utils.formatEther(await hre.ethers.provider.getBalance(deployerAddress));
     console.log('balance spent', parseFloat(balanceBefore) - parseFloat(balanceAfter));
+});
+
+task("wmx-reward-pool-lens:mainnet").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: ethers.utils.parseUnits('30', 'gwei'),
+        maxPriorityFeePerGas: ethers.utils.parseUnits('2', 'gwei'),
+    })) as any;
+
+    const WmxRewardPoolLensArgs = ['0x8Dd933f261545ef9be70559AccE057dd2A1Ec4e8'];
+    fs.writeFileSync('./args/wmxRewardPoolLens.js', 'module.exports = ' + JSON.stringify(WmxRewardPoolLensArgs));
+    const wmxRewardPoolLens = await deployContract<WmxRewardPoolLens>(
+        hre,
+        new WmxRewardPoolLens__factory(deployer),
+        "WmxRewardPoolLens",
+        WmxRewardPoolLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('wmxRewardPoolLens', wmxRewardPoolLens.address);
 });
