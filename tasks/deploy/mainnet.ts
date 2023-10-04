@@ -2,6 +2,8 @@ import {task} from "hardhat/config";
 import {TaskArguments} from "hardhat/types";
 import {deployContract, getSigner} from "../utils";
 import {
+    BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory, BribesTokenFactory__factory,
+    GaugeVoting, GaugeVoting__factory, GaugeVotingLens, GaugeVotingLens__factory,
     IERC20__factory,
     MasterWombatV2__factory,
     ProxyFactory,
@@ -9,7 +11,7 @@ import {
     VoterProxy,
     VoterProxy__factory,
     WETH__factory,
-    Wmx__factory, WmxRewardPoolLens, WmxRewardPoolLens__factory,
+    Wmx__factory, WmxRewardPoolLens, WmxRewardPoolLens__factory, WombexLensUI, WombexLensUI__factory,
 } from "../../types/generated";
 import {deploySideChain} from "../../scripts/deploySystem";
 import {impersonate, ZERO_ADDRESS} from "../../test-utils";
@@ -141,4 +143,104 @@ task("wmx-reward-pool-lens:mainnet").setAction(async function (taskArguments: Ta
         waitForBlocks,
     );
     console.log('wmxRewardPoolLens', wmxRewardPoolLens.address);
+});
+
+task("gauge-voting:mainnet").setAction(async function (taskArguments: TaskArguments, hre) {
+    const networkConfig = JSON.parse(fs.readFileSync('./mainnet.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+    })) as any;
+
+    const treasuryMultisig = '0x1e6C59aa5B72196666c13c0521774a6971e4e991';
+    const gaugeVotingArgs = [
+        networkConfig.cvxLocker,
+        networkConfig.booster,
+        '0x32A936CbA2629619b46684cDf923CB556f09442c',
+    ];
+    fs.writeFileSync('./args/gaugeVoting.js', 'module.exports = ' + JSON.stringify(gaugeVotingArgs));
+    const gaugeVoting = await deployContract<GaugeVoting>(
+        hre,
+        new GaugeVoting__factory(deployer),
+        "GaugeVoting",
+        gaugeVotingArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVoting', gaugeVoting.address);
+
+    const args = [
+        '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', //_UNISWAP_ROUTER
+        '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6', //_UNISWAP_V3_ROUTER
+        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', //_MAIN_STABLE_TOKEN
+        '0xc0B314a8c08637685Fc3daFC477b92028c540CFB', //_WOM_TOKEN
+        '0xFa66478296841b636D72a3B31Da9CDc77E902bf1', //_WMX_TOKEN
+        '0x96ff1506f7ac06b95486e09529c7efb9dfef601e', //_WMX_MINTER
+        '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', //_WETH_TOKEN
+        '0xEfF2B1353Cdcaa2C3279C2bfdE72120c7FfB5E24', //_WMX_WOM_TOKEN
+    ];
+    fs.writeFileSync('./args/lens.js', 'module.exports = ' + JSON.stringify(args));
+    const lens = await deployContract<WombexLensUI>(
+        hre,
+        new WombexLensUI__factory(deployer),
+        "WombexLensUI",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('lens', lens.address);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await lens.setUsdStableTokens(['0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', '0xdac17f958d2ee523a2206206994597c13d831ec7', '0x853d955acef822db058eb8505911ed77f175b99e'], true).then(tx => tx.wait());
+    await lens.setTokenUniV3(['0x1a7e4e63778b4f12a199c062f3efdd288afcbce8'], true).then(tx => tx.wait());
+
+    const gaugeVotingLensArgs = [
+        gaugeVoting.address,
+    ];
+    fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
+    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+        hre,
+        new GaugeVotingLens__factory(deployer),
+        "GaugeVotingLens",
+        gaugeVotingLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVotingLens', gaugeVotingLens.address);
+
+    const bribesRewardFactoryArgs = [
+        gaugeVoting.address,
+    ];
+    fs.writeFileSync('./args/bribesRewardFactory.js', 'module.exports = ' + JSON.stringify(bribesRewardFactoryArgs));
+    const bribesRewardFactory = await deployContract<BribesRewardFactory>(
+        hre,
+        new BribesRewardFactory__factory(deployer),
+        "BribesRewardFactory",
+        bribesRewardFactoryArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bribesRewardFactory', bribesRewardFactory.address);
+
+    const bribesTokenFactoryArgs = [
+        gaugeVoting.address,
+    ];
+    fs.writeFileSync('./args/bribesTokenFactory.js', 'module.exports = ' + JSON.stringify(bribesTokenFactoryArgs));
+    const bribesTokenFactory = await deployContract<BribesTokenFactory>(
+        hre,
+        new BribesTokenFactory__factory(deployer),
+        "BribesTokenFactory",
+        bribesTokenFactoryArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('bribesTokenFactory', bribesTokenFactory.address);
+
+    await gaugeVoting.setFactories(bribesTokenFactory.address, bribesRewardFactory.address, ZERO_ADDRESS).then(tx => tx.wait());
+    await gaugeVoting.transferOwnership(treasuryMultisig).then(tx => tx.wait());
 });
