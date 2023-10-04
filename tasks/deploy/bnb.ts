@@ -839,16 +839,18 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     await lens.setSwapTokenByPool(['0x6764506be2a755c18f4c70bDe4e63F26f9F62810'], '0xbed9B758A681d73a95Ab4c01309C63aa16297b80').then(tx => tx.wait());
     await lens.setSwapTokenByPool(['0xc2E9d07F66A89c44062459A47a0D2Dc038E4fb16'], '0x0029b7e8e9eD8001c868AA09c74A1ac6269D4183').then(tx => tx.wait());
     await lens.setSwapTokenByPool(['0xe05A08226c49b636ACf99c40Da8DC6aF83CE5bB3'], '0x1b507b97c89eDE3E40d1b2Ed92972197c6276D35').then(tx => tx.wait());
+    await lens.setSwapTokenByPool(['0xF027E525D491ef6ffCC478555FBb3CFabB3406a6'], '0x0592083B285aa75B9c8BaD2485C6cCCF93cCC348').then(tx => tx.wait());
+    await lens.setSwapTokenByPool(['0xB0b84D294e0C75A6abe60171b70edEb2EFd14A1B'], '0xF1e604e9A31c3b575f91CF008445B7ce06BF3fef').then(tx => tx.wait());
     await lens.setPoolsForToken(['0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'], '0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x05f727876d7C123B9Bb41507251E2Afd81EAD09A'], '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d').then(tx => tx.wait());
-    await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0', '0x6F1c689235580341562cdc3304E923cC8fad5bFa', '0x0029b7e8e9eD8001c868AA09c74A1ac6269D4183', '0xbed9B758A681d73a95Ab4c01309C63aa16297b80'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
+    await lens.setPoolsForToken(['0x8df1126de13bcfef999556899F469d64021adBae', '0xB0219A90EF6A24a237bC038f7B7a6eAc5e01edB0', '0x6F1c689235580341562cdc3304E923cC8fad5bFa', '0x0029b7e8e9eD8001c868AA09c74A1ac6269D4183', '0xbed9B758A681d73a95Ab4c01309C63aa16297b80', '0x0592083B285aa75B9c8BaD2485C6cCCF93cCC348', '0xF1e604e9A31c3b575f91CF008445B7ce06BF3fef'], '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x2Ea772346486972E7690219c190dAdDa40Ac5dA4', '0x8b892b6Ea1d0e5B29b719d6Bd6eb9354f1cDE060', '0x1b507b97c89eDE3E40d1b2Ed92972197c6276D35'], '0x2170Ed0880ac9A755fd29B2688956BD959F933F8').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x6569DDC1Cc2648c89BC8025046A7dd65EB8940F3'], '0x14016E85a25aeb13065688cAFB43044C2ef86784').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x0520451B19AD0bb00eD35ef391086A692CFC74B2'], '0x55d398326f99059fF775485246999027B3197955').then(tx => tx.wait());
     await lens.setTokensToRouter(['0x3BC5AC0dFdC871B365d159f728dd1B9A0B5481E8', '0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0xcF0feBd3f17CEf5b47b0cD257aCf6025c5BFf3b7').then(tx => tx.wait());
-    await lens.setTokenSwapThroughToken(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8'], ['0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c']).then(tx => tx.wait());
+    await lens.setTokenSwapThroughToken(['0xf307910A4c7bbc79691fD374889b36d8531B08e3','0x2170Ed0880ac9A755fd29B2688956BD959F933F8', '0x1eE098cBaF1f846d5Df1993f7e2d10AFb35A878d'], ['0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c']).then(tx => tx.wait());
     await lens.setTokensTargetStable(['0xe48A3d7d0Bc88d552f730B62c006bC925eadB9eE'], '0x90c97f71e18723b0cf0dfa30ee176ab653e89f40').then(tx => tx.wait());
 
     // console.log('getRewardPoolApys', await lens.callStatic['getRewardPoolApys((address,uint256,address,address,uint256[])[])']([{"booster":"0xa4A1533f5F939D6718B0d5CE2850F2ff55206967","poolId":5,"lpToken":"0x1fa71DF4b344ffa5755726Ea7a9a56fbbEe0D38b","crvRewards":"0xc9dcf462b666ab2196e044afcf7814f60cd2e09d","rewardTokenPrices":[]}]))
@@ -887,7 +889,7 @@ task("booster-lens:bnb").setAction(async function (taskArguments: TaskArguments,
     })) as any;
 
     const boosterLensArgs = [
-        '0x53def0a5dB716f6ac4884F1A89eB11B50F570B70',
+        '0x7d84a8977095a0cB4EA3C5CDE105276217754E7c',
         networkConfig.voterProxy
     ];
     fs.writeFileSync('./args/boosterLens.js', 'module.exports = ' + JSON.stringify(boosterLensArgs));

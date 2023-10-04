@@ -299,7 +299,7 @@ contract WombexLensUI is Ownable {
             uint8 decimals = getTokenDecimals(aprs[i].token);
             uint256 price = rewardTokenPrices.length == 0 ? estimateInBUSDEther(aprs[i].token, 10 ** decimals, decimals) : rewardTokenPrices[i];
             uint256 usdPerSec = price * uint256(aprs[i].rewardRate) / (10 ** decimals);
-            if (voteWeight / poolTvl > 0) {
+            if (veWomBalance != 0 && poolTvl != 0 && voteWeight / poolTvl > 0) {
                 aprs[i].apr = uint128(usdPerSec * 365 days * 10e3 / (voteWeight * allPoolsTvl / veWomBalance));
                 // 365 * 24 * 60 * 60 * rewardInfo.tokenPerSec * tokenUsdcPrice * userVotes / weight / (rewardPoolTotalSupply * wmxPrice) * 100,
                 aprItem += usdPerSec * 365 days * userVotes * 100 / voteWeight;
