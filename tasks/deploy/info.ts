@@ -352,7 +352,8 @@ task("info:writeArgs").setAction(async function (taskArguments: TaskArguments, h
             ]);
         }
         await writeArgsAndVerify(hre,'gaugeVotingLens', poolConfig.gaugeVotingLens, [
-            poolConfig.gaugeVoting
+            poolConfig.gaugeVoting,
+            poolConfig.wombexUiLens
         ]);
         await writeArgsAndVerify(hre,'bribeRewardsFactory', await gaugeVoting.bribeRewardsFactory(), [
             poolConfig.gaugeVoting

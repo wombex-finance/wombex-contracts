@@ -90,7 +90,7 @@ contract WombexLensUI is Ownable {
     mapping(address => bool) public isUsdStableToken;
     mapping(address => address) public poolToToken;
     mapping(address => address) public tokenToRouter;
-    mapping(address => bool) public tokenUniV3;
+    mapping(address => uint24) public tokenUniV3Fee;
     mapping(address => address[]) public tokenSwapThroughTokens;
     mapping(address => address) public tokenSwapToTargetStable;
 
@@ -163,9 +163,9 @@ contract WombexLensUI is Ownable {
         }
     }
 
-    function setTokenUniV3(address[] memory _tokens, bool _tokenUniV3) external onlyOwner {
+    function setTokenUniV3Fee(address[] memory _tokens, uint24 _tokenUniV3Fee) external onlyOwner {
         for (uint256 i = 0; i < _tokens.length; i++) {
-            tokenUniV3[_tokens[i]] = _tokenUniV3;
+            tokenUniV3Fee[_tokens[i]] = _tokenUniV3Fee;
         }
     }
 
@@ -460,11 +460,12 @@ contract WombexLensUI is Ownable {
             try FraxRouter(router).getAmountsOutWithTwamm(oneUnit, path) returns (uint256[] memory amountsOut) {
                 result = _amountIn * amountsOut[amountsOut.length - 1] / oneUnit;
             } catch {}
-        } else if (tokenUniV3[_token]) {
-            QuoterV2.QuoteExactInputSingleParams memory params = QuoterV2.QuoteExactInputSingleParams(_token, targetStable, oneUnit, 3000, 0);
-            try QuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(params) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate) {
+        } else if (tokenUniV3Fee[_token] != 0) {
+            QuoterV2.QuoteExactInputSingleParams memory params = QuoterV2.QuoteExactInputSingleParams(_token, targetStable, oneUnit, tokenUniV3Fee[_token], 0);
+            (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate) = QuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(params);
+//            try QuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(params) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate) {
                 result = _amountIn * amountOut / oneUnit;
-            } catch {}
+//            } catch {}
         } else {
             try IUniswapV2Router01(router).getAmountsOut(oneUnit, path) returns (uint256[] memory amountsOut) {
                 result = _amountIn * amountsOut[amountsOut.length - 1] / oneUnit;

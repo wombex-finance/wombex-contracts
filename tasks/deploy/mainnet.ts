@@ -14,7 +14,7 @@ import {
     Wmx__factory, WmxRewardPoolLens, WmxRewardPoolLens__factory, WombexLensUI, WombexLensUI__factory,
 } from "../../types/generated";
 import {deploySideChain} from "../../scripts/deploySystem";
-import {impersonate, ZERO_ADDRESS} from "../../test-utils";
+import {impersonate, simpleToExactAmount, ZERO_ADDRESS} from "../../test-utils";
 const fs = require('fs');
 const ethers = require('ethers');
 const waitForBlocks = 1;
@@ -150,7 +150,8 @@ task("gauge-voting:mainnet").setAction(async function (taskArguments: TaskArgume
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: null, maxPriorityFeePerGas: null, gasPrice: ethers.BigNumber.from(3000000000),
+        maxFeePerGas: 12e9,
+        maxPriorityFeePerGas: 1e9,
     })) as any;
 
     const treasuryMultisig = '0x1e6C59aa5B72196666c13c0521774a6971e4e991';
@@ -173,7 +174,7 @@ task("gauge-voting:mainnet").setAction(async function (taskArguments: TaskArgume
 
     const args = [
         '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', //_UNISWAP_ROUTER
-        '0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6', //_UNISWAP_V3_ROUTER
+        '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', //_UNISWAP_V3_ROUTER
         '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', //_MAIN_STABLE_TOKEN
         '0xc0B314a8c08637685Fc3daFC477b92028c540CFB', //_WOM_TOKEN
         '0xFa66478296841b636D72a3B31Da9CDc77E902bf1', //_WMX_TOKEN
@@ -194,22 +195,10 @@ task("gauge-voting:mainnet").setAction(async function (taskArguments: TaskArgume
     console.log('lens', lens.address);
     await new Promise((resolve) => setTimeout(resolve, 3000));
     await lens.setUsdStableTokens(['0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', '0xdac17f958d2ee523a2206206994597c13d831ec7', '0x853d955acef822db058eb8505911ed77f175b99e'], true).then(tx => tx.wait());
-    await lens.setTokenUniV3(['0x1a7e4e63778b4f12a199c062f3efdd288afcbce8'], true).then(tx => tx.wait());
-
-    const gaugeVotingLensArgs = [
-        gaugeVoting.address,
-    ];
-    fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
-    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
-        hre,
-        new GaugeVotingLens__factory(deployer),
-        "GaugeVotingLens",
-        gaugeVotingLensArgs,
-        {},
-        true,
-        waitForBlocks,
-    );
-    console.log('gaugeVotingLens', gaugeVotingLens.address);
+    await lens.setTokenUniV3Fee(['0x1a7e4e63778b4f12a199c062f3efdd288afcbce8'], 100).then(tx => tx.wait());
+    // await lens.setTokenSwapThroughToken(['0x1a7e4e63778b4f12a199c062f3efdd288afcbce8'], ['0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2']).then(tx => tx.wait());
+    console.log('estimateInBUSDEther euro', await lens.callStatic.estimateInBUSDEther('0x1a7e4e63778b4f12a199c062f3efdd288afcbce8', simpleToExactAmount(1), 18));
+    console.log('estimateInBUSDEther eth', await lens.callStatic.estimateInBUSDEther('0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', simpleToExactAmount(1), 18));
 
     const bribesRewardFactoryArgs = [
         gaugeVoting.address,
@@ -243,4 +232,21 @@ task("gauge-voting:mainnet").setAction(async function (taskArguments: TaskArgume
 
     await gaugeVoting.setFactories(bribesTokenFactory.address, bribesRewardFactory.address, ZERO_ADDRESS).then(tx => tx.wait());
     await gaugeVoting.transferOwnership(treasuryMultisig).then(tx => tx.wait());
+
+    const gaugeVotingLensArgs = [
+        gaugeVoting.address,
+        lens.address,
+    ];
+    fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
+    const gaugeVotingLens = await deployContract<GaugeVotingLens>(
+        hre,
+        new GaugeVotingLens__factory(deployer),
+        "GaugeVotingLens",
+        gaugeVotingLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('gaugeVotingLens', gaugeVotingLens.address);
+
 });
