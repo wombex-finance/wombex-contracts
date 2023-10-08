@@ -368,15 +368,13 @@ contract WombexLensUI is Ownable {
         uint256 len = _tokens.length;
         prices = new uint256[](len);
         for (uint256 i = 0; i < len; i++) {
-            address underlyingToken;
-            try IWomAsset(_tokens[i]).underlyingToken() returns (address _underlyingToken) {
-                underlyingToken = _underlyingToken;
-            } catch {}
+            address underlyingToken = getTokenUnderlying(_tokens[i]);
             if (underlyingToken == address(0)) {
                 uint8 decimals = getTokenDecimals(_tokens[i]);
                 prices[i] = estimateInBUSDEther(_tokens[i], 10 ** decimals, decimals);
             } else {
                 address womPool = IWomAsset(_tokens[i]).pool();
+                uint8 decimals = getTokenDecimals(underlyingToken);
                 prices[i] = getLpUsdOut(womPool, underlyingToken, 1 ether);
             }
         }
@@ -462,10 +460,9 @@ contract WombexLensUI is Ownable {
             } catch {}
         } else if (tokenUniV3Fee[_token] != 0) {
             QuoterV2.QuoteExactInputSingleParams memory params = QuoterV2.QuoteExactInputSingleParams(_token, targetStable, oneUnit, tokenUniV3Fee[_token], 0);
-            (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate) = QuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(params);
-//            try QuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(params) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate) {
+            try QuoterV2(UNISWAP_V3_QUOTER).quoteExactInputSingle(params) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate) {
                 result = _amountIn * amountOut / oneUnit;
-//            } catch {}
+            } catch {}
         } else {
             try IUniswapV2Router01(router).getAmountsOut(oneUnit, path) returns (uint256[] memory amountsOut) {
                 result = _amountIn * amountsOut[amountsOut.length - 1] / oneUnit;
@@ -569,12 +566,37 @@ contract WombexLensUI is Ownable {
         } catch {}
     }
 
-    function getTokenDecimals(address _token) public view returns (uint8 decimals) {
-        try ERC20(_token).decimals() returns (uint8 _decimals) {
-            decimals = _decimals;
-        } catch {
-            decimals = uint8(18);
+    function getTokenDecimals(address _token) public view returns (uint8) {
+        (bool success, bytes memory data) = _token.staticcall(abi.encodeWithSelector(ERC20.decimals.selector));
+
+        if (!success) {
+            return uint8(18);
         }
+
+        if (data.length == 1) {
+            return uint8(data[0]);
+        } else if (data.length == 32) {
+            uint256 decimalsValue;
+            assembly {
+                decimalsValue := mload(add(data, 32))
+            }
+            return uint8(decimalsValue);
+        } else {
+            return uint8(18);
+        }
+    }
+
+    function getTokenUnderlying(address _token) public view returns (address) {
+        (bool success, bytes memory data) = _token.staticcall(abi.encodeWithSelector(IWomAsset.underlyingToken.selector));
+
+        if (!success || data.length != 32) {
+            return address(0);
+        }
+        address result;
+        assembly {
+            result := mload(add(data, 32))
+        }
+        return result;
     }
 
     function getUserPendingRewards(uint256 _mintRatio, address _rewardsPool, address _user) public
