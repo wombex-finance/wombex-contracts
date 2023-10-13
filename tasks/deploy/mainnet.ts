@@ -2,10 +2,11 @@ import {task} from "hardhat/config";
 import {TaskArguments} from "hardhat/types";
 import {deployContract, getSigner} from "../utils";
 import {
+    BaseRewardPool4626__factory,
     BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory, BribesTokenFactory__factory,
     GaugeVoting, GaugeVoting__factory, GaugeVotingLens, GaugeVotingLens__factory,
     IERC20__factory, IWomPool__factory,
-    MasterWombatV2__factory,
+    MasterWombatV2__factory, PoolDepositor, PoolDepositor__factory,
     ProxyFactory,
     ProxyFactory__factory,
     VoterProxy,
@@ -15,6 +16,7 @@ import {
 } from "../../types/generated";
 import {deploySideChain} from "../../scripts/deploySystem";
 import {impersonate, simpleToExactAmount, ZERO_ADDRESS} from "../../test-utils";
+const {approvePoolDepositor} = require('../helpers');
 const fs = require('fs');
 const ethers = require('ethers');
 const waitForBlocks = 1;
@@ -313,4 +315,45 @@ task("gauge-voting:mainnet").setAction(async function (taskArguments: TaskArgume
     );
     console.log('gaugeVotingLens', gaugeVotingLens.address);
 
+});
+
+task("pool-depositor:mainnet").setAction(async function (taskArguments: TaskArguments, hre) {
+    const networkConfig = JSON.parse(fs.readFileSync('./mainnet.json', {encoding: 'utf8'}));
+    const deployer = await getSigner(hre);
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: 6e9,
+        maxPriorityFeePerGas: 1e9,
+    })) as any;
+
+    const treasuryMultisig = '0x1e6C59aa5B72196666c13c0521774a6971e4e991';
+
+    const poolDepositor = await deployContract<PoolDepositor>(
+        hre,
+        new PoolDepositor__factory(deployer),
+        "PoolDepositor",
+        [networkConfig.weth, networkConfig.booster, networkConfig.masterWombat],
+        {},
+        debug,
+        waitForBlocks,
+    );
+    console.log('poolDeposior', poolDepositor.address);
+
+    await approvePoolDepositor(poolDepositor, deployer);
+
+    // const testAddress = '0xFDF9b61Dc7C238A0b845403b16b6761A5c47d9D2';
+    // const testAcc = await impersonate(testAddress, true);
+    // const depositAmount = simpleToExactAmount(1, 6);
+    // const lpAddress = '0x6966553568634F4225330D559a8783DE7649C7D3';
+    // const lpUnderlying = IERC20__factory.connect('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', testAcc);
+    // await lpUnderlying.approve(poolDepositor.address, depositAmount).then(tx => tx.wait());
+    // console.log('getDepositAmountOut', await poolDepositor.connect(testAddress).getDepositAmountOut('0x6966553568634F4225330D559a8783DE7649C7D3', depositAmount));
+    // await poolDepositor.connect(testAcc).deposit(lpAddress, depositAmount, 0, simpleToExactAmount(1), true).then(tx => tx.wait());
+    // const crvRewardsAddress = await poolDepositor.getLpTokenCrvRewards(lpAddress);
+    // const crvRewards = BaseRewardPool4626__factory.connect(crvRewardsAddress, testAcc);
+    // await crvRewards.approve(poolDepositor.address, simpleToExactAmount(1)).then(tx => tx.wait());
+    // console.log('getWithdrawAmountOut', await poolDepositor.connect(testAddress).getWithdrawAmountOut('0x6966553568634F4225330D559a8783DE7649C7D3', lpUnderlying.address, simpleToExactAmount(0.5)));
+    // await poolDepositor.connect(testAcc).withdrawFromOtherAsset(lpAddress, lpUnderlying.address, simpleToExactAmount(0.5), 0, simpleToExactAmount(1), testAddress).then(tx => tx.wait());
+
+    await poolDepositor.transferOwnership(treasuryMultisig);
 });

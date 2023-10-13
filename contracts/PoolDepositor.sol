@@ -152,11 +152,9 @@ contract PoolDepositor is Ownable {
     }
 
     function _withdraw(address _lptoken, address _underlying, uint256 _amount, uint256 _minOut, uint256 _deadline, address _recipient) internal {
+        IRewards(getLpTokenCrvRewards(_lptoken)).withdraw(_amount, address(this), msg.sender);
+
         address pool = IAsset(_lptoken).pool();
-        IBooster.PoolInfo memory p = IBooster(booster).poolInfo(lpTokenToPid[_lptoken]);
-
-        IRewards(p.crvRewards).withdraw(_amount, address(this), msg.sender);
-
         address lpTokenUnderlying = IAsset(_lptoken).underlyingToken();
         if (lpTokenUnderlying == _underlying) {
             IPool(pool).withdraw(_underlying, _amount, _minOut, _recipient, _deadline);
@@ -165,13 +163,19 @@ contract PoolDepositor is Ownable {
         }
     }
 
+    function getLpTokenCrvRewards(address _lptoken) public view returns(address) {
+        IBooster.PoolInfo memory p = IBooster(booster).poolInfo(lpTokenToPid[_lptoken]);
+        return p.crvRewards;
+    }
+
     function getDepositAmountOut(
         address _lptoken,
         uint256 _amount
     ) external view returns (uint256 liquidity, uint256 reward) {
+        reward = 0; // backward compatibility with clients
         address pool = IAsset(_lptoken).pool();
         address underlying = IAsset(_lptoken).underlyingToken();
-        return IPool(pool).quotePotentialDeposit(underlying, _amount);
+        liquidity = staticCallAndGetUint(pool, abi.encodeWithSelector(IPool.quotePotentialDeposit.selector, underlying, _amount));
     }
 
     function getTokenDecimals(address _token) public view returns (uint8 decimals) {
@@ -182,17 +186,27 @@ contract PoolDepositor is Ownable {
         }
     }
 
+    function staticCallAndGetUint(address _contract, bytes memory _argsData) public view returns (uint256 amount){
+        (bool success, bytes memory data) = _contract.staticcall(_argsData);
+        require(success, "staticCallAndGetUint call failed");
+
+        assembly {
+            amount := mload(add(data, 32))
+        }
+    }
+
     function getWithdrawAmountOut(
         address _lptoken,
         address _tokenOut,
         uint256 _amount
     ) external view returns (uint256 amount, uint256 fee) {
+        fee = 0; // backward compatibility with clients
         address pool = IAsset(_lptoken).pool();
         address lpTokenUnderlying = IAsset(_lptoken).underlyingToken();
-        (amount, fee) = IPool(pool).quotePotentialWithdraw(lpTokenUnderlying, _amount);
-
-        if (_tokenOut != lpTokenUnderlying) {
-            (amount, ) = IPool(pool).quotePotentialWithdrawFromOtherAsset(lpTokenUnderlying, _tokenOut, _amount);
+        if (_tokenOut == lpTokenUnderlying) {
+            amount = staticCallAndGetUint(pool, abi.encodeWithSelector(IPool.quotePotentialWithdraw.selector, lpTokenUnderlying, _amount));
+        } else {
+            amount = staticCallAndGetUint(pool, abi.encodeWithSelector(IPool.quotePotentialWithdrawFromOtherAsset.selector, lpTokenUnderlying, _tokenOut, _amount));
         }
     }
 }
