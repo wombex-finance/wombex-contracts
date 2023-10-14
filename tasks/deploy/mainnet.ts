@@ -3,16 +3,33 @@ import {TaskArguments} from "hardhat/types";
 import {deployContract, getSigner} from "../utils";
 import {
     BaseRewardPool4626__factory,
-    BribesRewardFactory, BribesRewardFactory__factory, BribesTokenFactory, BribesTokenFactory__factory,
-    GaugeVoting, GaugeVoting__factory, GaugeVotingLens, GaugeVotingLens__factory,
-    IERC20__factory, IWomPool__factory,
-    MasterWombatV2__factory, PoolDepositor, PoolDepositor__factory,
+    BoosterLensUI,
+    BoosterLensUI__factory,
+    BribesRewardFactory,
+    BribesRewardFactory__factory,
+    BribesTokenFactory,
+    BribesTokenFactory__factory,
+    EarmarkRewardsLens, EarmarkRewardsLens__factory,
+    GaugeVoting,
+    GaugeVoting__factory,
+    GaugeVotingLens,
+    GaugeVotingLens__factory,
+    IAsset__factory,
+    IERC20__factory,
+    IWomPool__factory,
+    MasterWombatV2__factory,
+    PoolDepositor,
+    PoolDepositor__factory,
     ProxyFactory,
     ProxyFactory__factory,
     VoterProxy,
     VoterProxy__factory,
     WETH__factory,
-    Wmx__factory, WmxRewardPoolLens, WmxRewardPoolLens__factory, WombexLensUI, WombexLensUI__factory,
+    Wmx__factory,
+    WmxRewardPoolLens,
+    WmxRewardPoolLens__factory,
+    WombexLensUI,
+    WombexLensUI__factory,
 } from "../../types/generated";
 import {deploySideChain} from "../../scripts/deploySystem";
 import {impersonate, simpleToExactAmount, ZERO_ADDRESS} from "../../test-utils";
@@ -322,7 +339,7 @@ task("pool-depositor:mainnet").setAction(async function (taskArguments: TaskArgu
     const deployer = await getSigner(hre);
 
     deployer.getFeeData = () => new Promise((resolve) => resolve({
-        maxFeePerGas: 6e9,
+        maxFeePerGas: 7e9,
         maxPriorityFeePerGas: 1e9,
     })) as any;
 
@@ -344,16 +361,82 @@ task("pool-depositor:mainnet").setAction(async function (taskArguments: TaskArgu
     // const testAddress = '0xFDF9b61Dc7C238A0b845403b16b6761A5c47d9D2';
     // const testAcc = await impersonate(testAddress, true);
     // const depositAmount = simpleToExactAmount(1, 6);
-    // const lpAddress = '0x6966553568634F4225330D559a8783DE7649C7D3';
-    // const lpUnderlying = IERC20__factory.connect('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', testAcc);
+    // const lpAddress = '0x752945079a0446AA7efB6e9E1789751cDD601c95';
+    // const lptContract = IAsset__factory.connect(lpAddress, testAcc);
+    // const lpUnderlying = IERC20__factory.connect(await lptContract.underlyingToken(), testAcc);
     // await lpUnderlying.approve(poolDepositor.address, depositAmount).then(tx => tx.wait());
-    // console.log('getDepositAmountOut', await poolDepositor.connect(testAddress).getDepositAmountOut('0x6966553568634F4225330D559a8783DE7649C7D3', depositAmount));
+    // console.log('getDepositAmountOut', await poolDepositor.connect(testAddress).getDepositAmountOut(lpAddress, depositAmount));
     // await poolDepositor.connect(testAcc).deposit(lpAddress, depositAmount, 0, simpleToExactAmount(1), true).then(tx => tx.wait());
     // const crvRewardsAddress = await poolDepositor.getLpTokenCrvRewards(lpAddress);
     // const crvRewards = BaseRewardPool4626__factory.connect(crvRewardsAddress, testAcc);
     // await crvRewards.approve(poolDepositor.address, simpleToExactAmount(1)).then(tx => tx.wait());
-    // console.log('getWithdrawAmountOut', await poolDepositor.connect(testAddress).getWithdrawAmountOut('0x6966553568634F4225330D559a8783DE7649C7D3', lpUnderlying.address, simpleToExactAmount(0.5)));
+    // console.log('getWithdrawAmountOut', await poolDepositor.connect(testAddress).getWithdrawAmountOut(lpAddress, lpUnderlying.address, simpleToExactAmount(0.5)));
     // await poolDepositor.connect(testAcc).withdrawFromOtherAsset(lpAddress, lpUnderlying.address, simpleToExactAmount(0.5), 0, simpleToExactAmount(1), testAddress).then(tx => tx.wait());
 
     await poolDepositor.transferOwnership(treasuryMultisig);
+});
+
+task("booster-lens:mainnet").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    const network = process.env.NETWORK || hre.network.name;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: 6e9,
+        maxPriorityFeePerGas: 1e9,
+    })) as any;
+
+    const boosterLensArgs = [
+        '0xAb13D628B2216b7d5a7A15Aae66Ea8A71Ed9DB4F',
+        networkConfig.voterProxy
+    ];
+    fs.writeFileSync('./args/boosterLens.js', 'module.exports = ' + JSON.stringify(boosterLensArgs));
+    const boosterLens = await deployContract<BoosterLensUI>(
+        hre,
+        new BoosterLensUI__factory(deployer),
+        "BoosterLensUI",
+        boosterLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    console.log('boosterLens', boosterLens.address);
+    // console.log('getBoostRatioList', await boosterLens.callStatic.getBoostRatioList('0x489833311676B566f888119c29bd997Dc6C95830', '0xa4A1533f5F939D6718B0d5CE2850F2ff55206967').then(list => list.map(br => ethers.utils.formatEther(br.value))))
+});
+
+
+task("earmark-rewards-lens:mainnet").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    const network = process.env.NETWORK || hre.network.name;
+    const networkConfig = JSON.parse(fs.readFileSync('./' + network + '.json', {encoding: 'utf8'}));
+
+    deployer.getFeeData = () => new Promise((resolve) => resolve({
+        maxFeePerGas: 6e9,
+        maxPriorityFeePerGas: 1e9,
+    })) as any;
+
+    const wombexLensUI = WombexLensUI__factory.connect('0xAb13D628B2216b7d5a7A15Aae66Ea8A71Ed9DB4F', deployer);
+
+    const earmarkRewardsLensArgs = [networkConfig.voterProxy, wombexLensUI.address, 5];
+    fs.writeFileSync('./args/earmarkRewardsLens.js', 'module.exports = ' + JSON.stringify(earmarkRewardsLensArgs));
+    const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
+        hre,
+        new EarmarkRewardsLens__factory(deployer),
+        "EarmarkRewardsLens",
+        earmarkRewardsLensArgs,
+        {},
+        true,
+        waitForBlocks,
+    );
+    // console.log('getPoolsQueue', await earmarkRewardsLens.getPoolsQueue());
+    // console.log('getPidsToEarmark', await earmarkRewardsLens.getPidsToEarmark(false));
+    // console.log('crv', await earmarkRewardsLens.crv());
+    // console.log('estimateInBUSDEther', await wombexLensUI.callStatic.estimateInBUSDEther(await earmarkRewardsLens.crv(), simpleToExactAmount(1), 18));
+    // console.log('getRewardsToExecute', await earmarkRewardsLens.callStatic.getRewardsToExecute().then(r => r.rewards));
+    // const {tokensSymbols, diffBalances} = await earmarkRewardsLens.getRewards();
+    // tokensSymbols.map((symbol, index) => {
+    //     console.log(symbol, diffBalances[index]);
+    // })
 });

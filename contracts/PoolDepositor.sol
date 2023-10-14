@@ -130,7 +130,7 @@ contract PoolDepositor is Ownable {
 
     function deposit(address _lptoken, uint256 _amount, uint256 _minLiquidity, uint256 _deadline, bool _stake) public {
         address underlying = IAsset(_lptoken).underlyingToken();
-        IERC20(underlying).transferFrom(msg.sender, address(this), _amount);
+        IERC20(underlying).safeTransferFrom(msg.sender, address(this), _amount);
         _deposit(_lptoken, underlying, _amount, _minLiquidity, _deadline, _stake);
     }
 
