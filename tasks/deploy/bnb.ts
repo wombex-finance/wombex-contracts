@@ -407,13 +407,17 @@ task("deploy-erdp:bnb").setAction(async function (taskArguments: TaskArguments, 
 task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
     const deployer = await getSigner(hre);
 
+    const network = process.env.NETWORK || hre.network.name;
     deployer.getFeeData = () => new Promise((resolve) => resolve({
         maxFeePerGas: null,
         maxPriorityFeePerGas: null,
-        gasPrice: ethers.BigNumber.from(5000000000),
+        gasPrice: ethers.BigNumber.from(network === 'bnb' ? 3000000000 : 100000000),
     })) as any;
 
-    const bnbConfig = JSON.parse(fs.readFileSync('./bnb.json', {encoding: 'utf8'}));
+    const bnbConfig = JSON.parse(fs.readFileSync(`./${network}.json`, {encoding: 'utf8'}));
+    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
+    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    // return console.log('Array.from(Array(poolLength).keys())', JSON.stringify(Array.from(Array(poolLength).keys())));
 
     const args = [
         bnbConfig.weth,
@@ -432,9 +436,10 @@ task("deploy-pool-depositor:bnb").setAction(async function (taskArguments: TaskA
         waitForBlocks,
     );
     console.log('poolDepositor', poolDepositor.address);
-    const booster = Booster__factory.connect(bnbConfig.booster, deployer);
-    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
     await poolDepositor.approveSpendingMultiplePools(Array.from(Array(poolLength).keys())).then(tx => tx.wait());
+    await poolDepositor.setBoosterLpTokensPid().then(tx => tx.wait());
+    await poolDepositor.transferOwnership(await booster.owner()).then(tx => tx.wait());
+    // console.log('getWithdrawAmountOut', await poolDepositor.getWithdrawAmountOut('0x2977b0B54a76c2b56D32cef19f8ea83Cc766cFD9', '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8', simpleToExactAmount(1000)));
 });
 
 task("deploy-booster-earmark:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
