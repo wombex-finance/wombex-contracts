@@ -113,45 +113,45 @@ contract PoolDepositor is Ownable {
 
     receive() external payable {}
 
-    function depositNative(address _lptoken, uint256 _minLiquidity, bool _stake) external payable {
+    function depositNative(address _lptoken, uint256 _minLiquidity, uint256 _deadline, bool _stake) external payable {
         uint256 amount = msg.value;
         IWETH(weth).deposit{value: amount}();
-        _deposit(_lptoken, weth, amount, _minLiquidity, _stake);
+        _deposit(_lptoken, weth, amount, _minLiquidity, _deadline, _stake);
     }
 
-    function withdrawNative(address _lptoken, address _underlying, uint256 _amount, uint256 _minOut, address payable _recipient) external {
+    function withdrawNative(address _lptoken, address _underlying, uint256 _amount, uint256 _minOut, uint256 _deadline, address payable _recipient) external {
         uint256 wethBalanceBefore = IERC20(weth).balanceOf(address(this));
-        _withdraw(_lptoken, _underlying, _amount, _minOut, address(this));
+        _withdraw(_lptoken, _underlying, _amount, _minOut, _deadline, address(this));
         uint256 wethAmount = IERC20(weth).balanceOf(address(this)) - wethBalanceBefore;
 
         IWETH(weth).withdraw(wethAmount);
         _recipient.sendValue(wethAmount);
     }
 
-    function deposit(address _lptoken, uint256 _amount, uint256 _minLiquidity, bool _stake) public {
+    function deposit(address _lptoken, uint256 _amount, uint256 _minLiquidity, uint256 _deadline, bool _stake) public {
         address underlying = IAsset(_lptoken).underlyingToken();
         IERC20(underlying).transferFrom(msg.sender, address(this), _amount);
-        _deposit(_lptoken, underlying, _amount, _minLiquidity, _stake);
+        _deposit(_lptoken, underlying, _amount, _minLiquidity, _deadline, _stake);
     }
 
-    function _deposit(address _lptoken, address _underlying, uint256 _amount, uint256 _minLiquidity, bool _stake) internal {
+    function _deposit(address _lptoken, address _underlying, uint256 _amount, uint256 _minLiquidity, uint256 _deadline, bool _stake) internal {
         address pool = IAsset(_lptoken).pool();
         uint256 balanceBefore = IERC20(_lptoken).balanceOf(address(this));
-        IPool(pool).deposit(_underlying, _amount, _minLiquidity, address(this), block.timestamp + 1, false);
+        IPool(pool).deposit(_underlying, _amount, _minLiquidity, address(this), _deadline, false);
         uint256 resultLpAmount = IERC20(_lptoken).balanceOf(address(this)) - balanceBefore;
 
         IBooster(booster).depositFor(lpTokenToPid[_lptoken], resultLpAmount, _stake, msg.sender);
     }
 
-    function withdraw(address _lptoken, uint256 _amount, uint256 _minOut, address _recipient) public {
-        _withdraw(_lptoken, IAsset(_lptoken).underlyingToken(), _amount, _minOut, _recipient);
+    function withdraw(address _lptoken, uint256 _amount, uint256 _minOut, uint256 _deadline, address _recipient) public {
+        _withdraw(_lptoken, IAsset(_lptoken).underlyingToken(), _amount, _minOut, _deadline, _recipient);
     }
 
-    function withdrawFromOtherAsset(address _lptoken, address _underlying, uint256 _amount, uint256 _minOut, address _recipient) public {
-        _withdraw(_lptoken, _underlying, _amount, _minOut, _recipient);
+    function withdrawFromOtherAsset(address _lptoken, address _underlying, uint256 _amount, uint256 _minOut, uint256 _deadline, address _recipient) public {
+        _withdraw(_lptoken, _underlying, _amount, _minOut, _deadline, _recipient);
     }
 
-    function _withdraw(address _lptoken, address _underlying, uint256 _amount, uint256 _minOut, address _recipient) internal {
+    function _withdraw(address _lptoken, address _underlying, uint256 _amount, uint256 _minOut, uint256 _deadline, address _recipient) internal {
         address pool = IAsset(_lptoken).pool();
         IBooster.PoolInfo memory p = IBooster(booster).poolInfo(lpTokenToPid[_lptoken]);
 
@@ -159,9 +159,9 @@ contract PoolDepositor is Ownable {
 
         address lpTokenUnderlying = IAsset(_lptoken).underlyingToken();
         if (lpTokenUnderlying == _underlying) {
-            IPool(pool).withdraw(_underlying, _amount, _minOut, _recipient, block.timestamp + 1);
+            IPool(pool).withdraw(_underlying, _amount, _minOut, _recipient, _deadline);
         } else {
-            IPool(pool).withdrawFromOtherAsset(lpTokenUnderlying, _underlying, _amount, _minOut, _recipient, block.timestamp + 1);
+            IPool(pool).withdrawFromOtherAsset(lpTokenUnderlying, _underlying, _amount, _minOut, _recipient, _deadline);
         }
     }
 
