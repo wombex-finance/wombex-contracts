@@ -86,6 +86,30 @@ interface IWmxLocker {
         uint256 locked,
         LockedBalance[] memory lockData
     );
+
+    function addReward(address _rewardsToken, address _distributor) external;
+
+    function approveRewardDistributor(
+        address _rewardsToken,
+        address _distributor,
+        bool _approved
+    ) external;
+
+    function modifyBlacklist(address _account, bool _blacklisted) external;
+
+    function setKickIncentive(uint256 _rate, uint256 _delay) external;
+
+    function shutdown() external;
+
+    function recoverERC20(address _tokenAddress, uint256 _tokenAmount) external;
+}
+
+interface IOwnable {
+    function transferOwnership(address _newOwner) external;
+}
+
+interface IRewardsManager {
+    function onNewRewardToken(address _token) external;
 }
 
 interface IWmxLockerExt {
@@ -414,6 +438,12 @@ interface IBoosterEarmark {
     function lastEarmarkAt(uint256 pid) external view returns (uint256);
     function getEarmarkPoolExecuteOn(uint256 pid) external view returns (uint256);
     function getEarmarkPoolExecuteOn(uint256 _pid, IBooster.PoolInfo calldata _pool) external view returns (uint256);
+    function updateDistributionByTokens(
+        address _token,
+        address[] memory _distros,
+        uint256[] memory _shares,
+        bool[] memory _callQueue
+    ) external;
 }
 
 interface ISwapRouter {

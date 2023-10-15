@@ -188,7 +188,7 @@ describe("PoolDepositor", () => {
             await tx.wait();
 
             const underlyingBalanceBefore = await alice.getBalance();
-            tx = await poolDepositor.connect(alice).withdrawNative(nativeLptoken.address, amount, 0, aliceAddress);
+            tx = await poolDepositor.connect(alice).withdrawNative(nativeLptoken.address, mocks.weth.address, amount, 0, aliceAddress);
             tx = await tx.wait();
 
             expect(await nativeCrvRewards.balanceOf(aliceAddress)).to.equal(stakedBalanceBefore.sub(amount));
