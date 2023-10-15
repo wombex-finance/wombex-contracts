@@ -36,30 +36,35 @@ async function approvePoolDepositor(masterWombat, poolDepositor, signer) {
         if (!pools[i].tokens.length) {
             continue;
         }
-        await new Promise((resolve) => setTimeout(resolve, 30e3))
-        await poolDepositor.approveSpendingByPool(pools[i].tokens, pools[i].address);
-        await new Promise((resolve) => setTimeout(resolve, 30e3))
-        await poolDepositor.approveSpendingByPool(pools[i].tokens, booster);
+        await poolDepositor.approveSpendingByPoolAndBooster(pools[i].tokens, pools[i].address, booster).then(tx => tx.wait());
     }
 }
 
 async function getBoosterValues(booster: Booster, boosterEarmark: BoosterEarmark) {
+    console.log('booster.poolLength()');
     const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
     for (let i = 0; i < poolLength; i++) {
         const pool = await booster.poolInfo(i);
         if (pool.shutdown) {
             continue;
         }
-        await boosterEarmark.earmarkRewards(i).then(tx => tx.wait(1));
+        console.log('boosterEarmark.earmarkRewards(i)', boosterEarmark.address);
+        await boosterEarmark['earmarkRewards(uint256)'](i).then(tx => tx.wait(1)).catch(() => null);
         const lp = IERC20__factory.connect(pool.lptoken, booster.provider);
+        console.log('lp.balanceOf');
         await lp.balanceOf(booster.address);
     }
+    console.log('booster.voterProxy()');
     await booster.voterProxy();
+    console.log('booster.crvLockRewards()');
     await booster.crvLockRewards();
+    console.log('boosterEarmark.distributionTokenList()');
     const distroTokens = await boosterEarmark.distributionTokenList();
     for (let i = 0; i < distroTokens.length; i++) {
+        console.log('boosterEarmark.distributionByTokenLength(');
         const len = await boosterEarmark.distributionByTokenLength(distroTokens[i]).then(l => parseInt(l.toString()));
         for(let j = 0; j < len; j++) {
+            console.log('boosterEarmark.distributionByTokens');
             await boosterEarmark.distributionByTokens(distroTokens[i], j);
         }
     }

@@ -11,6 +11,7 @@ contract BoosterEarmark is Ownable {
 
     IBooster public booster;
     address public voterProxy;
+    address public depositor;
     address public mainRewardToken;
     address public weth;
 
@@ -25,6 +26,9 @@ contract BoosterEarmark is Ownable {
         bool callQueue;
     }
     address[] distributionTokens;
+
+    uint256 public earmarkPeriod;
+    mapping(uint256 => uint256) public lastEarmarkAt;
 
     struct EarmarkState {
         IERC20 token;
@@ -42,9 +46,10 @@ contract BoosterEarmark is Ownable {
 
     event SetPoolManager(address poolManager);
 
-    event SetEarmarkConfig(uint256 earmarkIncentive);
+    event SetEarmarkConfig(uint256 earmarkIncentive, uint256 earmarkPeriod);
     event EarmarkRewards(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount);
     event EarmarkRewardsTransfer(uint256 indexed pid, address indexed lpToken, address indexed rewardToken, uint256 amount, address distro, bool queue);
+    event EarmarkRewardsDiff(address indexed rewardToken, uint256 diffAmount, uint256 pendingAmount, uint256 currentBal);
 
     event ReleaseToken(address indexed token, uint256 amount, address indexed recipient);
 
@@ -52,17 +57,24 @@ contract BoosterEarmark is Ownable {
         booster = IBooster(_booster);
         mainRewardToken = booster.crv();
         voterProxy = IBooster(_booster).voterProxy();
+        depositor = IStaker(voterProxy).depositor();
         weth = _weth;
+    }
+
+    function updateBoosterAndDepositor() external onlyOwner {
+        booster = IBooster(IStaker(voterProxy).operator());
+        depositor = IStaker(voterProxy).depositor();
     }
 
     /**
      * @notice Fee manager can set all the relevant fees
      * @param _earmarkIncentive   % for whoever calls the claim where 1% == 100
      */
-    function setEarmarkConfig(uint256 _earmarkIncentive) external onlyOwner {
+    function setEarmarkConfig(uint256 _earmarkIncentive, uint256 _earmarkPeriod) external onlyOwner {
         require(_earmarkIncentive <= 100, ">max");
         earmarkIncentive = _earmarkIncentive;
-        emit SetEarmarkConfig(_earmarkIncentive);
+        earmarkPeriod = _earmarkPeriod;
+        emit SetEarmarkConfig(_earmarkIncentive, _earmarkPeriod);
     }
 
     /**
@@ -99,11 +111,6 @@ contract BoosterEarmark is Ownable {
 
     function forceShutdownPool(uint256 _pid) external onlyOwner returns (bool) {
         return booster.forceShutdownPool(_pid);
-    }
-
-    function gaugeMigrate(address _newGauge, uint256[] calldata migratePids) external onlyOwner {
-        require(_newGauge != address(0), "zero");
-        return booster.gaugeMigrate(_newGauge, migratePids);
     }
 
     /**
@@ -239,16 +246,23 @@ contract BoosterEarmark is Ownable {
 
         balances = new uint256[](tLen);
         for (uint256 i = 0; i < tLen; ) {
-            balances[i] = IERC20(_tokens[i]).balanceOf(address(booster)) - balancesBefore[i] + pendingRewards[i];
+            uint256 currentBal = IERC20(_tokens[i]).balanceOf(address(booster));
+            balances[i] = currentBal - balancesBefore[i];
+            if(balances[i] + pendingRewards[i] > currentBal) {
+                emit EarmarkRewardsDiff(_tokens[i], (balances[i] + pendingRewards[i]) - currentBal, pendingRewards[i], currentBal);
+                balances[i] = currentBal;
+            } else {
+                balances[i] += pendingRewards[i];
+            }
             unchecked {
                 ++i;
             }
         }
     }
 
-    function earmarkRewards(uint256 _pid) external {
+    function earmarkRewards(uint256 _pid) public {
         IBooster.PoolInfo memory p = booster.poolInfo(_pid);
-        require(!p.shutdown, "closed");
+        require(isEarmarkPoolAvailable(_pid, p), "!available");
 
         //claim crv/wom and bonus tokens
         address[] memory tokens = IStaker(voterProxy).getGaugeRewardTokens(p.lptoken, p.gauge);
@@ -322,6 +336,54 @@ contract BoosterEarmark is Ownable {
             emit EarmarkRewardsTransfer(_pid, p.lptoken, address(s.token), _transferAmount[s.totalDLen - 1], p.crvRewards, true);
             unchecked {
                 ++i;
+            }
+        }
+        lastEarmarkAt[_pid] = block.timestamp;
+    }
+
+    function earmarkRewardsIfAvailable(uint256 _pid) external {
+        if (!isEarmarkAvailable(_pid)) {
+           return;
+        }
+        earmarkRewards(_pid);
+    }
+
+    function earmarkRewards(uint256[] memory _pids) external {
+        uint256 len = _pids.length;
+        for (uint256 i = 0; i < len; i++) {
+            earmarkRewards(_pids[i]);
+        }
+    }
+
+    function isEarmarkAvailable(uint256 _pid) public view returns (bool) {
+        return isEarmarkPoolAvailable(_pid, booster.poolInfo(_pid));
+    }
+
+    function isEarmarkPoolAvailable(uint256 _pid, IBooster.PoolInfo memory _pool) public view returns (bool) {
+        if (msg.sender == depositor && !_pool.shutdown) {
+            return true;
+        }
+        return getEarmarkPoolExecuteOn(_pid, _pool) < block.timestamp;
+    }
+
+    function getEarmarkPoolExecuteOn(uint256 _pid) public view returns (uint256) {
+        return getEarmarkPoolExecuteOn(_pid, booster.poolInfo(_pid));
+    }
+
+    function getEarmarkPoolExecuteOn(uint256 _pid, IBooster.PoolInfo memory _pool) public view returns (uint256 executeOn) {
+        if (_pool.shutdown) {
+            return type(uint256).max;
+        }
+        executeOn = lastEarmarkAt[_pid] + earmarkPeriod;
+        if (block.timestamp > executeOn) {
+            return executeOn;
+        }
+        address[] memory rewardTokens = IRewards(_pool.crvRewards).rewardTokensList();
+        uint256 len = rewardTokens.length;
+        for (uint256 i = 0; i < len; i++) {
+            ( , uint256 periodFinish, , , , , , , bool paused) = IRewards(_pool.crvRewards).tokenRewards(rewardTokens[i]);
+            if (!paused && periodFinish < executeOn) {
+                executeOn = periodFinish;
             }
         }
     }

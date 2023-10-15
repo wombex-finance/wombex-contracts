@@ -366,6 +366,7 @@ interface IBooster {
     function distributeRewards(uint256 _pid, address _lpToken, address _rewardToken, address[] memory _transferTo, uint256[] memory _transferAmount, bool[] memory _callQueue) external;
     function lpPendingRewards(address _lptoken, address _token) external view returns (uint256);
     function earmarkRewards(uint256 _pid) external;
+    function earmarkRewardsIfAvailable(uint256 _pid) external;
     function shutdownPool(uint256 _pid) external returns (bool);
     function forceShutdownPool(uint256 _pid) external returns (bool);
     function gaugeMigrate(address _newGauge, uint256[] memory migratePids) external;
@@ -384,6 +385,12 @@ interface IBoosterEarmark {
     function distributionTokenList() external view returns (address[] memory);
     function addPool(address _lptoken, address _gauge) external returns (uint256);
     function addCreatedPool(address _lptoken, address _gauge, address _token, address _crvRewards) external returns (uint256);
+    function isEarmarkAvailable(uint256 _pid) external view returns(bool);
+    function isEarmarkPoolAvailable(uint256 _pid, IBooster.PoolInfo memory _pool) external view returns (bool);
+    function earmarkRewards(uint256[] memory _pids) external;
+    function earmarkPeriod() external view returns (uint256);
+    function lastEarmarkAt(uint256 pid) external view returns (uint256);
+    function getEarmarkPoolExecuteOn(uint256 pid) external view returns (uint256);
 }
 
 interface ISwapRouter {

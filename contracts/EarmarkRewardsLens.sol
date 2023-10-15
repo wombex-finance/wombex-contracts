@@ -9,8 +9,11 @@ contract EarmarkRewardsLens {
     IBooster public booster;
     IBoosterEarmark public boosterEarmark;
     address public crv;
-    constructor(IStaker _voterProxy) {
+    uint256 public maxPidsToExecute;
+
+    constructor(IStaker _voterProxy, uint256 _maxPidsToExecute) {
         voterProxy = _voterProxy;
+        maxPidsToExecute = _maxPidsToExecute;
         updateBooster();
     }
 
@@ -68,6 +71,74 @@ contract EarmarkRewardsLens {
             availableBalances[i] = IERC20(tokens[i]).balanceOf(address(booster)) + IERC20(tokens[i]).balanceOf(address(voterProxy));
 
             diffBalances[i] = int256(wombatPendingRewards[i]) + int256(availableBalances[i]) - int256(boosterPendingRewards[i]);
+        }
+    }
+
+
+    function getEarmarkablePools() public view returns(bool[] memory earmarkablePools, uint256 poolsCount) {
+        uint256 poolLen = booster.poolLength();
+        earmarkablePools = new bool[](poolLen);
+
+        for (uint256 i = 0; i < poolLen; i++) {
+            IBooster.PoolInfo memory p = booster.poolInfo(i);
+            if (p.shutdown || !boosterEarmark.isEarmarkPoolAvailable(i, p)) {
+                continue;
+            }
+
+            (address token , uint256 periodFinish, , , , , , , bool paused) = IRewards(p.crvRewards).tokenRewards(crv);
+            if (token == crv && periodFinish < block.timestamp && IERC20(crv).balanceOf(p.crvRewards) > 1000 ether) {
+                earmarkablePools[i] = true;
+                continue;
+            }
+
+            (uint256 pendingRewards, , , uint256[] memory pendingBonusRewards) = IMasterWombatV2(p.gauge).pendingTokens(i, address(voterProxy));
+            if (pendingRewards != 0) {
+                earmarkablePools[i] = true;
+                poolsCount++;
+                continue;
+            }
+            for (uint256 j = 0; j < pendingBonusRewards.length; j++) {
+                if (pendingBonusRewards[j] != 0) {
+                    earmarkablePools[i] = true;
+                    poolsCount++;
+                    break;
+                }
+            }
+        }
+    }
+
+    function getPidsToEarmark() public view returns(uint256[] memory pids) {
+        (bool[] memory earmarkablePools, uint256 poolsCount) = getEarmarkablePools();
+        pids = new uint256[](poolsCount);
+        uint256 curIndex = 0;
+        for (uint256 i = 0; i < earmarkablePools.length; i++) {
+            if (earmarkablePools[i]) {
+                pids[curIndex] = i;
+                curIndex++;
+            }
+        }
+    }
+
+    function earmarkResolver() public view returns(bool execute, bytes memory data) {
+        uint256[] memory pidsToExecute = getPidsToEarmark();
+        if (pidsToExecute.length > maxPidsToExecute) {
+            uint256[] memory pids = new uint256[](maxPidsToExecute);
+            for (uint256 i = 0; i < maxPidsToExecute; i++) {
+                pids[i] = pidsToExecute[i];
+            }
+            pidsToExecute = pids;
+        }
+        return (
+            pidsToExecute.length > 0,
+            abi.encodeWithSelector(IBoosterEarmark.earmarkRewards.selector, pidsToExecute)
+        );
+    }
+
+    function getPoolsQueue() public view returns(uint256[] memory pidsNextExecuteOn) {
+        uint256 poolLen = booster.poolLength();
+        pidsNextExecuteOn = new uint256[](poolLen);
+        for (uint256 i = 0; i < poolLen; i++) {
+            pidsNextExecuteOn[i] = boosterEarmark.getEarmarkPoolExecuteOn(i);
         }
     }
 }

@@ -182,6 +182,10 @@ contract WomDepositor is Ownable {
         }
         executing = true;
 
+        if (IERC20(wom).balanceOf(staker) > 0) {
+            IBooster(booster).earmarkRewards(earmarkPid);
+        }
+
         uint256 slot = currentSlot;
         currentSlot = currentSlot + 1;
 
@@ -193,10 +197,6 @@ contract WomDepositor is Ownable {
             lockedCustomSlots[slot] = true;
         } else {
             amountToLock = IERC20(wom).balanceOf(address(this));
-        }
-
-        if (IERC20(wom).balanceOf(staker) > 0) {
-            IBooster(booster).earmarkRewards(earmarkPid);
         }
 
         IERC20(wom).safeTransfer(staker, amountToLock);
