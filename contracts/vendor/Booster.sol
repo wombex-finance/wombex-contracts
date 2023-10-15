@@ -168,7 +168,7 @@ contract Booster{
      * @notice Pool manager is responsible for adding new pools
      */
     function setPoolManager(address _poolM) external {
-        require(msg.sender == poolManager, "!auth");
+        require(msg.sender == poolManager || msg.sender == owner, "!auth");
         poolManager = _poolM;
 
         emit PoolManagerUpdated(_poolM);

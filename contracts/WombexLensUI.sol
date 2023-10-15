@@ -84,13 +84,12 @@ contract WombexLensUI is Ownable {
     address public WETH_TOKEN;
     address public WMX_WOM_TOKEN;
 
-    address public WOM_WMX_POOL;
-
+    mapping(address => address) public swapTokenByPool;
     mapping(address => bool) public isUsdStableToken;
     mapping(address => address) public poolToToken;
     mapping(address => address) public tokenToRouter;
     mapping(address => bool) public tokenUniV3;
-    mapping(address => address) public tokenSwapThroughToken;
+    mapping(address => address[]) public tokenSwapThroughTokens;
     mapping(address => address) public tokenSwapToTargetStable;
 
     struct PoolValues {
@@ -141,8 +140,7 @@ contract WombexLensUI is Ownable {
         address _WMX_TOKEN,
         address _WMX_MINTER,
         address _WETH_TOKEN,
-        address _WMX_WOM_TOKEN,
-        address _WOM_WMX_POOL
+        address _WMX_WOM_TOKEN
     ) {
         UNISWAP_ROUTER = _UNISWAP_ROUTER;
         UNISWAP_V3_QUOTER = _UNISWAP_V3_ROUTER;
@@ -153,12 +151,17 @@ contract WombexLensUI is Ownable {
         WMX_MINTER = _WMX_MINTER;
         WETH_TOKEN = _WETH_TOKEN;
         WMX_WOM_TOKEN = _WMX_WOM_TOKEN;
-        WOM_WMX_POOL = _WOM_WMX_POOL;
     }
 
     function setUsdStableTokens(address[] memory _tokens, bool _isStable) external onlyOwner {
         for (uint256 i = 0; i < _tokens.length; i++) {
             isUsdStableToken[_tokens[i]] = _isStable;
+        }
+    }
+
+    function setSwapTokenByPool(address[] memory _tokens, address _pool) external onlyOwner {
+        for (uint256 i = 0; i < _tokens.length; i++) {
+            swapTokenByPool[_tokens[i]] = _pool;
         }
     }
 
@@ -180,37 +183,15 @@ contract WombexLensUI is Ownable {
         }
     }
 
-    function setTokenSwapThroughToken(address[] memory _tokens, address _throughToken) external onlyOwner {
+    function setTokenSwapThroughToken(address[] memory _tokens, address[] memory _throughTokens) external onlyOwner {
         for (uint256 i = 0; i < _tokens.length; i++) {
-            tokenSwapThroughToken[_tokens[i]] = _throughToken;
+            tokenSwapThroughTokens[_tokens[i]] = _throughTokens;
         }
     }
 
     function setTokensTargetStable(address[] memory _tokens, address _targetStable) external onlyOwner {
         for (uint256 i = 0; i < _tokens.length; i++) {
             tokenSwapToTargetStable[_tokens[i]] = _targetStable;
-        }
-    }
-
-    function getRewardRates(
-        IBooster _booster
-    ) public view returns(PoolRewardRate[] memory result, uint256 mintRatio) {
-        uint256 len = _booster.poolLength();
-
-        result = new PoolRewardRate[](len);
-        mintRatio = _booster.mintRatio();
-
-        for (uint256 i = 0; i < len; i++) {
-            IBooster.PoolInfo memory poolInfo = _booster.poolInfo(i);
-            IBaseRewardPool4626 crvRewards = IBaseRewardPool4626(poolInfo.crvRewards);
-            address[] memory rewardTokens = crvRewards.rewardTokensList();
-            uint256[] memory rewardRates = new uint256[](rewardTokens.length);
-            for (uint256 j = 0; j < rewardTokens.length; j++) {
-                address token = rewardTokens[j];
-                rewardRates[j] = crvRewards.tokenRewards(token).rewardRate;
-            }
-            result[i].rewardTokens = rewardTokens;
-            result[i].rewardRates = rewardRates;
         }
     }
 
@@ -485,14 +466,16 @@ contract WombexLensUI is Ownable {
         return 0;
     }
 
-    function wmxWomToWom(uint256 wmxWomAmount) public view returns (uint256 womAmount) {
-        if (wmxWomAmount == 0) {
-            return 0;
+    function tokenToPoolToken(address _token, uint256 _tokenAmount) public view returns (uint256 resAmount, address resToken) {
+        address pool = swapTokenByPool[_token];
+        resToken = poolToToken[pool];
+        if (_tokenAmount == 0) {
+            return (0, resToken);
         }
-        try IWomPool(WOM_WMX_POOL).quotePotentialSwap(WMX_WOM_TOKEN, WOM_TOKEN, int256(1 ether)) returns (uint256 potentialOutcome, uint256 haircut) {
-            womAmount = potentialOutcome * wmxWomAmount / 1 ether;
+        uint8 decimals = getTokenDecimals(_token);
+        try IWomPool(pool).quotePotentialSwap(_token, resToken, int256(10 ** decimals)) returns (uint256 potentialOutcome, uint256 haircut) {
+            resAmount = potentialOutcome * _tokenAmount / (10 ** decimals);
         } catch {
-            womAmount = wmxWomAmount;
         }
     }
 
@@ -515,9 +498,8 @@ contract WombexLensUI is Ownable {
         if (tokenToRouter[_token] != address(0)) {
             router = tokenToRouter[_token];
         }
-        if (_token == WMX_WOM_TOKEN) {
-            _amountIn = wmxWomToWom(_amountIn);
-            _token = WOM_TOKEN;
+        if (swapTokenByPool[_token] != address(0)) {
+            (_amountIn, _token) = tokenToPoolToken(_token, _amountIn);
         }
 
         address targetStable = MAIN_STABLE_TOKEN;
@@ -528,12 +510,14 @@ contract WombexLensUI is Ownable {
         }
 
         address[] memory path;
-        address throughToken = tokenSwapThroughToken[_token];
-        if (throughToken != address(0)) {
-            path = new address[](3);
+        address[] memory throughTokens = tokenSwapThroughTokens[_token];
+        if (throughTokens.length > 0) {
+            path = new address[](2 + throughTokens.length);
             path[0] = _token;
-            path[1] = throughToken;
-            path[2] = targetStable;
+            for(uint256 i = 0; i < throughTokens.length; i++) {
+                path[1 + i] = throughTokens[i];
+            }
+            path[path.length - 1] = targetStable;
         } else {
             path = new address[](2);
             path[0] = _token;
@@ -592,7 +576,8 @@ contract WombexLensUI is Ownable {
     ) public returns (RewardContractData memory data) {
         RewardItem[] memory rewards = getUserPendingRewards(_booster.mintRatio(), _crvLockRewards, _user);
         uint256 wmxWomBalance = ERC20(_crvLockRewards).balanceOf(_user);
-        data = RewardContractData(_crvLockRewards, uint128(wmxWomBalance), uint128(wmxWomToWom(wmxWomBalance)), uint128(0), uint8(18), rewards);
+        (uint256 womBalance, ) = tokenToPoolToken(WMX_WOM_TOKEN, wmxWomBalance);
+        data = RewardContractData(_crvLockRewards, uint128(wmxWomBalance), uint128(womBalance), uint128(0), uint8(18), rewards);
         data.usdBalance = uint128(estimateInBUSD(WMX_WOM_TOKEN, data.underlyingBalance, uint8(18)));
     }
 
@@ -711,20 +696,6 @@ contract WombexLensUI is Ownable {
                 uint128(estimateInBUSDEther(userRewards[i].token, userRewards[i].amount, decimals)),
                 decimals
             );
-        }
-    }
-
-    function getWomLpBalances(
-        IBooster _booster,
-        address _user,
-        uint256[] memory _poolIds
-    ) public view returns(uint256[] memory balances) {
-        uint256 len = _poolIds.length;
-        balances = new uint256[](len);
-
-        for (uint256 i = 0; i < len; i++) {
-            IBooster.PoolInfo memory poolInfo = _booster.poolInfo(i);
-            balances[i] = ERC20(poolInfo.crvRewards).balanceOf(_user);
         }
     }
 }

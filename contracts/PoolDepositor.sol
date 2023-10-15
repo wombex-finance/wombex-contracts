@@ -24,6 +24,7 @@ contract PoolDepositor is Ownable {
 
     address public weth;
     address public booster;
+    address public voterProxy;
     address public masterWombat;
     mapping (address => uint256) public lpTokenToPid;
 
@@ -35,7 +36,12 @@ contract PoolDepositor is Ownable {
     constructor(address _weth, address _booster, address _masterWombat) public Ownable() {
         weth =  _weth;
         booster =  _booster;
+        voterProxy = IBooster(_booster).voterProxy();
         masterWombat = _masterWombat;
+    }
+
+    function updateBooster() public onlyOwner {
+        booster = IStaker(voterProxy).operator();
     }
 
     /**
@@ -43,7 +49,6 @@ contract PoolDepositor is Ownable {
      * @dev Needs to be done after asset deployment for router to be able to support the tokens
      */
     function approveSpendingMultiplePools(uint256[] calldata pids) public onlyOwner {
-        address voterProxy = IBooster(booster).voterProxy();
         for (uint256 i; i < pids.length; i++) {
             IBooster.PoolInfo memory p = IBooster(booster).poolInfo(pids[i]);
             uint256 wmPid = IStaker(voterProxy).lpTokenToPid(p.gauge, p.lptoken);

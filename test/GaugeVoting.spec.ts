@@ -353,6 +353,7 @@ describe("GaugeVoting", () => {
         });
 
         it("methods vote, voteExecute and onVotesChanged should work properly", async () => {
+            await gaugeVoting.updateBooster().then(tx => tx.wait());
             await cvx.connect(bob).approve(cvxLocker.address, simpleToExactAmount(10)).then(tx => tx.wait());
             await cvxLocker.connect(bob).lock(bobAddress, simpleToExactAmount(10)).then(tx => tx.wait());
             await cvxLocker.connect(bob)['getReward(address)'](bobAddress).then(tx => tx.wait());
