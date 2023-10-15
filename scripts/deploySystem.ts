@@ -815,7 +815,7 @@ async function deploySideChain(
     );
     console.log('poolDeposior', poolDepositor.address);
 
-    await approvePoolDepositor(masterWombat, poolDepositor, signer);
+    await approvePoolDepositor(poolDepositor, signer);
 
     const rewardFactory = await deployContract<RewardFactory>(
         hre,

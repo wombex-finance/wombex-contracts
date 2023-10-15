@@ -47,10 +47,16 @@ contract PoolDepositor is Ownable {
         for (uint256 i; i < pids.length; i++) {
             IBooster.PoolInfo memory p = IBooster(booster).poolInfo(pids[i]);
             uint256 wmPid = IStaker(voterProxy).lpTokenToPid(p.gauge, p.lptoken);
+
             address[] memory tokens = new address[](2);
             tokens[0] = p.lptoken;
             tokens[1] = IAsset(p.lptoken).underlyingToken();
-            approveSpendingByPoolAndBooster(tokens, IAsset(p.lptoken).pool());
+
+            address[] memory boosterTokens = new address[](1);
+            boosterTokens[0] = p.lptoken;
+
+            approveSpendingByPool(tokens, IAsset(p.lptoken).pool());
+            approveSpendingByPool(boosterTokens, booster);
         }
     }
 
@@ -62,7 +68,9 @@ contract PoolDepositor is Ownable {
      */
     function approveSpendingByPool(address[] memory tokens, address pool) public onlyOwner {
         for (uint256 i; i < tokens.length; i++) {
-            IERC20(tokens[i]).safeApprove(pool, 0);
+            if (IERC20(tokens[i]).allowance(address(this), pool) != 0) {
+                IERC20(tokens[i]).safeApprove(pool, 0);
+            }
             IERC20(tokens[i]).safeApprove(pool, type(uint256).max);
         }
     }

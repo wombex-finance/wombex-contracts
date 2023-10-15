@@ -182,7 +182,7 @@ describe("WomStakingProxy", () => {
             // bal before
             let balBefore = await crv.balanceOf(veWom.address);
             // collect the rewards
-            let tx = await (await boosterEarmark.connect(alice).earmarkRewards(0)).wait(1);
+            let tx = await (await boosterEarmark.connect(alice)['earmarkRewards(uint256)'](0)).wait(1);
             let earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === crv.address.toLowerCase())[0].args;
 
             expect(await cvxStakingProxy.swapShare()).to.eq('4000');
@@ -211,7 +211,7 @@ describe("WomStakingProxy", () => {
 
             balBefore = await crv.balanceOf(veWom.address);
 
-            tx = await (await boosterEarmark.connect(alice).earmarkRewards(0)).wait(1);
+            tx = await (await boosterEarmark.connect(alice)['earmarkRewards(uint256)'](0)).wait(1);
             earmarkRewards = tx.events.filter(e => e.event === 'EarmarkRewards' && e.args.rewardToken.toLowerCase() === crv.address.toLowerCase())[0].args;
 
             // bals after

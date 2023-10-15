@@ -55,7 +55,7 @@ contract GaugeVoting is Ownable {
     event SetLpTokenStatus(address indexed lpToken, LpTokenStatus indexed status);
     event StakingTokenMigrate(address indexed newOperator);
     event RewardPoolMigrate(address indexed rewards, address indexed newOperator);
-    event Vote(address[] lpTokens, int256[] deltas, uint256 availableVotes, uint256 votedAmount);
+    event Vote(address indexed voter, address[] lpTokens, int256[] deltas, uint256 availableVotes, uint256 votedAmount);
     event DistributeBribeRewards(address indexed lpToken, address indexed rewardsPool, address indexed bribe, address[] rewardTokens, uint256[] rewardAmounts);
     event ZeroRewards(address indexed lpToken, address indexed bribe, address indexed rewardToken);
     event TransferRewards(address indexed lpToken, address indexed rewardToken, address indexed recipient, uint256 rewardAmount, bool queueRewards);
@@ -225,7 +225,7 @@ contract GaugeVoting is Ownable {
         uint256 userVoted = getUserVoted(msg.sender);
         require(userVoted <= userLockerVotes, "votes overflow");
 
-        emit Vote(_lpTokens, _deltas, userLockerVotes, userVoted);
+        emit Vote(msg.sender, _lpTokens, _deltas, userLockerVotes, userVoted);
 
         if (executeOnVote && isVoteExecuteReady()) {
             voteExecute(msg.sender);
@@ -354,6 +354,13 @@ contract GaugeVoting is Ownable {
         }
     }
 
+    function onVotesChangedMultiple(address[] memory _users, address _incentiveRecipient) public {
+        uint256 len = _users.length;
+        for (uint256 i = 0; i < len; i++) {
+            onVotesChanged(_users[i], _incentiveRecipient);
+        }
+    }
+
     function onVotesChanged(address _user, address _incentiveRecipient) public {
         address msgSender = msg.sender == address(nftLocker) ? _user : msg.sender;
         _onVotesChanged(_user, _incentiveRecipient, msgSender);
@@ -368,6 +375,16 @@ contract GaugeVoting is Ownable {
         for (uint256 i = 0; i < len; i++) {
             IBribeRewardsPool rewardsPool = IBribeRewardsPool(lpTokenRewards[lpTokensAdded[i]]);
             _rewardPoolWithdraw(rewardsPool, _user, rewardsPool.balanceOf(_user), _incentiveRecipient);
+        }
+    }
+
+    function burnDeprecatedPools(address[] memory _pools) public onlyOwner {
+        uint256 len = _pools.length;
+        for (uint256 i = 0; i < len; i++) {
+            address rewardsPool = _pools[i];
+            address lpToken = IRewards(rewardsPool).asset();
+            require(rewardsPool != lpTokenRewards[lpToken], "!deprecated");
+            stakingToken.burn(rewardsPool, stakingToken.balanceOf(rewardsPool));
         }
     }
 
@@ -396,6 +413,15 @@ contract GaugeVoting is Ownable {
 
     function getLpTokensAdded() external view returns (address[] memory) {
         return lpTokensAdded;
+    }
+
+    function getLpTokensRewardPools() external view returns (address[] memory rewardPools) {
+        uint256 len = lpTokensAdded.length;
+        rewardPools = new address[](len);
+        for (uint256 i = 0; i < len; i++) {
+            rewardPools[i] = lpTokenRewards[lpTokensAdded[i]];
+        }
+        return rewardPools;
     }
 
     function boostedUserVotes(address _user, bool _locked) public view returns (uint256 userLockerVotes) {
