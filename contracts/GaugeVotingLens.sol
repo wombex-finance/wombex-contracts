@@ -28,6 +28,7 @@ contract GaugeVotingLens {
         bool isActive;
         string name;
         string symbol;
+        WombexLensUI.PoolValuesTokenApr[] bribeAprs;
         uint128 rewardsApr;
         uint128 rewardsAprItem;
         uint128 bribeApr;
@@ -50,6 +51,12 @@ contract GaugeVotingLens {
         uint256 usdAmount;
     }
 
+    struct RewardToken {
+        address token;
+        string symbol;
+        uint8 decimals;
+    }
+
     constructor(GaugeVoting _gaugeVoting, WombexLensUI _wombexLensUI) {
         gaugeVoting = _gaugeVoting;
         wmx = _wombexLensUI.WMX_TOKEN();
@@ -69,7 +76,7 @@ contract GaugeVotingLens {
             votes = new int256[](lpTokens.length);
         }
         pools = new Pool[](lpTokens.length);
-        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSD(wmx, 1 ether, 18);
+        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSDEther(wmx, 1 ether, 18);
         uint256 stakingTotalSupply = IERC20(stakingToken).totalSupply();
         uint256 veWomBalance = veWom.balanceOf(voterProxy);
         for (uint256 i = 0; i < lpTokens.length; i++) {
@@ -90,12 +97,45 @@ contract GaugeVotingLens {
             }
             uint256 tvl = (stakingTokenPrice * vlVotes) / 1 ether;
             (pools[i].rewardsAprItem, pools[i].rewardsApr) = wombexLensUI.getRewardPoolTotalApr128(IBaseRewardPool4626(pools[i].rewards), tvl, 0, 0);
-            (pools[i].bribeAprItem, pools[i].bribeApr) = wombexLensUI.getBribeTotalApr128(voterProxy, bribeVoter, lpTokens[i], tvl, (stakingTotalSupply * stakingTokenPrice) / 1 ether, veWomBalance);
+            (pools[i].bribeAprItem, pools[i].bribeApr, pools[i].bribeAprs) = wombexLensUI.getBribeTotalApr128(voterProxy, bribeVoter, lpTokens[i], tvl, (stakingTotalSupply * stakingTokenPrice) / 1 ether, veWomBalance);
 
             pools[i].lpToken = lpTokens[i];
             pools[i].isActive = isLpActive(lpTokens[i]);
             pools[i].name = ERC20(lpTokens[i]).name();
             pools[i].symbol = ERC20(lpTokens[i]).symbol();
+        }
+    }
+
+    function getPoolWithPrices(address _lpToken, uint256[] memory rewardTokenPrices) public returns (Pool memory pool) {
+        pool.rewards = gaugeVoting.lpTokenRewards(_lpToken);
+        uint256 stakingTokenPrice = wombexLensUI.estimateInBUSDEther(wmx, 1 ether, 18);
+        uint256 bribeAprItem;
+        uint256 bribeApr;
+        (pool.bribeAprs, bribeAprItem, bribeApr) = wombexLensUI.getBribeApys(
+            voterProxy,
+            bribeVoter,
+            _lpToken,
+            (stakingTokenPrice * IERC20(pool.rewards).totalSupply()) / 1 ether,
+            (IERC20(stakingToken).totalSupply() * stakingTokenPrice) / 1 ether,
+            veWom.balanceOf(voterProxy),
+            rewardTokenPrices
+        );
+        pool.bribeAprItem = uint128(bribeAprItem);
+        pool.bribeApr = uint128(bribeApr);
+        pool.lpToken = _lpToken;
+        pool.isActive = isLpActive(_lpToken);
+        pool.name = ERC20(_lpToken).name();
+        pool.symbol = ERC20(_lpToken).symbol();
+    }
+
+    struct PoolInput {
+        address lpToken;
+        uint256[] rewardTokenPrices;
+    }
+    function getPoolsWithPrices(PoolInput[] memory poolInputs) public returns (Pool[] memory pools) {
+        pools = new Pool[](poolInputs.length);
+        for(uint256 i = 0; i < pools.length; i++) {
+            pools[i] = getPoolWithPrices(poolInputs[i].lpToken, poolInputs[i].rewardTokenPrices);
         }
     }
 
@@ -169,6 +209,32 @@ contract GaugeVotingLens {
                     decimals,
                     amount,
                     wombexLensUI.estimateInBUSDEther(bribeRewardTokens[j], amount, decimals)
+                );
+                rIndex++;
+            }
+        }
+    }
+
+    function getAllTokens(uint256 _rewardsPerLpToken) public returns (RewardToken[] memory rewardTokens) {
+        address[] memory lpTokens = gaugeVoting.getLpTokensAdded();
+        rewardTokens = new RewardToken[](lpTokens.length * (_rewardsPerLpToken + 1));
+        uint256 rIndex = 0;
+
+        for (uint256 i = 0; i < lpTokens.length; i++) {
+            rewardTokens[rIndex] = RewardToken(
+                lpTokens[i],
+                ERC20(lpTokens[i]).symbol(),
+                wombexLensUI.getTokenDecimals(lpTokens[i])
+            );
+            rIndex++;
+
+            (, , , , , , address bribe) = bribeVoter.infos(lpTokens[i]);
+            IERC20[] memory bribeTokens = IBribe(bribe).rewardTokens();
+            for (uint256 j = 0; j < bribeTokens.length; j++) {
+                rewardTokens[rIndex] = RewardToken(
+                    address(bribeTokens[j]),
+                    ERC20(address(bribeTokens[j])).symbol(),
+                    wombexLensUI.getTokenDecimals(address(bribeTokens[j]))
                 );
                 rIndex++;
             }
