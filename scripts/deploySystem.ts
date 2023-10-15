@@ -919,7 +919,7 @@ async function deploySideChain(
         waitForBlocks,
     );
 
-    await booster.setMintParams(6000, reservoirMinter.address).then(tx => tx.wait());
+    await booster.setMintParams(6000, reservoirMinter.address, ZERO_ADDRESS).then(tx => tx.wait());
     await booster.setLockRewardContracts(cvxCrvRewards.address, wmxLocker.address).then(tx => tx.wait());
     console.log('booster.setFactories')
     await booster.setFactories(rewardFactory.address, tokenFactory.address).then(tx => tx.wait());
