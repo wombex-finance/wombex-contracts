@@ -33,7 +33,7 @@ import {
     BribesRewardFactory__factory, GaugeVotingLens__factory, GaugeVotingLens, BaseRewardPool4626__factory,
     EarmarkRewardsLens__factory,
     LensPoker,
-    LensPoker__factory
+    LensPoker__factory, EarmarkRewardsLens
 } from "../../types/generated";
 import {BN, impersonate, simpleToExactAmount, ZERO_ADDRESS, increaseTime} from "../../test-utils";
 import {BoosterMigrator} from "../../types/generated/BoosterMigrator";
@@ -579,35 +579,26 @@ task("test-fork:check-earmark").setAction(async function (taskArguments: TaskArg
     console.log('deployerAddress', deployerAddress, 'nonce', await hre.ethers.provider.getTransactionCount(deployerAddress), 'blockNumber', await hre.ethers.provider.getBlockNumber());
     const bnbConfig = JSON.parse(fs.readFileSync(`./${process.env.NETWORK || hre.network.name}.json`, {encoding: 'utf8'}));
 
+    const wom = ERC20__factory.connect(bnbConfig.wom, deployer);
     const booster = Booster__factory.connect(bnbConfig.booster, deployer);
-    const boosterEarmark = BoosterEarmark__factory.connect(await booster.earmarkDelegate(), deployer);
-    const earmarkRewardsLens = EarmarkRewardsLens__factory.connect('0xBc502Eb6c9bAD77929dabeF3155967E0ABfA9209', deployer);
-
-    const lensPoker = await deployContract<LensPoker>(
+    const earmarkRewardsLens = await deployContract<EarmarkRewardsLens>(
         hre,
-        new LensPoker__factory(deployer),
-        "LensPoker",
-        [bnbConfig.voterProxy],
+        new EarmarkRewardsLens__factory(deployer),
+        "EarmarkRewardsLens",
+        [await booster.voterProxy(), '0x036e464b3fA3f31468C4Df419BF24BBb561e9E38', 15],
         {},
         true,
         waitForBlocks,
     );
-    console.log('lensPoker', lensPoker.address);
+    console.log('earmarkRewardsLens', earmarkRewardsLens.address);
     // const lensPoker = LensPoker__factory.connect('0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569', deployer);
 
-    const useBalanceToDiff = true;
-    const pendingPools = await lensPoker.getPokeRequiredPendingPools(false, useBalanceToDiff);
-    const pools = orderBy(pendingPools.pools, [p => parseFloat(ethers.utils.formatEther(p.womDiff))], ['desc']);
-    console.log('pools', pools, 'pendingPools.pools', pendingPools.pools.map(p => ({pid: p.pid.toString(), womDiff: parseFloat(ethers.utils.formatEther(p.womDiff))})));
-    return;
-    for (let i = 0; i < pools.length; i++) {
-        const pool = await booster.poolInfo(pools[i].pid);
-        const lensRewards = await earmarkRewardsLens.getRewards();
-        console.log(pools[i].pid.toString(), 'before pending', await booster.lpPendingRewards(pool.lptoken, bnbConfig.wom).then(r => r.toString()), 'diff', lensRewards.diffBalances[0].toString());
-        await boosterEarmark['earmarkRewards(uint256)'](pools[i].pid).then(tx => tx.wait());
-        console.log(pools[i].pid.toString(), 'after pending', await lensPoker.getPokeRequiredPendingPools(false, useBalanceToDiff).then(res => res.pools.map(p => ({pid: p.pid.toString(), womDiff: parseFloat(ethers.utils.formatEther(p.womDiff))}))));
-    }
+    const rewardsToExecute = await earmarkRewardsLens.callStatic.getRewardsToExecute();
+    console.log('rewardsToExecute', rewardsToExecute);
 
+    console.log('lpPendingRewards', await booster.lpPendingRewards(rewardsToExecute.pools[3].lpToken, bnbConfig.wom));
+    console.log('booster balance', await wom.balanceOf(booster.address));
+    console.log('voterProxy balance', await wom.balanceOf(bnbConfig.voterProxy));
 });
 
 task("test-fork:wom-swap-depositor").setAction(async function (taskArguments: TaskArguments, hre) {

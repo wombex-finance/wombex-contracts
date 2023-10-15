@@ -267,32 +267,33 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     // console.log('gaugeVotingLens', gaugeVotingLens.address);
     // return;
 
-    // const args = [
-    //     '0xc873fEcbd354f5A56E00E710B90EF4201db2448d', //_UNISWAP_ROUTER
-    //     '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', //_UNISWAP_V3_ROUTER
-    //     '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', //_MAIN_STABLE_TOKEN
-    //     '0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96', //_WOM_TOKEN
-    //     '0x5190F06EaceFA2C552dc6BD5e763b81C73293293', //_WMX_TOKEN
-    //     '0x96Ff1506F7aC06B95486E09529c7eFb9DfEF601E', //_WMX_MINTER
-    //     '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', //_WETH_TOKEN
-    //     '0xEfF2B1353Cdcaa2C3279C2bfdE72120c7FfB5E24', //_WMX_WOM_TOKEN
-    // ];
-    // fs.writeFileSync('./args/wombexLensUi.js', 'module.exports = ' + JSON.stringify(args));
-    // const lens = await deployContract<WombexLensUI>(
-    //     hre,
-    //     new WombexLensUI__factory(deployer),
-    //     "WombexLensUI",
-    //     args,
-    //     {},
-    //     true,
-    //     waitForBlocks,
-    // );
-    const lens = WombexLensUI__factory.connect('0xe400486ac923c9e99a23043c2e3a82eb02e7ee70', deployer);
+    const args = [
+        '0xc873fEcbd354f5A56E00E710B90EF4201db2448d', //_UNISWAP_ROUTER
+        '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', //_UNISWAP_V3_ROUTER
+        '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', //_MAIN_STABLE_TOKEN
+        '0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96', //_WOM_TOKEN
+        '0x5190F06EaceFA2C552dc6BD5e763b81C73293293', //_WMX_TOKEN
+        '0x96Ff1506F7aC06B95486E09529c7eFb9DfEF601E', //_WMX_MINTER
+        '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', //_WETH_TOKEN
+        '0xEfF2B1353Cdcaa2C3279C2bfdE72120c7FfB5E24', //_WMX_WOM_TOKEN
+    ];
+    fs.writeFileSync('./args/wombexLensUi.js', 'module.exports = ' + JSON.stringify(args));
+    const lens = await deployContract<WombexLensUI>(
+        hre,
+        new WombexLensUI__factory(deployer),
+        "WombexLensUI",
+        args,
+        {},
+        true,
+        waitForBlocks,
+    );
+    // const lens = WombexLensUI__factory.connect('0xe400486ac923c9e99a23043c2e3a82eb02e7ee70', deployer);
+    console.log('estimateInBUSDEther', await lens.callStatic.estimateInBUSDEther(await lens.WOM_TOKEN(), simpleToExactAmount(1), 18));
     await new Promise((resolve) => setTimeout(resolve, 3000));
     await lens.setUsdStableTokens(['0xff970a61a04b1ca14834a43f5de4533ebddb5cc8', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1', '0xe80772eaf6e2e18b651f160bc9158b2a5cafca65', '0xeb8e93a0c7504bffd8a8ffa56cd754c63aaebfe8', '0xfea7a6a0b346362bf88a9e4a88416b77a57d6c2a', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f', '0x3f56e0c36d275367b8c502090edf38289b3dea0d', '0xb0b195aefa3650a6908f15cdac7d92f8a5791b0b', '0x17fc002b466eec40dae837fc4be5c67993ddbd6f'], true).then(tx => tx.wait());
     await lens.setSwapTokenByPool(['0xEfF2B1353Cdcaa2C3279C2bfdE72120c7FfB5E24'], '0xEE9b42b40852a53c7361F527e638B485D49750cD').then(tx => tx.wait());
     await lens.setPoolsForToken(['0xEE9b42b40852a53c7361F527e638B485D49750cD'], '0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96').then(tx => tx.wait());
-    await lens.setTokenUniV3(['0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96', '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], true).then(tx => tx.wait());
+    await lens.setTokenUniV3(['0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], true).then(tx => tx.wait());
     await lens.setTokensTargetStable(['0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'], '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8').then(tx => tx.wait());
     await lens.setTokensToRouter(['0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'], '0xCAAaB0A72f781B92bA63Af27477aA46aB8F653E7').then(tx => tx.wait());
     await lens.setTokensTargetStable(['0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'], '0x17fc002b466eec40dae837fc4be5c67993ddbd6f').then(tx => tx.wait());
@@ -301,7 +302,7 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     // const lens = WombexLensUI__factory.connect('0xa2a791c8ad4f3363c3997a565f9d7c19e870c83e', deployer);
     console.log('lens', lens.address);
 
-    const gaugeVotingLensArgs = ['0x85eDed59cC3Bacb4D3B13C7122fB173fCAB89401', lens.address];
+    const gaugeVotingLensArgs = ['0x754961D3F6Bc537C507Dc8954DDC3f8351D29077', lens.address];
     fs.writeFileSync('./args/gaugeVotingLens.js', 'module.exports = ' + JSON.stringify(gaugeVotingLensArgs));
     const gaugeVotingLens = await deployContract<GaugeVotingLens>(
         hre,
@@ -316,24 +317,24 @@ task("lens:arbitrum").setAction(async function (taskArguments: TaskArguments, hr
     // console.log('getPools()', await gaugeVotingLens.callStatic.getPools().then(pools => pools.filter(p => p.symbol === 'LP-DAI+')));
 
     // console.log('quotePotentialWithdrawalTokenToBUSD', await lens.callStatic.quotePotentialWithdrawalTokenToBUSD('0xc6bc781e20f9323012f6e422bdf552ff06ba6cd1', '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '15986739405025212357290065'));
-    console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '15986739405025212357290065', 6));
-    // console.log('getLpUsdOut', await lens.callStatic.getLpUsdOut('0xc6bc781e20f9323012f6e422bdf552ff06ba6cd1', '15986739405025212357290065'));
-    // console.log('getTvl', await lens.callStatic.getTvl('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F'));
-    const boosterAddress = '0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F';
-    console.log('getTvl', await lens.callStatic.getTvl(boosterAddress));
-    const booster = await Booster__factory.connect(boosterAddress, deployer);
-    const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
-    for (let i = 0; i < poolLength; i++) {
-        const poolInfo = await booster.poolInfo(i);
-        const asset = await Asset__factory.connect(poolInfo.lptoken, deployer);
-        const [symbol, poolAddress, underlying] = await Promise.all([
-            asset.symbol(),
-            asset.pool(),
-            asset.underlyingToken()
-        ])
-        const tokenToWithdrawal = await lens.callStatic.getTokenToWithdrawFromPool(poolAddress);
-        console.log(symbol, 'tokenToWithdrawal === underlying', tokenToWithdrawal.toLowerCase() === underlying.toLowerCase(), 'getLpUsdOut', ethers.utils.formatEther(await lens.callStatic.getLpUsdOut(poolAddress, underlying, simpleToExactAmount(1))))
-    }
+    // console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', '15986739405025212357290065', 6));
+    // // console.log('getLpUsdOut', await lens.callStatic.getLpUsdOut('0xc6bc781e20f9323012f6e422bdf552ff06ba6cd1', '15986739405025212357290065'));
+    // // console.log('getTvl', await lens.callStatic.getTvl('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F'));
+    // const boosterAddress = '0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F';
+    // console.log('getTvl', await lens.callStatic.getTvl(boosterAddress));
+    // const booster = await Booster__factory.connect(boosterAddress, deployer);
+    // const poolLength = await booster.poolLength().then(l => parseInt(l.toString()));
+    // for (let i = 0; i < poolLength; i++) {
+    //     const poolInfo = await booster.poolInfo(i);
+    //     const asset = await Asset__factory.connect(poolInfo.lptoken, deployer);
+    //     const [symbol, poolAddress, underlying] = await Promise.all([
+    //         asset.symbol(),
+    //         asset.pool(),
+    //         asset.underlyingToken()
+    //     ])
+    //     const tokenToWithdrawal = await lens.callStatic.getTokenToWithdrawFromPool(poolAddress);
+    //     console.log(symbol, 'tokenToWithdrawal === underlying', tokenToWithdrawal.toLowerCase() === underlying.toLowerCase(), 'getLpUsdOut', ethers.utils.formatEther(await lens.callStatic.getLpUsdOut(poolAddress, underlying, simpleToExactAmount(1))))
+    // }
     // console.log('estimateInBUSD', await lens.callStatic.estimateInBUSD('0x7b5eb3940021ec0e8e463d5dbb4b7b09a89ddf96', simpleToExactAmount(1, 18), 18));
     // console.log('getTokenToWithdrawFromPool', await lens.callStatic.getTokenToWithdrawFromPool('0x4a8686df475D4c44324210FFA3Fc1DEA705296e0'));
     // // console.log('getUserBalances 0,1,2,3,4,5', await lens.callStatic.getUserBalances('0x4181E561b42fDaD14c68b0794c215DeB9Bc80c8F', '0x2f667D66dD3145F9cf9665428fd530902b0F7843', [0,1,2,3,4,5]));
