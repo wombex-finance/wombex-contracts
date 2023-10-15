@@ -17,6 +17,11 @@ contract PoolDepositor is Ownable {
     using SafeERC20 for IERC20;
     using Address for address payable;
 
+    struct ApprovePool {
+        address pool;
+        address[] tokens;
+    }
+
     address public weth;
     address public booster;
     address public masterWombat;
@@ -36,10 +41,26 @@ contract PoolDepositor is Ownable {
     /**
      * @notice Approve spending of router tokens by pool
      * @dev Needs to be done after asset deployment for router to be able to support the tokens
+     */
+    function approveSpendingMultiplePools(uint256[] calldata pids) public onlyOwner {
+        address voterProxy = IBooster(booster).voterProxy();
+        for (uint256 i; i < pids.length; i++) {
+            IBooster.PoolInfo memory p = IBooster(booster).poolInfo(pids[i]);
+            uint256 wmPid = IStaker(voterProxy).lpTokenToPid(p.gauge, p.lptoken);
+            address[] memory tokens = new address[](2);
+            tokens[0] = p.lptoken;
+            tokens[1] = IAsset(p.lptoken).underlyingToken();
+            approveSpendingByPoolAndBooster(tokens, IAsset(p.lptoken).pool());
+        }
+    }
+
+    /**
+     * @notice Approve spending of router tokens by pool
+     * @dev Needs to be done after asset deployment for router to be able to support the tokens
      * @param tokens    array of tokens to be approved
      * @param pool      to be approved to spend
      */
-    function approveSpendingByPool(address[] calldata tokens, address pool) public onlyOwner {
+    function approveSpendingByPool(address[] memory tokens, address pool) public onlyOwner {
         for (uint256 i; i < tokens.length; i++) {
             IERC20(tokens[i]).safeApprove(pool, 0);
             IERC20(tokens[i]).safeApprove(pool, type(uint256).max);
@@ -51,9 +72,8 @@ contract PoolDepositor is Ownable {
      * @dev Needs to be done after asset deployment for router to be able to support the tokens
      * @param tokens    array of tokens to be approved
      * @param pool      to be approved to spend
-     * @param booster   to be approved to spend
      */
-    function approveSpendingByPoolAndBooster(address[] calldata tokens, address pool, address booster) external onlyOwner {
+    function approveSpendingByPoolAndBooster(address[] memory tokens, address pool) public onlyOwner {
         approveSpendingByPool(tokens, pool);
         approveSpendingByPool(tokens, booster);
     }

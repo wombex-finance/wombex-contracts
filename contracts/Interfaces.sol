@@ -267,6 +267,8 @@ interface IPool {
     ) external view returns (uint256 amountIn, uint256 haircut);
 
     function addressOfAsset(address token) external view returns (address);
+
+    function getTokens() external view returns (address[] memory);
 }
 
 interface IWombatRouter {
