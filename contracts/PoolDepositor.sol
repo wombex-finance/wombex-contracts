@@ -120,6 +120,8 @@ contract PoolDepositor is Ownable {
     }
 
     function withdrawNative(address _lptoken, address _underlying, uint256 _amount, uint256 _minOut, uint256 _deadline, address payable _recipient) external {
+        require(_underlying == weth, "Not Native"); 
+
         uint256 wethBalanceBefore = IERC20(weth).balanceOf(address(this));
         _withdraw(_lptoken, _underlying, _amount, _minOut, _deadline, address(this));
         uint256 wethAmount = IERC20(weth).balanceOf(address(this)) - wethBalanceBefore;
