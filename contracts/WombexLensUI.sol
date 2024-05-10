@@ -505,7 +505,7 @@ contract WombexLensUI is Ownable {
         uint256 wmxWomBalance = ERC20(_crvLockRewards).balanceOf(_user);
         (uint256 womBalance, ) = tokenToPoolToken(WMX_WOM_TOKEN, wmxWomBalance);
         data = RewardContractData(_crvLockRewards, uint128(wmxWomBalance), uint128(womBalance), uint128(0), uint8(18), rewards);
-        data.usdBalance = uint128(_estimateInBUSD(WMX_WOM_TOKEN, data.underlyingBalance, uint8(18)));
+        data.usdBalance = uint128(_estimateInBUSD(WOM_TOKEN, data.underlyingBalance, uint8(18)));
     }
 
     function _getUserLocker(

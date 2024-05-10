@@ -839,6 +839,8 @@ task("deploy-lens:bnb").setAction(async function (taskArguments: TaskArguments, 
     await lens.setSwapTokenByPool(['0x6764506be2a755c18f4c70bDe4e63F26f9F62810'], '0xbed9B758A681d73a95Ab4c01309C63aa16297b80').then(tx => tx.wait());
     await lens.setSwapTokenByPool(['0xc2E9d07F66A89c44062459A47a0D2Dc038E4fb16'], '0x0029b7e8e9eD8001c868AA09c74A1ac6269D4183').then(tx => tx.wait());
     await lens.setSwapTokenByPool(['0xe05A08226c49b636ACf99c40Da8DC6aF83CE5bB3'], '0x1b507b97c89eDE3E40d1b2Ed92972197c6276D35').then(tx => tx.wait());
+    await lens.setSwapTokenByPool(['0xF027E525D491ef6ffCC478555FBb3CFabB3406a6'], '0x0592083B285aa75B9c8BaD2485C6cCCF93cCC348').then(tx => tx.wait());
+    await lens.setSwapTokenByPool(['0xB0b84D294e0C75A6abe60171b70edEb2EFd14A1B'], '0xF1e604e9A31c3b575f91CF008445B7ce06BF3fef').then(tx => tx.wait());
     await lens.setPoolsForToken(['0xeEB5a751E0F5231Fc21c7415c4A4c6764f67ce2e'], '0xAD6742A35fB341A9Cc6ad674738Dd8da98b94Fb1').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x312Bc7eAAF93f1C60Dc5AfC115FcCDE161055fb0', '0x48f6A8a0158031BaF8ce3e45344518f1e69f2A14', '0x8ad47d7ab304272322513eE63665906b64a49dA2', '0x277E777F7687239B092c8845D4d2cd083a33C903'], '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56').then(tx => tx.wait());
     await lens.setPoolsForToken(['0x4dFa92842d05a790252A7f374323b9C86D7b7E12'], '0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5').then(tx => tx.wait());
