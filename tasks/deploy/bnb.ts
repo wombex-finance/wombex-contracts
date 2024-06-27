@@ -53,6 +53,8 @@ import {
     BribesRewardFactory,
     BribesRewardFactory__factory,
     BribesTokenFactory__factory,
+    IBribeVoter__factory,
+    GetData__factory,
     BribesTokenFactory,
     DepositToken,
     DepositToken__factory,
@@ -75,11 +77,14 @@ import {
     ZERO_ADDRESS
 } from "../../test-utils";
 import assert from "assert";
+import { BigNumber } from "ethers";
 
 const {approvePoolDepositor} = require('../helpers');
 
 const fs = require('fs');
-const ethers = require('ethers');
+import ethers from 'ethers';
+// import {ethers as ethershardhat} from "hardhat";
+
 const _ = require('lodash');
 const pIteration = require('p-iteration');
 
@@ -1017,6 +1022,85 @@ task("earmark-rewards-lens:bnb").setAction(async function (taskArguments: TaskAr
     // tokensSymbols.map((symbol, index) => {
     //     console.log(symbol, diffBalances[index]);
     // })
+});
+
+// yarn run task get-lp-tokens-added:bnb --network bnb
+task("get-lp-tokens-added:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    const GaugeVoting = GaugeVoting__factory.connect('0x6D1Fce96E26D7E48e8eCc88A7D9D8241c00e9af8', deployer);
+
+    const lpTokenAdded = await GaugeVoting.getLpTokensAdded();
+  
+    console.log('lpTokenAdded', lpTokenAdded);
+  
+});
+
+//yarn run task get-current-lp-vote-on-wombat:bnb --network bnb
+task("get-current-lp-vote-on-wombat:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    const GaugeVoting = GaugeVoting__factory.connect('0x6D1Fce96E26D7E48e8eCc88A7D9D8241c00e9af8', deployer);
+
+    const lpTokenAdded = await GaugeVoting.getLpTokensAdded();
+  
+    // get current vote on bribe voter in wombat system
+    const IBribeVoter = IBribeVoter__factory.connect('0x04D4e1C1F3D6539071b6D3849fDaED04d48D563d', deployer);
+
+    let lpToken= [];
+    let currentVotes = []
+    const LP_TO_VOTES = new Map<String, BigNumber>()
+    for (let i = 0 ;i <lpTokenAdded.length; i++){
+        let votes = await IBribeVoter.votes("0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569", lpTokenAdded[i]);
+        if ( votes.gt(BigNumber.from(0))) {
+            LP_TO_VOTES.set(lpTokenAdded[i], votes);
+            currentVotes.push(votes);
+            lpToken.push(lpTokenAdded[i]);
+        }
+    }
+
+    console.log(LP_TO_VOTES);
+    console.log(lpToken)
+    console.log(currentVotes)
+
+  
+});
+
+
+
+//yarn run task create-unvote:bnb --network bnb
+task("create-unvote:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    const GaugeVoting = GaugeVoting__factory.connect('0x6D1Fce96E26D7E48e8eCc88A7D9D8241c00e9af8', deployer);
+
+    const lpTokenAdded = await GaugeVoting.getLpTokensAdded();
+  
+    // get current vote on bribe voter in wombat system
+    const IBribeVoter = IBribeVoter__factory.connect('0x04D4e1C1F3D6539071b6D3849fDaED04d48D563d', deployer);
+
+    const LP_TO_VOTES = new Map<String, BigNumber>();
+    let lpToken= [];
+    let currentVotes = []
+    for (let i = 0 ;i <lpTokenAdded.length; i++){
+        let votes = await IBribeVoter.votes("0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569", lpTokenAdded[i]);
+        if ( votes.gt(BigNumber.from(0))) {
+            LP_TO_VOTES.set(lpTokenAdded[i], votes);
+            currentVotes.push(BigNumber.from(0).sub(votes));
+            lpToken.push(lpTokenAdded[i]);
+
+        }
+    }
+
+    console.log({lpToken, currentVotes})
+
+    
+    const GetData = GetData__factory.connect('0x0b513ff5b7c44d61b1e75a504bf4a37b1b6312d1', deployer);
+
+    const bytes = await GetData.getData(lpToken, currentVotes);
+
+    console.log({bytes})
+  
 });
 
 task("gauge-voting:bnb").setAction(async function (taskArguments: TaskArguments, hre) {

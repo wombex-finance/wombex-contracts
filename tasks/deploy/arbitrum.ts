@@ -28,10 +28,13 @@ import {
     WmxRewardPoolLens__factory,
     WombexLensUI,
     WombexLensUI__factory,
-    WomDepositorV3__factory
+    WomDepositorV3__factory,
+    IBribeVoter__factory,
+    GetData__factory
 } from "../../types/generated";
 import {deploySideChain} from "../../scripts/deploySystem";
 import {impersonate, simpleToExactAmount, ZERO_ADDRESS} from "../../test-utils";
+import { BigNumber } from "ethers";
 const fs = require('fs');
 const ethers = require('ethers');
 const _ = require('lodash');
@@ -423,6 +426,42 @@ task("gauge-voting:arbitrum").setAction(async function (taskArguments: TaskArgum
 
     await gaugeVoting.setFactories(bribesTokenFactory.address, bribesRewardFactory.address, ZERO_ADDRESS).then(tx => tx.wait());
     await gaugeVoting.transferOwnership(treasuryMultisig).then(tx => tx.wait());
+});
+
+
+//yarn run task create-unvote:arb --network arbitrum
+task("create-unvote:arb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    const GaugeVoting = GaugeVoting__factory.connect('0x754961D3F6Bc537C507Dc8954DDC3f8351D29077', deployer);
+
+    const lpTokenAdded = await GaugeVoting.getLpTokensAdded();
+  
+    // get current vote on bribe voter in wombat system
+    const IBribeVoter = IBribeVoter__factory.connect('0x3f90a5a47364c0467031fB00246192d40E3D2D9D', deployer);
+
+    const LP_TO_VOTES = new Map<String, BigNumber>();
+    let lpToken= [];
+    let currentVotes = []
+    for (let i = 0 ;i <lpTokenAdded.length; i++){
+        let votes = await IBribeVoter.votes("0x24D2f6be2bF9cdf3627f720cf09D4551580C1eC1", lpTokenAdded[i]);
+        if ( votes.gt(BigNumber.from(0))) {
+            LP_TO_VOTES.set(lpTokenAdded[i], votes);
+            currentVotes.push(BigNumber.from(0).sub(votes));
+            lpToken.push(lpTokenAdded[i]);
+
+        }
+    }
+
+    console.log({lpToken, currentVotes})
+
+    
+    const GetData = GetData__factory.connect('0x76f9D282C532b2754Bcc0C89F24376A58bf8530f', deployer);
+
+    const bytes = await GetData.getData(lpToken, currentVotes);
+
+    console.log({bytes})
+  
 });
 
 task("gauge-voting-migrate:arbitrum").setAction(async function (taskArguments: TaskArguments, hre) {
