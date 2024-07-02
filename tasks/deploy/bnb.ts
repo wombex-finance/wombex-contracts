@@ -53,6 +53,7 @@ import {
     BribesRewardFactory,
     BribesRewardFactory__factory,
     BribesTokenFactory__factory,
+    IMasterWombatV2__factory,
     IBribeVoter__factory,
     GetData__factory,
     BribesTokenFactory,
@@ -1062,6 +1063,92 @@ task("get-current-lp-vote-on-wombat:bnb").setAction(async function (taskArgument
     console.log(LP_TO_VOTES);
     console.log(lpToken)
     console.log(currentVotes)
+
+  
+});
+
+// yarn run task get-current-pending-reward:bnb --network bnb
+task("get-current-pending-reward:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    const IMasterWombat = IMasterWombatV2__factory.connect('0x489833311676B566f888119c29bd997Dc6C95830', deployer);
+
+    const getPoolLength = await IMasterWombat.poolLength();
+    console.log(getPoolLength.toString());
+
+    const PoolData = new Map<Number, any>()
+
+    let totalWom: BigNumber = BigNumber.from(0)
+    let hzn: BigNumber = BigNumber.from(0);
+
+    let lp= [];
+
+    for (let i = 0 ;i <Number(getPoolLength); i++){
+        let pendingTokens  = await IMasterWombat.pendingTokens(i, "0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569");
+        // console.log({pendingTokens})
+
+        if ( pendingTokens.pendingRewards.gt(BigNumber.from(0))) {
+            console.log(i)
+
+            totalWom = totalWom.add(pendingTokens.pendingRewards)
+            PoolData.set(i, pendingTokens);
+            const getLp = await IMasterWombat.poolInfo(i);
+            console.log({lp: getLp.lpToken})
+            lp.push(getLp.lpToken);
+            continue;
+        }
+
+        for (let j = 0; j < pendingTokens.pendingBonusRewards.length; j++) {
+            if ( pendingTokens.pendingBonusRewards[j].gt(BigNumber.from(0))) {
+                PoolData.set(i, pendingTokens);
+                hzn = hzn.add(pendingTokens.pendingBonusRewards[2])
+                const getLp = await IMasterWombat.poolInfo(i);
+                lp.push(getLp.lpToken);
+                continue;
+            }
+        }
+    }
+
+    console.log(PoolData, totalWom, lp);
+
+  
+});
+
+
+// yarn run task get-current-pending-reward:bnb --network bnb
+task("transfer-script:bnb").setAction(async function (taskArguments: TaskArguments, hre) {
+    const deployer = await getSigner(hre);
+
+    const IMasterWombat = IMasterWombatV2__factory.connect('0x489833311676B566f888119c29bd997Dc6C95830', deployer);
+
+    const getPoolLength = await IMasterWombat.poolLength();
+    console.log(getPoolLength.toString());
+
+    const PoolData = new Map<Number, any>()
+
+    let totalWom: BigNumber = BigNumber.from(0)
+    let hzn: BigNumber = BigNumber.from(0);
+
+    for (let i = 0 ;i <Number(getPoolLength); i++){
+        let pendingTokens  = await IMasterWombat.pendingTokens(i, "0xE3a7FB9C6790b02Dcfa03B6ED9cda38710413569");
+        // console.log({pendingTokens})
+
+        if ( pendingTokens.pendingRewards.gt(BigNumber.from(0))) {
+            totalWom = totalWom.add(pendingTokens.pendingRewards)
+            PoolData.set(i, pendingTokens);
+            continue;
+        }
+
+        for (let j = 0; j < pendingTokens.pendingBonusRewards.length; j++) {
+            if ( pendingTokens.pendingBonusRewards[j].gt(BigNumber.from(0))) {
+                PoolData.set(i, pendingTokens);
+                hzn = hzn.add(pendingTokens.pendingBonusRewards[2])
+                continue;
+            }
+        }
+    }
+
+    console.log(PoolData, totalWom);
 
   
 });
